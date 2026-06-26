@@ -66,6 +66,27 @@ class ApiClient {
   getLucaMessages() { return this.request('/luca/messages'); }
   sendLucaMessage(content) { return this.request('/luca/messages', { method: 'POST', body: JSON.stringify({ content }) }); }
 
+  // ---- Contributions / Credentials / Agents ----
+  getContributions() { return this.request('/contributions'); }
+  createContribution(data) { return this.request('/contributions', { method: 'POST', body: JSON.stringify(data) }); }
+  getCredentials() { return this.request('/credentials'); }
+  getAgents() { return this.request('/agents'); }
+
+  // ---- Vault export (sovereign data) ----
+  // JSON manifest + files
+  getVaultExport() { return this.request('/export/me'); }
+  // Binary ZIP — returns a Blob for download
+  async downloadVault() {
+    const headers = {};
+    if (this.token) headers.Authorization = `Bearer ${this.token}`;
+    const res = await fetch(`${API_URL}/export/me?format=zip`, { headers });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Export failed' }));
+      throw new Error(err.error || 'Export failed');
+    }
+    return res.blob();
+  }
+
   // ---- Practitioner ----
   getPractitionerProfile() { return this.request('/practitioner/profile'); }
   savePractitionerProfile(data) { return this.request('/practitioner/profile', { method: 'PUT', body: JSON.stringify(data) }); }
