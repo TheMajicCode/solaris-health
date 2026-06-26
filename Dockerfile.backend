@@ -1,0 +1,16 @@
+FROM node:18-slim
+
+# Install PostgreSQL client for schema/seed
+RUN apt-get update && apt-get install -y postgresql-client && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy backend files
+COPY backend/package*.json ./
+RUN npm ci --only=production
+
+COPY backend/ ./
+
+EXPOSE 5000
+
+CMD ["node", "src/server.js"]
