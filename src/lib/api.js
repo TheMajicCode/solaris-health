@@ -87,6 +87,36 @@ class ApiClient {
     return res.blob();
   }
 
+  // ---- Timeline & Trends (Phase 3) ----
+  getTimeline(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/timeline/me${qs ? '?' + qs : ''}`);
+  }
+  getPatientTimeline(userId, params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/timeline/patient/${userId}${qs ? '?' + qs : ''}`);
+  }
+  getSystemTimeline(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/timeline/system${qs ? '?' + qs : ''}`);
+  }
+  getVitalsTrends(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/trends/vitals${qs ? '?' + qs : ''}`);
+  }
+  async exportTimeline(body = {}) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (this.token) headers.Authorization = `Bearer ${this.token}`;
+    const res = await fetch(`${API_URL}/timeline/export`, {
+      method: 'POST', headers, body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Export failed' }));
+      throw new Error(err.error || 'Export failed');
+    }
+    return res.blob();
+  }
+
   // ---- Practitioner ----
   getPractitionerProfile() { return this.request('/practitioner/profile'); }
   savePractitionerProfile(data) { return this.request('/practitioner/profile', { method: 'PUT', body: JSON.stringify(data) }); }

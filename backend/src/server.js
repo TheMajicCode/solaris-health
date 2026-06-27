@@ -14,6 +14,8 @@ const lucaRoutes = require('./routes/luca');
 const practitionerRoutes = require('./routes/practitioner');
 const adminRoutes = require('./routes/admin');
 const exportRoutes = require('./routes/export');
+const timelineRoutes = require('./routes/timeline');
+const trendsRoutes = require('./routes/trends');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -40,6 +42,8 @@ app.use('/api/luca', lucaRoutes);
 app.use('/api/practitioner', practitionerRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/export', exportRoutes);
+app.use('/api/timeline', timelineRoutes);
+app.use('/api/trends', trendsRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {
