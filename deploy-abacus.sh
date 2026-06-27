@@ -55,11 +55,11 @@ echo -e "${GREEN}✓ Dev services stopped${NC}"
 # Build and start with Docker Compose
 echo ""
 echo -e "${BLUE}Building Docker containers...${NC}"
-docker-compose --env-file .env.production build --no-cache
+docker compose --env-file .env.production build --no-cache
 
 echo ""
 echo -e "${BLUE}Starting production services...${NC}"
-docker-compose --env-file .env.production up -d
+docker compose --env-file .env.production up -d
 
 # Wait for services
 echo ""
@@ -85,7 +85,7 @@ fi
 # Seed database
 echo ""
 echo -e "${BLUE}Seeding database...${NC}"
-docker-compose --env-file .env.production run --rm seed
+docker compose --env-file .env.production run --rm seed
 echo -e "${GREEN}✓ Database seeded${NC}"
 
 # Done
@@ -98,15 +98,15 @@ echo -e "${BLUE}Your app is live at:${NC}"
 echo "  $PREVIEW_URL"
 echo ""
 echo -e "${BLUE}Service status:${NC}"
-docker-compose ps
+docker compose ps
 echo ""
 echo -e "${YELLOW}Note: This deployment is tied to the VM lifecycle.${NC}"
 echo -e "${YELLOW}For true always-on hosting, upgrade to Abacus.AI SuperComputer.${NC}"
 echo ""
 echo "Commands:"
-echo "  View logs:    docker-compose logs -f"
-echo "  Stop:         docker-compose down"
-echo "  Restart:      docker-compose restart"
-echo "  Update:       git pull && docker-compose up -d --build"
+echo "  View logs:    docker compose logs -f"
+echo "  Stop:         docker compose down"
+echo "  Restart:      docker compose restart"
+echo "  Update:       git pull && docker compose up -d --build"
 echo ""
 echo "🌅 Welcome to production Solaris!"

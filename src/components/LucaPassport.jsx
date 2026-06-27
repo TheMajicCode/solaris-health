@@ -9,7 +9,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, Cell,
-  RadarChart as ReRadar, PolarGrid, PolarAngleAxis, Radar,
+  RadarChart as ReRadar, PolarGrid, PolarAngleAxis, Radar, CartesianGrid,
 } from 'recharts';
 import {
   LayoutDashboard, HeartPulse, Bot, Wallet, Calendar, ClipboardList, CalendarDays,
@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { api } from '../lib/api.js';
+import HealthTimeline from './HealthTimeline.jsx';
+import TrendCharts from './TrendCharts.jsx';
 
 /* ============================== DESIGN SYSTEM ============================== */
 const CSS = `
@@ -342,6 +344,7 @@ function navForRole(role) {
     {
       group: 'Salud', color: '#36C9A9', items: [
         { id: 'health', label: 'Health Passport', icon: HeartPulse },
+        { id: 'timeline', label: 'Timeline', icon: Clock },
         { id: 'coach', label: 'LUCA Coach', icon: Bot },
         { id: 'appointments', label: 'Appointments', icon: Calendar },
       ],
@@ -361,6 +364,7 @@ function navForRole(role) {
     nav.push({
       group: 'System', color: '#8AA09C', items: [
         { id: 'analytics', label: 'Analytics', icon: Activity },
+        { id: 'systimeline', label: 'System Timeline', icon: Clock },
         { id: 'users', label: 'User Management', icon: UserCog },
         { id: 'settings', label: 'System Settings', icon: Settings },
       ],
@@ -371,6 +375,8 @@ function navForRole(role) {
 const TAB_META = {
   dashboard: { title: 'Dashboard', sub: 'Your steering wheel for health, value, and care — one sovereign view.' },
   health: { title: 'Health Passport', sub: 'Your 360° vitality, owned by you and exportable anytime.' },
+  timeline: { title: 'Health Timeline', sub: 'Your complete health journey and trends — chronological and exportable.' },
+  systimeline: { title: 'System Timeline', sub: 'Platform-wide activity, sign-ups, and usage patterns over time.' },
   coach: { title: 'LUCA Coach', sub: 'Heart-Centered Intelligence — a guide, never a diagnosis.' },
   appointments: { title: 'Appointments', sub: 'Book care and track your visits across the Solaris network.' },
   wallet: { title: 'Wallet & Rewards', sub: 'Your LOVE points, contributions, and value flows.' },
@@ -1116,6 +1122,7 @@ function PatientsPage() {
   const [loading, setLoading] = useState(true);
   const [bookings, setBookings] = useState([]);
   const [q, setQ] = useState('');
+  const [selected, setSelected] = useState(null); // { id, name }
 
   useEffect(() => {
     let on = true;
@@ -1130,14 +1137,41 @@ function PatientsPage() {
 
   if (loading) return <CardSkeleton rows={6} />;
 
-  // derive unique patients from bookings
+  // detail view: a single patient's timeline
+  if (selected) {
+    return (
+      <div className="col gap-4">
+        <div className="row gap-3" style={{ alignItems: 'center' }}>
+          <Btn icon={ChevronRight} className="ghost" style={{ transform: 'rotate(180deg)' }} onClick={() => setSelected(null)} aria-label="Back" />
+          <Avatar name={selected.name} />
+          <div>
+            <div className="card-title">{selected.name}</div>
+            <div className="small muted">Complete patient history & trends</div>
+          </div>
+        </div>
+        <TrendCharts loader={(p) => api.getVitalsTrends(p)} userId={selected.id} />
+        <HealthTimeline
+          loader={(p) => api.getPatientTimeline(selected.id, p)}
+          exporter={(b) => api.exportTimeline(b)}
+          exportUserId={selected.id}
+          title={`${selected.name}'s timeline`}
+          subtitle="Click any event to review details or add a clinical note."
+          clusterBy="day"
+          extraNote={(event) => <ClinicalNote event={event} />}
+        />
+      </div>
+    );
+  }
+
+  // derive unique patients from bookings (keyed by user_id so we can drill in)
   const map = {};
   bookings.forEach((b) => {
+    const id = b.user_id || b.patient_name || 'unknown';
     const name = b.patient_name || 'Unknown patient';
-    if (!map[name]) map[name] = { name, visits: 0, last: null, statuses: [] };
-    map[name].visits += 1;
-    map[name].statuses.push(b.status || 'pending');
-    if (!map[name].last || (b.preferred_date && b.preferred_date > map[name].last)) map[name].last = b.preferred_date;
+    if (!map[id]) map[id] = { id: b.user_id || null, name, visits: 0, last: null, statuses: [] };
+    map[id].visits += 1;
+    map[id].statuses.push(b.status || 'pending');
+    if (!map[id].last || (b.preferred_date && b.preferred_date > map[id].last)) map[id].last = b.preferred_date;
   });
   let patients = Object.values(map);
   if (q.trim()) patients = patients.filter((p) => p.name.toLowerCase().includes(q.toLowerCase()));
@@ -1155,13 +1189,16 @@ function PatientsPage() {
         {patients.length ? (
           <div className="patient-grid">
             {patients.map((p) => (
-              <div key={p.name} className="patient-card">
+              <div key={p.id || p.name} className="patient-card"
+                style={{ cursor: p.id ? 'pointer' : 'default' }}
+                onClick={() => p.id && setSelected({ id: p.id, name: p.name })}
+                title={p.id ? 'View patient timeline' : 'No linked record'}>
                 <Avatar name={p.name} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="small f6 ellipsis">{p.name}</div>
                   <div className="tiny muted">{p.visits} visit{p.visits > 1 ? 's' : ''} · last {p.last ? fmtShort(p.last) : '—'}</div>
                 </div>
-                <Pill tone="teal">{p.visits}</Pill>
+                {p.id ? <ChevronRight size={16} style={{ color: 'var(--muted-2)' }} /> : <Pill tone="teal">{p.visits}</Pill>}
               </div>
             ))}
           </div>
@@ -1412,11 +1449,104 @@ function SystemSettingsPage() {
 
 
 
+/* ============================== PATIENT — TIMELINE ============================== */
+function TimelinePage({ user }) {
+  return (
+    <div className="col gap-4">
+      <TrendCharts loader={(p) => api.getVitalsTrends(p)} />
+      <HealthTimeline
+        loader={(p) => api.getTimeline(p)}
+        exporter={(b) => api.exportTimeline(b)}
+        title="Your health journey"
+        subtitle="Every check-in, appointment, assessment and coach session — in one place."
+        clusterBy="day"
+      />
+    </div>
+  );
+}
+
+/* ============================== SHARED — CLINICAL NOTE ON EVENT ============================== */
+function ClinicalNote({ event }) {
+  const key = `luca_note_${event.id}`;
+  const [note, setNote] = useState(() => { try { return localStorage.getItem(key) || ''; } catch { return ''; } });
+  const [saved, setSaved] = useState(false);
+  const save = () => {
+    try { localStorage.setItem(key, note); setSaved(true); setTimeout(() => setSaved(false), 1500); } catch { /* noop */ }
+  };
+  return (
+    <div className="col gap-2" style={{ marginTop: 4 }}>
+      <div className="eyebrow" style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FileText size={13} /> Clinical note</div>
+      <textarea className="input-line" placeholder="Add a private clinical note for this event…"
+        value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
+      <div className="row" style={{ justifyContent: 'flex-end', gap: 8 }}>
+        {saved && <span className="pill mint" style={{ alignSelf: 'center' }}><Check size={12} /> Saved</span>}
+        <Btn variant="primary" icon={Check} onClick={save}>Save note</Btn>
+      </div>
+    </div>
+  );
+}
+
+/* ============================== ADMIN — SYSTEM TIMELINE ============================== */
+function SystemTimelinePage() {
+  const [series, setSeries] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let on = true;
+    (async () => {
+      try {
+        const r = await api.getSystemTimeline({ limit: 1 });
+        if (on) setSeries(r?.series || []);
+      } catch { /* noop */ } finally { if (on) setLoading(false); }
+    })();
+    return () => { on = false; };
+  }, []);
+
+  return (
+    <div className="col gap-4">
+      <Card>
+        <SectionHead eyebrow="Usage over time" title="Platform activity" />
+        {loading ? (
+          <Skel h={240} />
+        ) : series.length === 0 ? (
+          <Empty icon={Activity} title="No activity yet" sub="Sign-ups, assessments and bookings will chart here." />
+        ) : (
+          <div style={{ height: 260 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={series} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="sysReg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#0EA5A0" stopOpacity={0.35} /><stop offset="100%" stopColor="#0EA5A0" stopOpacity={0.02} /></linearGradient>
+                  <linearGradient id="sysAsm" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#8B5CF6" stopOpacity={0.35} /><stop offset="100%" stopColor="#8B5CF6" stopOpacity={0.02} /></linearGradient>
+                  <linearGradient id="sysBk" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#3B82F6" stopOpacity={0.35} /><stop offset="100%" stopColor="#3B82F6" stopOpacity={0.02} /></linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#EBF3F0" vertical={false} />
+                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#5b6f6c' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: '#5b6f6c' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                <Tooltip contentStyle={{ borderRadius: 12, border: '1px solid #e3ece9', fontSize: 12 }} />
+                <Area type="monotone" dataKey="registration" name="Sign-ups" stroke="#0EA5A0" strokeWidth={2} fill="url(#sysReg)" />
+                <Area type="monotone" dataKey="assessment" name="Assessments" stroke="#8B5CF6" strokeWidth={2} fill="url(#sysAsm)" />
+                <Area type="monotone" dataKey="appointment" name="Bookings" stroke="#3B82F6" strokeWidth={2} fill="url(#sysBk)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </Card>
+      <HealthTimeline
+        loader={(p) => api.getSystemTimeline(p)}
+        title="System events"
+        subtitle="Registrations, assessments and bookings across the network."
+        clusterBy="day"
+      />
+    </div>
+  );
+}
+
 /* ============================== PAGE ROUTER ============================== */
 function TabPage({ tab, user, go }) {
   switch (tab) {
     case 'dashboard': return <DashboardPage user={user} go={go} />;
     case 'health': return <HealthPage user={user} />;
+    case 'timeline': return <TimelinePage user={user} />;
     case 'coach': return <CoachPage user={user} />;
     case 'appointments': return <AppointmentsPage user={user} />;
     case 'wallet': return <WalletPage user={user} />;
@@ -1424,6 +1554,7 @@ function TabPage({ tab, user, go }) {
     case 'schedule': return <SchedulePage />;
     case 'patients': return <PatientsPage />;
     case 'analytics': return <AnalyticsPage />;
+    case 'systimeline': return <SystemTimelinePage />;
     case 'users': return <UserManagementPage />;
     case 'settings': return <SystemSettingsPage />;
     default: return <DashboardPage user={user} go={go} />;

@@ -5,7 +5,7 @@ services:
     image: postgres:15-alpine
     environment:
       POSTGRES_USER: luca_user
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-luca_prod_2026}
+      POSTGRES_PASSWORD: luca_dev_2026
       POSTGRES_DB: luca_passport
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -39,6 +39,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.frontend
+      args:
+        VITE_API_URL: ${API_URL:-http://localhost:5000}/api
     environment:
       VITE_API_URL: ${API_URL:-http://localhost:5000}/api
     ports:
