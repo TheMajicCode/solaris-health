@@ -17,12 +17,13 @@ import {
   Send, Download, Sparkles, Leaf, TrendingUp, Award, Gift, Stethoscope, LogOut,
   Menu, X, Check, CheckCircle2, Clock, FileText, Plus, Building2, Star, Coins,
   Droplet, Moon, Footprints, Brain, Heart, ArrowUpRight, ArrowDownLeft, Eye,
-  BadgeCheck, Zap, MapPin, Layers, RefreshCw,
+  BadgeCheck, Zap, MapPin, Layers, RefreshCw, MessageSquare,
 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { api } from '../lib/api.js';
 import HealthTimeline from './HealthTimeline.jsx';
 import TrendCharts from './TrendCharts.jsx';
+import SecureChat from './SecureChat.jsx';
 import WalletConnect from './wallet/WalletConnect.jsx';
 import WalletDashboard from './wallet/WalletDashboard.jsx';
 import HealthNFT from './wallet/HealthNFT.jsx';
@@ -350,6 +351,7 @@ function navForRole(role) {
         { id: 'timeline', label: 'Timeline', icon: Clock },
         { id: 'coach', label: 'LUCA Coach', icon: Bot },
         { id: 'appointments', label: 'Appointments', icon: Calendar },
+        { id: 'messages', label: 'Messages', icon: MessageSquare, badgeKey: 'messages' },
       ],
     },
     { group: 'Tierra', color: '#C58A53', items: [{ id: 'wallet', label: 'Wallet & Rewards', icon: Wallet }] },
@@ -382,6 +384,7 @@ const TAB_META = {
   systimeline: { title: 'System Timeline', sub: 'Platform-wide activity, sign-ups, and usage patterns over time.' },
   coach: { title: 'LUCA Coach', sub: 'Heart-Centered Intelligence — a guide, never a diagnosis.' },
   appointments: { title: 'Appointments', sub: 'Book care and track your visits across the Solaris network.' },
+  messages: { title: 'Secure Messages', sub: 'End-to-end encrypted conversations with your care network — only you can read them.' },
   wallet: { title: 'Wallet & Rewards', sub: 'Your LOVE points, contributions, and value flows.' },
   drafts: { title: 'Draft Queue', sub: 'Review and approve AI-prepared triage summaries before they reach patients.' },
   schedule: { title: 'Schedule', sub: 'Your appointment calendar and incoming requests.' },
@@ -1674,13 +1677,14 @@ function SystemTimelinePage() {
 }
 
 /* ============================== PAGE ROUTER ============================== */
-function TabPage({ tab, user, go }) {
+function TabPage({ tab, user, go, onUnread }) {
   switch (tab) {
     case 'dashboard': return <DashboardPage user={user} go={go} />;
     case 'health': return <HealthPage user={user} />;
     case 'timeline': return <TimelinePage user={user} />;
     case 'coach': return <CoachPage user={user} />;
     case 'appointments': return <AppointmentsPage user={user} />;
+    case 'messages': return <SecureChat user={user} onUnread={onUnread} />;
     case 'wallet': return <WalletPage user={user} />;
     case 'drafts': return <DraftQueuePage />;
     case 'schedule': return <SchedulePage />;
@@ -1715,6 +1719,17 @@ export default function LucaPassport() {
     }
     return () => { on = false; };
   }, [role]);
+
+  // live badge: total unread secure messages (all roles), polled periodically
+  useEffect(() => {
+    let on = true;
+    const pull = () => api.getUnreadCount()
+      .then((r) => { if (on) setBadges((b) => ({ ...b, messages: r.unread || 0 })); })
+      .catch(() => {});
+    pull();
+    const t = setInterval(pull, 60000);
+    return () => { on = false; clearInterval(t); };
+  }, []);
 
   const meta = TAB_META[tab] || { title: 'LUCA Passport', sub: '' };
   const displayName = user?.fullName || [user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.email || 'Member';
@@ -1779,7 +1794,7 @@ export default function LucaPassport() {
           <main className="page">
             <PageHead title={meta.title} sub={meta.sub}
               action={<Pill tone="mint" icon={ShieldCheck}>{roleLabel(role)}</Pill>} />
-            <TabPage tab={tab} user={user} go={go} />
+            <TabPage tab={tab} user={user} go={go} onUnread={(n) => setBadges((b) => ({ ...b, messages: n }))} />
           </main>
         </div>
       </div>
