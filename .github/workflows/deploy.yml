@@ -1,0 +1,60 @@
+name: Deploy
+
+# Manual deployment workflow. Trigger from the Actions tab → "Run workflow".
+# Builds the Docker images and (optionally) deploys to the target host.
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        default: production
+        type: choice
+        options:
+          - production
+          - staging
+
+jobs:
+  build:
+    name: Build images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.backend
+          push: false
+          tags: luca-passport-backend:${{ github.sha }}
+
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.frontend
+          push: false
+          tags: luca-passport-frontend:${{ github.sha }}
+          build-args: |
+            VITE_API_URL=https://solaris-health.abacusai.cloud/api
+
+  deploy:
+    name: Deploy to ${{ github.event.inputs.environment }}
+    needs: build
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Replace the placeholder below with your delivery mechanism, e.g.:
+      #   - SSH into the host and `docker compose up -d --build`
+      #   - push images to a registry and pull on the host
+      #   - trigger a platform-specific deploy hook
+      - name: Deploy (placeholder)
+        run: |
+          echo "Deploying ${{ github.sha }} to ${{ github.event.inputs.environment }}"
+          echo "Wire up your host's 'docker compose up -d --build' here."

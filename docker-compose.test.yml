@@ -1,0 +1,43 @@
+# Ephemeral test stack — spins up a throwaway Postgres and runs the backend
+# test suite against it, then tears everything down. Useful for CI or a clean
+# local test run that does not touch your dev database.
+#
+#   docker compose -f docker-compose.test.yml up --build --abort-on-container-exit
+#   docker compose -f docker-compose.test.yml down -v
+version: '3.8'
+
+services:
+  postgres-test:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: luca_user
+      POSTGRES_PASSWORD: luca_test_pw
+      POSTGRES_DB: luca_passport
+    volumes:
+      - ./backend/schema.sql:/docker-entrypoint-initdb.d/1-schema.sql
+    tmpfs:
+      - /var/lib/postgresql/data   # in-memory: data is discarded on teardown
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U luca_user']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    environment:
+      DATABASE_URL: postgresql://luca_user:luca_test_pw@postgres-test:5432/luca_passport
+      JWT_SECRET: test-secret
+      NODE_ENV: test
+      LUCA_AI_MODE: mock
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+    # Install dev deps and run the suite (the production image omits them).
+    command: sh -c "npm install && npm test"
+
+networks:
+  default:
+    name: solaris-test-network

@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
+const db = require('./db');
 const authRoutes = require('./routes/auth');
 const usersRoutes = require('./routes/users');
 const credentialsRoutes = require('./routes/credentials');
@@ -20,14 +21,63 @@ const walletRoutes = require('./routes/wallet');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const START_TIME = Date.now();
 
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '15mb' })); // allow base64 doc uploads
 
-// Health check
+// ---- Health & monitoring ----
+// Liveness probe (legacy path, kept for backwards compatibility)
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Liveness + readiness probe (checks DB connectivity)
+app.get('/api/health', async (req, res) => {
+  const health = {
+    status: 'ok',
+    service: 'luca-passport-backend',
+    timestamp: new Date().toISOString(),
+    uptimeSeconds: Math.floor((Date.now() - START_TIME) / 1000),
+    checks: { database: 'unknown' },
+  };
+  try {
+    await db.query('SELECT 1');
+    health.checks.database = 'ok';
+    res.json(health);
+  } catch (err) {
+    health.status = 'degraded';
+    health.checks.database = 'error';
+    res.status(503).json(health);
+  }
+});
+
+// Lightweight metrics endpoint for uptime monitoring (Prometheus-style text)
+app.get('/api/metrics', async (req, res) => {
+  const mem = process.memoryUsage();
+  let dbUp = 0;
+  try { await db.query('SELECT 1'); dbUp = 1; } catch { dbUp = 0; }
+  res.set('Content-Type', 'text/plain; version=0.0.4');
+  res.send(
+    [
+      '# HELP luca_up Whether the service is up (always 1 when responding).',
+      '# TYPE luca_up gauge',
+      'luca_up 1',
+      '# HELP luca_database_up Whether the database is reachable.',
+      '# TYPE luca_database_up gauge',
+      `luca_database_up ${dbUp}`,
+      '# HELP luca_uptime_seconds Process uptime in seconds.',
+      '# TYPE luca_uptime_seconds counter',
+      `luca_uptime_seconds ${Math.floor((Date.now() - START_TIME) / 1000)}`,
+      '# HELP luca_process_resident_memory_bytes Resident memory size in bytes.',
+      '# TYPE luca_process_resident_memory_bytes gauge',
+      `luca_process_resident_memory_bytes ${mem.rss}`,
+      '# HELP luca_process_heap_used_bytes Heap memory used in bytes.',
+      '# TYPE luca_process_heap_used_bytes gauge',
+      `luca_process_heap_used_bytes ${mem.heapUsed}`,
+    ].join('\n') + '\n'
+  );
 });
 
 // Routes
@@ -53,7 +103,12 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Something went wrong!' });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`✓ LUCA Passport Backend running on port ${PORT}`);
-  console.log(`✓ Environment: ${process.env.NODE_ENV}`);
-});
+// Only start the HTTP listener when run directly (not when imported by tests)
+if (require.main === module) {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`✓ LUCA Passport Backend running on port ${PORT}`);
+    console.log(`✓ Environment: ${process.env.NODE_ENV}`);
+  });
+}
+
+module.exports = app;

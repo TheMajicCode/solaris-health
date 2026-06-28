@@ -22,3 +22,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Test coverage output
+coverage
+backend/coverage
+
+# Auto-generated document previews
+docs/*.pdf
+docs/*.docx
