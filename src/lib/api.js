@@ -142,6 +142,25 @@ class ApiClient {
   getAdminListings() { return this.request('/admin/listings'); }
   updateAdminListing(id, status) { return this.request(`/admin/listings/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) }); }
   getAdminBookings() { return this.request('/admin/bookings'); }
+
+  // ---- Messaging (Phase 5: E2E encrypted) ----
+  uploadPublicKey(publicKey, algorithm = 'RSA-OAEP-256') {
+    return this.request('/messages/keys', { method: 'POST', body: JSON.stringify({ publicKey, algorithm }) });
+  }
+  getPublicKey(userId) { return this.request(`/messages/keys/${userId}`); }
+  getMessageContacts() { return this.request('/messages/contacts'); }
+  getConversations() { return this.request('/messages/conversations'); }
+  startConversation(contactId) {
+    return this.request('/messages/conversations', { method: 'POST', body: JSON.stringify({ contactId }) });
+  }
+  getConversation(conversationId) { return this.request(`/messages/${conversationId}`); }
+  sendMessage(payload) { return this.request('/messages/send', { method: 'POST', body: JSON.stringify(payload) }); }
+  uploadAttachment(payload) { return this.request('/messages/upload', { method: 'POST', body: JSON.stringify(payload) }); }
+  downloadAttachment(messageId) { return this.request(`/messages/${messageId}/attachment`); }
+  setTyping(conversationId) { return this.request('/messages/typing', { method: 'POST', body: JSON.stringify({ conversationId }) }); }
+  markRead(conversationId) { return this.request('/messages/read', { method: 'POST', body: JSON.stringify({ conversationId }) }); }
+  reportMessage(payload) { return this.request('/messages/report', { method: 'POST', body: JSON.stringify(payload) }); }
+  getUnreadCount() { return this.request('/messages/unread-count'); }
 }
 
 export const api = new ApiClient();
