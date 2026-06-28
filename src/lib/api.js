@@ -117,6 +117,20 @@ class ApiClient {
     return res.blob();
   }
 
+  // ---- Wallet (Phase 4: Cross-chain) ----
+  getWalletChains() { return this.request('/wallet/chains'); }
+  getWallets() { return this.request('/wallet/me'); }
+  connectWallet(data) { return this.request('/wallet/connect', { method: 'POST', body: JSON.stringify(data) }); }
+  disconnectWallet(id) { return this.request('/wallet/disconnect', { method: 'PUT', body: JSON.stringify({ id }) }); }
+  setPrimaryWallet(id) { return this.request('/wallet/primary', { method: 'PUT', body: JSON.stringify({ id }) }); }
+  getWalletNonce(address) {
+    const qs = address ? `?address=${encodeURIComponent(address)}` : '';
+    return this.request(`/wallet/nonce${qs}`);
+  }
+  verifyWalletSignature(data) { return this.request('/wallet/verify-signature', { method: 'POST', body: JSON.stringify(data) }); }
+  getWalletBalance(chain, address) { return this.request(`/wallet/balance/${chain}/${address}`); }
+  getWalletTransactions(chain, address, limit = 20) { return this.request(`/wallet/transactions/${chain}/${address}?limit=${limit}`); }
+
   // ---- Practitioner ----
   getPractitionerProfile() { return this.request('/practitioner/profile'); }
   savePractitionerProfile(data) { return this.request('/practitioner/profile', { method: 'PUT', body: JSON.stringify(data) }); }
