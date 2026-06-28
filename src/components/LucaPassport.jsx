@@ -23,6 +23,9 @@ import { useApp } from '../state/AppContext.jsx';
 import { api } from '../lib/api.js';
 import HealthTimeline from './HealthTimeline.jsx';
 import TrendCharts from './TrendCharts.jsx';
+import WalletConnect from './wallet/WalletConnect.jsx';
+import WalletDashboard from './wallet/WalletDashboard.jsx';
+import HealthNFT from './wallet/HealthNFT.jsx';
 
 /* ============================== DESIGN SYSTEM ============================== */
 const CSS = `
@@ -891,7 +894,7 @@ function Field({ label, children }) {
 }
 
 /* ============================== PATIENT — WALLET & REWARDS ============================== */
-function WalletPage({ user }) {
+function RewardsRecognition({ user }) {
   const [rewards, setRewards] = useState({ events: [], total: 0 });
   const [contribs, setContribs] = useState([]);
   const [credentials, setCredentials] = useState([]);
@@ -984,6 +987,135 @@ function WalletPage({ user }) {
           )) : <Empty icon={BadgeCheck} title="No credentials yet" sub="Verified achievements from the network appear here." />}
         </Card>
       </div>
+    </div>
+  );
+}
+
+/* ---------------------------- Web3 wallet hub ---------------------------- */
+function WalletHub({ user }) {
+  const [wallets, setWallets] = useState([]);
+  const [chains, setChains] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showConnect, setShowConnect] = useState(false);
+  const [activeId, setActiveId] = useState(null);
+  const [toast, setToast] = useState(null); // { kind, msg }
+
+  const flash = (kind, msg) => { setToast({ kind, msg }); setTimeout(() => setToast(null), 3600); };
+
+  const load = useCallback(async () => {
+    try {
+      const [w, c] = await Promise.all([
+        api.getWallets().catch(() => ({ wallets: [] })),
+        api.getWalletChains().catch(() => ({ chains: [] })),
+      ]);
+      const list = Array.isArray(w.wallets) ? w.wallets : [];
+      setWallets(list);
+      setChains(Array.isArray(c.chains) ? c.chains : []);
+      setActiveId((prev) => (prev && list.find((x) => x.id === prev)) ? prev : (list[0]?.id || null));
+      setShowConnect(list.length === 0);
+    } finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleConnected = async (wallet) => {
+    flash('ok', `Connected ${wallet.label || wallet.chain} wallet${wallet.verified ? ' (verified)' : ''}`);
+    await load();
+    setActiveId(wallet.id);
+    setShowConnect(false);
+  };
+  const handlePrimary = async (id) => {
+    try { await api.setPrimaryWallet(id); flash('ok', 'Primary wallet updated'); await load(); }
+    catch (e) { flash('err', e.message); }
+  };
+  const handleDisconnect = async (id) => {
+    try {
+      await api.disconnectWallet(id);
+      flash('ok', 'Wallet disconnected');
+      const remaining = wallets.filter((w) => w.id !== id);
+      setActiveId(remaining[0]?.id || null);
+      await load();
+    } catch (e) { flash('err', e.message); }
+  };
+
+  if (loading) return <CardSkeleton rows={5} />;
+
+  const active = wallets.find((w) => w.id === activeId) || wallets[0];
+
+  return (
+    <div className="col gap-4">
+      {toast && (
+        <div className="row" style={{
+          gap: 8, alignItems: 'center', padding: '10px 14px', borderRadius: 12,
+          background: toast.kind === 'ok' ? 'var(--mint-soft)' : 'var(--danger-soft)',
+          color: toast.kind === 'ok' ? 'var(--mint-ink)' : 'var(--danger-ink)',
+          border: '1px solid', borderColor: toast.kind === 'ok' ? 'var(--mint-line)' : 'var(--danger-soft)',
+        }}>
+          {toast.kind === 'ok' ? <Check size={16} /> : <X size={16} />}
+          <span className="small f6">{toast.msg}</span>
+        </div>
+      )}
+
+      {/* connected wallets selector */}
+      {wallets.length > 0 && (
+        <Card>
+          <SectionHead eyebrow="Sovereign finance" title="Your wallets"
+            action={<Btn variant="ghost" className="sm" icon={Plus} onClick={() => setShowConnect((v) => !v)}>{showConnect ? 'Close' : 'Connect wallet'}</Btn>} />
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+            {wallets.map((w) => (
+              <button key={w.id} onClick={() => { setActiveId(w.id); setShowConnect(false); }}
+                className="row" style={{
+                  gap: 8, alignItems: 'center', padding: '8px 12px', borderRadius: 12, cursor: 'pointer',
+                  border: '1px solid', borderColor: w.id === active?.id ? 'var(--mint)' : 'var(--line)',
+                  background: w.id === active?.id ? 'var(--mint-soft)' : 'var(--surface)',
+                }}>
+                <Wallet size={15} style={{ color: 'var(--teal)' }} />
+                <span className="small f6">{w.label || w.chain}</span>
+                {w.isPrimary && <Pill tone="gold">Primary</Pill>}
+                {w.verified && <BadgeCheck size={14} style={{ color: 'var(--mint-ink)' }} />}
+              </button>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* connect panel */}
+      {showConnect && (
+        <Card>
+          <SectionHead eyebrow="Connect" title="Add a crypto wallet"
+            action={wallets.length ? <Btn variant="ghost" className="sm" icon={X} onClick={() => setShowConnect(false)}>Cancel</Btn> : null} />
+          <WalletConnect chains={chains} onConnected={handleConnected} onError={(m) => flash('err', m)} />
+        </Card>
+      )}
+
+      {/* active wallet dashboard */}
+      {active && !showConnect && (
+        <Card>
+          <WalletDashboard wallet={active} onPrimary={handlePrimary}
+            onDisconnect={handleDisconnect} onError={(m) => flash('err', m)} />
+        </Card>
+      )}
+
+      {/* health NFTs */}
+      <Card>
+        <SectionHead eyebrow="Tokenized milestones" title="Health NFTs"
+          action={<Pill tone="gray" icon={Sparkles}>Preview</Pill>} />
+        <HealthNFT wallets={wallets} onError={(m) => flash('err', m)} />
+      </Card>
+    </div>
+  );
+}
+
+/* ============================== PATIENT — WALLET (tabbed) ============================== */
+function WalletPage({ user }) {
+  const [view, setView] = useState('web3');
+  return (
+    <div className="col gap-4">
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+        <Btn variant={view === 'web3' ? 'primary' : 'ghost'} className="sm" icon={Wallet} onClick={() => setView('web3')}>Crypto wallets</Btn>
+        <Btn variant={view === 'rewards' ? 'primary' : 'ghost'} className="sm" icon={Gift} onClick={() => setView('rewards')}>LOVE &amp; rewards</Btn>
+      </div>
+      {view === 'web3' ? <WalletHub user={user} /> : <RewardsRecognition user={user} />}
     </div>
   );
 }

@@ -33,4 +33,27 @@ function shapeUser(u) {
   };
 }
 
-module.exports = { award, shapeUser };
+/**
+ * Write an audit log entry. Best-effort: never throws (failures are logged only),
+ * so audit logging can never break a request flow.
+ */
+async function audit({ actorId, action, resourceType, resourceId, newValues, oldValues, result = 'success', reason, ip }) {
+  try {
+    await db.query(
+      `INSERT INTO audit_logs
+        (actor_id, action, resource_type, resource_id, old_values, new_values, result, result_reason, ip_address)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [
+        actorId || null, action, resourceType || null, resourceId || null,
+        oldValues ? JSON.stringify(oldValues) : null,
+        newValues ? JSON.stringify(newValues) : null,
+        result, reason || null,
+        ip && /^[0-9a-fA-F:.]+$/.test(ip) ? ip : null,
+      ]
+    );
+  } catch (err) {
+    console.error('audit log failed:', err.message);
+  }
+}
+
+module.exports = { award, shapeUser, audit };

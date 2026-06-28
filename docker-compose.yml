@@ -11,6 +11,7 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./backend/schema.sql:/docker-entrypoint-initdb.d/1-schema.sql
       - ./backend/schema_solaris.sql:/docker-entrypoint-initdb.d/2-schema_solaris.sql
+      - ./backend/schema_wallet.sql:/docker-entrypoint-initdb.d/3-schema_wallet.sql
     ports:
       - "5432:5432"
     healthcheck:

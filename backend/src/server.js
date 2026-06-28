@@ -16,6 +16,7 @@ const adminRoutes = require('./routes/admin');
 const exportRoutes = require('./routes/export');
 const timelineRoutes = require('./routes/timeline');
 const trendsRoutes = require('./routes/trends');
+const walletRoutes = require('./routes/wallet');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -44,6 +45,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/timeline', timelineRoutes);
 app.use('/api/trends', trendsRoutes);
+app.use('/api/wallet', walletRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {
