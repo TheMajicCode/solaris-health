@@ -1,0 +1,6 @@
+dist
+coverage
+node_modules
+*.md
+backend/node_modules
+backend/coverage
