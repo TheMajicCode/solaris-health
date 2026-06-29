@@ -221,6 +221,51 @@ class ApiClient {
   markAllNotificationsRead() { return this.request('/notifications/read-all', { method: 'PUT', body: JSON.stringify({}) }); }
   createTestNotification(data = {}) { return this.request('/notifications/test', { method: 'POST', body: JSON.stringify(data) }); }
 
+  // ---- Bookings (patient) ----
+  getAvailableSlots(providerId, serviceId, days = 60) {
+    return this.request(`/bookings/available-slots/${providerId}/${serviceId}?days=${days}`);
+  }
+  requestBooking(data) { return this.request('/bookings/request', { method: 'POST', body: JSON.stringify(data) }); }
+  getMyBookings() { return this.request('/bookings/me'); }
+  getBooking(id) { return this.request(`/bookings/${id}`); }
+  cancelBooking(id, reason) { return this.request(`/bookings/${id}/cancel`, { method: 'PUT', body: JSON.stringify({ reason }) }); }
+  rescheduleBooking(id, data) { return this.request(`/bookings/${id}/reschedule`, { method: 'PUT', body: JSON.stringify(data) }); }
+
+  // ---- Provider availability ----
+  getMyAvailability(providerId) {
+    const qs = providerId ? `?providerId=${providerId}` : '';
+    return this.request(`/provider/availability/me${qs}`);
+  }
+  updateMyAvailability(data) { return this.request('/provider/availability/me', { method: 'PUT', body: JSON.stringify(data) }); }
+  generateTimeSlots(data = {}) { return this.request('/provider/availability/time-slots', { method: 'POST', body: JSON.stringify(data) }); }
+  getProviderCalendar(params = {}) {
+    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
+    return this.request(`/provider/availability/calendar${qs ? `?${qs}` : ''}`);
+  }
+  blockDate(date, block = true, providerId) { return this.request(`/provider/availability/block/${date}`, { method: 'PUT', body: JSON.stringify({ block, providerId }) }); }
+
+  // ---- Provider bookings management ----
+  getProviderBookings(view, providerId) {
+    const params = {};
+    if (view) params.view = view;
+    if (providerId) params.providerId = providerId;
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/provider/bookings/me${qs ? `?${qs}` : ''}`);
+  }
+  getProviderBookingStats() { return this.request('/provider/bookings/stats'); }
+  confirmBooking(id) { return this.request(`/provider/bookings/${id}/confirm`, { method: 'PUT', body: JSON.stringify({}) }); }
+  declineBooking(id, reason) { return this.request(`/provider/bookings/${id}/cancel`, { method: 'PUT', body: JSON.stringify({ reason }) }); }
+  completeBooking(id, clinicalNotes) { return this.request(`/provider/bookings/${id}/complete`, { method: 'PUT', body: JSON.stringify({ clinicalNotes }) }); }
+  noShowBooking(id) { return this.request(`/provider/bookings/${id}/no-show`, { method: 'PUT', body: JSON.stringify({}) }); }
+
+  // ---- Admin booking oversight ----
+  getAdminBookingList(params = {}) {
+    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
+    return this.request(`/admin/bookings${qs ? `?${qs}` : ''}`);
+  }
+  getAdminBookingStats() { return this.request('/admin/bookings/stats'); }
+  resolveBooking(id, data) { return this.request(`/admin/bookings/${id}/resolve`, { method: 'PUT', body: JSON.stringify(data) }); }
+
   // ---- Profile photo ----
   uploadProfilePhoto(image) { return this.request('/users/upload-photo', { method: 'POST', body: JSON.stringify({ image }) }); }
 }

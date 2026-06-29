@@ -11,13 +11,16 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   Loader2, Store, Star, Calendar, BarChart3, Eye, EyeOff, MapPin, Settings as SettingsIcon,
-  CheckCircle2, Clock, TrendingUp, MessageSquare,
+  CheckCircle2, Clock, TrendingUp, MessageSquare, CalendarClock,
 } from 'lucide-react';
 import { api } from '../../lib/api.js';
+import ProviderBookings from './ProviderBookings.jsx';
+import ProviderCalendar from './ProviderCalendar.jsx';
 
 const SUBTABS = [
   { id: 'listings', label: 'Listings', icon: Store },
   { id: 'bookings', label: 'Bookings', icon: Calendar },
+  { id: 'availability', label: 'Availability', icon: CalendarClock },
   { id: 'reviews', label: 'Reviews', icon: Star },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
   { id: 'settings', label: 'Settings', icon: SettingsIcon },
@@ -63,7 +66,8 @@ export default function MyPractice({ user, onBookings }) {
       ) : (
         <div className="mp-content">
           {view === 'listings' && <ListingsView providers={list} onRefresh={load} />}
-          {view === 'bookings' && <BookingsView onBookings={onBookings} />}
+          {view === 'bookings' && <ProviderBookings onBookings={onBookings} />}
+          {view === 'availability' && <ProviderCalendar />}
           {view === 'reviews' && <ReviewsView providers={visible} />}
           {view === 'analytics' && <AnalyticsView providers={list} />}
           {view === 'settings' && <SettingsView user={user} />}
@@ -117,38 +121,6 @@ function ListingsView({ providers, onRefresh }) {
               {p.hidden ? 'Make visible' : 'Hide listing'}
             </button>
           )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* ------------------------------- Bookings ------------------------------- */
-function BookingsView({ onBookings }) {
-  const [bookings, setBookings] = useState(null);
-  useEffect(() => {
-    api.getPractitionerBookings()
-      .then((r) => {
-        const list = r.bookings || [];
-        setBookings(list);
-        onBookings?.(list.filter((b) => (b.status || 'pending') === 'pending').length);
-      })
-      .catch(() => setBookings([]));
-  }, [onBookings]);
-  if (bookings === null) return <div className="mp-loading"><Loader2 className="mp-spin" size={22} /> Loading bookings…</div>;
-  if (!bookings.length) {
-    return <div className="mp-empty"><Calendar size={30} /><h3>No bookings yet</h3><p>Patient bookings for your services will appear here.</p></div>;
-  }
-  return (
-    <div className="mp-rows">
-      {bookings.map((b) => (
-        <div key={b.id} className="mp-row">
-          <div className="mp-row-ico"><Calendar size={16} /></div>
-          <div className="mp-row-main">
-            <div className="mp-row-title">{b.service_name || b.listing_title || 'Appointment'}</div>
-            <div className="mp-row-sub">{b.patient_name || b.user_name || 'Patient'} · {b.scheduled_at ? new Date(b.scheduled_at).toLocaleString() : 'TBD'}</div>
-          </div>
-          <span className={`mp-badge ${b.status === 'confirmed' ? 'ok' : b.status === 'cancelled' ? 'no' : 'pend'}`}>{b.status || 'pending'}</span>
         </div>
       ))}
     </div>
