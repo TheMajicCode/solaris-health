@@ -30,6 +30,9 @@ function shapeUser(u) {
     country: u.country,
     city: u.city,
     language: u.language,
+    isProvider: u.is_provider === true,
+    providerMode: u.provider_mode === true,
+    providerApprovedAt: u.provider_approved_at || null,
   };
 }
 

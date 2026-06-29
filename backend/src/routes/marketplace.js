@@ -56,7 +56,7 @@ async function ownsProvider(req, providerId) {
 router.get('/categories', async (_req, res) => {
   try {
     const counts = await db.query(
-      "SELECT provider_type, COUNT(*)::int AS n FROM provider_profiles WHERE status='active' GROUP BY provider_type"
+      "SELECT provider_type, COUNT(*)::int AS n FROM provider_profiles WHERE status='active' AND hidden=false GROUP BY provider_type"
     );
     const map = Object.fromEntries(counts.rows.map((r) => [r.provider_type, r.n]));
     const categories = PROVIDER_TYPES.map((t) => ({ ...t, count: map[t.id] || 0 }));
@@ -77,7 +77,7 @@ router.get('/providers', async (req, res) => {
       lat, lon, radius, sort = 'rating', limit = 60, offset = 0,
     } = req.query;
 
-    const where = ["status='active'"];
+    const where = ["status='active'", "hidden=false"];
     const vals = [];
     let i = 1;
 
@@ -142,7 +142,7 @@ router.get('/providers', async (req, res) => {
 router.get('/search', async (req, res) => {
   try {
     const { north, south, east, west, lat, lon, radius, type, q, limit = 200 } = req.query;
-    const where = ["status='active'", 'latitude IS NOT NULL', 'longitude IS NOT NULL'];
+    const where = ["status='active'", "hidden=false", 'latitude IS NOT NULL', 'longitude IS NOT NULL'];
     const vals = [];
     let i = 1;
 
@@ -183,6 +183,15 @@ router.get('/providers/:id', optionalAuth, async (req, res) => {
     const id = req.params.id;
     const p = await db.query('SELECT * FROM provider_profiles WHERE id=$1', [id]);
     if (p.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+
+    // Hidden (unapproved) profiles are only visible to their owner or an admin.
+    const prof = p.rows[0];
+    const isOwnerOrAdmin = req.user
+      ? (req.user.role === 'admin' || prof.user_id === req.user.userId)
+      : false;
+    if (prof.hidden && !isOwnerOrAdmin) {
+      return res.status(404).json({ error: 'Not found' });
+    }
 
     const [services, credentials, photos, reviews] = await Promise.all([
       db.query('SELECT * FROM provider_services WHERE provider_id=$1 ORDER BY category, service_name', [id]),
@@ -302,6 +311,7 @@ router.put('/providers/:id', authMiddleware, async (req, res) => {
       'provider_type', 'business_name', 'description', 'address', 'city', 'country',
       'latitude', 'longitude', 'phone', 'website', 'email', 'profile_photo_url',
       'cover_photo_url', 'hours_of_operation', 'specialties', 'price_range', 'status',
+      'hidden',
     ];
     const sets = [];
     const vals = [];
@@ -316,6 +326,15 @@ router.put('/providers/:id', authMiddleware, async (req, res) => {
       }
     }
     if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' });
+
+    // Guard: a non-admin owner may only un-hide an already-approved profile.
+    if ('hidden' in (req.body || {}) && req.body.hidden === false && req.user.role !== 'admin') {
+      const chk = await db.query('SELECT approval_status FROM provider_profiles WHERE id=$1', [id]);
+      if (chk.rows[0]?.approval_status !== 'approved') {
+        return res.status(403).json({ error: 'Listing must be approved before it can be made visible.' });
+      }
+    }
+
     sets.push('updated_at=NOW()');
     vals.push(id);
     const result = await db.query(`UPDATE provider_profiles SET ${sets.join(', ')} WHERE id=$${i} RETURNING *`, vals);
