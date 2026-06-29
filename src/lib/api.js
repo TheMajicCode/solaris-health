@@ -211,6 +211,16 @@ class ApiClient {
   // ---- Account mode toggle ----
   toggleMode(mode) { return this.request('/users/toggle-mode', { method: 'PUT', body: JSON.stringify(mode ? { mode } : {}) }); }
 
+  // ---- Notifications ----
+  getNotifications(filter = 'all') {
+    const qs = filter && filter !== 'all' ? `?filter=${encodeURIComponent(filter)}` : '';
+    return this.request(`/notifications${qs}`);
+  }
+  getUnreadNotificationCount() { return this.request('/notifications/unread-count'); }
+  markNotificationRead(id) { return this.request(`/notifications/${id}/read`, { method: 'PUT', body: JSON.stringify({}) }); }
+  markAllNotificationsRead() { return this.request('/notifications/read-all', { method: 'PUT', body: JSON.stringify({}) }); }
+  createTestNotification(data = {}) { return this.request('/notifications/test', { method: 'POST', body: JSON.stringify(data) }); }
+
   // ---- Profile photo ----
   uploadProfilePhoto(image) { return this.request('/users/upload-photo', { method: 'POST', body: JSON.stringify({ image }) }); }
 }

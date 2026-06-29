@@ -16,6 +16,7 @@ const { authMiddleware } = require('../../middleware/auth');
 const { adminOnly } = require('../../middleware/admin-only');
 const { audit } = require('../../lib/helpers');
 const { sendEmail } = require('../../lib/email');
+const { createNotification } = require('../../lib/notifications');
 
 const router = express.Router();
 
@@ -273,6 +274,15 @@ router.post('/:id/approve', async (req, res) => {
       });
     }
 
+    // In-app notification.
+    await createNotification(
+      app.user_id,
+      'application_approved',
+      '🎉 Provider Application Approved!',
+      `Your application for ${app.business_name} has been approved. You can now manage your practice from My Practice.`,
+      { applicationId: id, providerId }
+    );
+
     await audit({
       actorId: adminId,
       action: 'provider.application.approve',
@@ -330,6 +340,15 @@ router.post('/:id/reject', async (req, res) => {
         vars: { name: u.rows[0].first_name, reason },
       });
     }
+
+    // In-app notification.
+    await createNotification(
+      app.user_id,
+      'application_rejected',
+      '❌ Provider Application Needs Updates',
+      `Your application for ${app.business_name} was not approved. Reason: ${reason}. You can update and resubmit.`,
+      { applicationId: id, reason }
+    );
 
     await audit({
       actorId: adminId,

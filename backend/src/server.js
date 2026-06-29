@@ -22,6 +22,7 @@ const messagesRoutes = require('./routes/messages');
 const marketplaceRoutes = require('./routes/marketplace');
 const providerApplicationRoutes = require('./routes/provider-application');
 const adminProvidersRoutes = require('./routes/admin/providers');
+const notificationsRoutes = require('./routes/notifications');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -104,6 +105,7 @@ app.use('/api/wallet', walletRoutes);
 app.use('/api/messages', messagesRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/provider', providerApplicationRoutes);
+app.use('/api/notifications', notificationsRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {

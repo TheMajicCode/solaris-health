@@ -30,9 +30,10 @@ import WalletDashboard from './wallet/WalletDashboard.jsx';
 import HealthNFT from './wallet/HealthNFT.jsx';
 import ExploreMarketplace from './marketplace/ExploreMarketplace.jsx';
 import ProviderApplication from './provider/ProviderApplication.jsx';
-import ModeToggle from './provider/ModeToggle.jsx';
-import ProviderWorkspace from './provider/ProviderWorkspace.jsx';
+import MyPractice from './provider/MyPractice.jsx';
 import ProviderApprovals from './admin/ProviderApprovals.jsx';
+import NotificationCenter from './NotificationCenter.jsx';
+import toast from 'react-hot-toast';
 
 /* ============================== DESIGN SYSTEM ============================== */
 const CSS = `
@@ -369,27 +370,10 @@ function EconomicPassportIcon({ size = 17, strokeWidth = 2, ...rest }) {
     </span>
   );
 }
-function navForRole(role, providerMode) {
-  // Provider mode replaces the patient navigation with a focused workspace.
-  if (providerMode) {
-    return [
-      {
-        group: 'Provider', color: '#E3AC46', items: [
-          { id: 'prov-listings', label: 'My Listings', icon: Store },
-          { id: 'prov-bookings', label: 'Bookings', icon: CalendarDays },
-          { id: 'prov-reviews', label: 'Reviews', icon: Star },
-          { id: 'prov-analytics', label: 'Analytics', icon: BarChart3 },
-          { id: 'prov-settings', label: 'Settings', icon: Settings },
-        ],
-      },
-      {
-        group: 'Account', color: '#9FE7D6', items: [
-          { id: 'explore', label: 'Explore', icon: Compass },
-        ],
-      },
-    ];
-  }
-
+function navForRole(role, isProvider) {
+  // Unified navigation — everyone is a patient on their healing journey.
+  // Approved providers simply gain an extra "My Practice" tab; nothing is
+  // taken away. No mode switching.
   const nav = [
     {
       group: 'Overview', color: '#9FE7D6', items: [
@@ -408,6 +392,14 @@ function navForRole(role, providerMode) {
     },
     { group: 'Tierra', color: '#C58A53', items: [{ id: 'wallet', label: 'Economic Passport', icon: EconomicPassportIcon }] },
   ];
+  // Approved provider tools — added alongside the patient experience.
+  if (isProvider) {
+    nav.push({
+      group: 'My Practice', color: '#E3AC46', items: [
+        { id: 'my-practice', label: 'My Practice', icon: Store, badgeKey: 'bookings' },
+      ],
+    });
+  }
   if (role === 'practitioner' || role === 'admin') {
     nav.push({
       group: 'Practice', color: '#E3AC46', items: [
@@ -447,12 +439,8 @@ const TAB_META = {
   'provider-approvals': { title: 'Provider Approvals', sub: 'Review and verify provider applications before they go live.' },
   users: { title: 'User Management', sub: 'Members, practitioners, and access across Solaris.' },
   settings: { title: 'System Settings', sub: 'Configuration, AI, and platform controls.' },
-  // Provider-mode workspace
-  'prov-listings': { title: 'My Listings', sub: 'Manage your provider profiles and visibility on Solaris Health.' },
-  'prov-bookings': { title: 'Bookings', sub: 'Appointments and requests from patients across your services.' },
-  'prov-reviews': { title: 'Reviews', sub: 'What patients are saying about your services.' },
-  'prov-analytics': { title: 'Provider Analytics', sub: 'Your listings, ratings, and performance at a glance.' },
-  'prov-settings': { title: 'Provider Settings', sub: 'Your provider account, status, and commission.' },
+  // Provider workspace (unified — shown alongside patient tabs)
+  'my-practice': { title: 'My Practice', sub: 'Manage your listings, bookings, reviews, and analytics — all in one place.' },
 };
 
 /* ============================== PATIENT — DASHBOARD ============================== */
@@ -1738,7 +1726,7 @@ function SystemTimelinePage() {
 }
 
 /* ============================== PAGE ROUTER ============================== */
-function TabPage({ tab, user, go, onUnread, onBecomeProvider, onApprovalStats }) {
+function TabPage({ tab, user, go, onUnread, onBecomeProvider, onApprovalStats, onBookings }) {
   switch (tab) {
     case 'dashboard': return <DashboardPage user={user} go={go} />;
     case 'explore': return <ExploreMarketplace user={user} onBecomeProvider={onBecomeProvider} />;
@@ -1756,11 +1744,7 @@ function TabPage({ tab, user, go, onUnread, onBecomeProvider, onApprovalStats })
     case 'systimeline': return <SystemTimelinePage />;
     case 'users': return <UserManagementPage />;
     case 'settings': return <SystemSettingsPage />;
-    case 'prov-listings': return <ProviderWorkspace user={user} view="listings" go={go} />;
-    case 'prov-bookings': return <ProviderWorkspace user={user} view="bookings" go={go} />;
-    case 'prov-reviews': return <ProviderWorkspace user={user} view="reviews" go={go} />;
-    case 'prov-analytics': return <ProviderWorkspace user={user} view="analytics" go={go} />;
-    case 'prov-settings': return <ProviderWorkspace user={user} view="settings" go={go} />;
+    case 'my-practice': return <MyPractice user={user} onBookings={onBookings} />;
     default: return <DashboardPage user={user} go={go} />;
   }
 }
@@ -1769,35 +1753,16 @@ function TabPage({ tab, user, go, onUnread, onBecomeProvider, onApprovalStats })
 export default function LucaPassport() {
   const { user, logout, refreshUser } = useApp();
   const role = user?.role || 'patient';
-  const providerMode = user?.providerMode === true && user?.isProvider === true;
-  const nav = navForRole(role, providerMode);
+  const isProvider = user?.isProvider === true;
+  const nav = navForRole(role, isProvider);
   const [tab, setTab] = useState('dashboard');
   const [drawer, setDrawer] = useState(false);
   const [badges, setBadges] = useState({});
   const [showApplication, setShowApplication] = useState(false);
   const [appStatus, setAppStatus] = useState(null); // current user's latest application
-  const [switching, setSwitching] = useState(false);
 
   // close drawer on tab change
   const go = useCallback((id) => { setTab(id); setDrawer(false); }, []);
-
-  // When provider mode turns on/off, jump to a valid default tab for that mode.
-  useEffect(() => {
-    setTab(providerMode ? 'prov-listings' : 'dashboard');
-  }, [providerMode]);
-
-  // Switch account mode (patient <-> provider).
-  const handleToggleMode = useCallback(async (mode) => {
-    setSwitching(true);
-    try {
-      await api.toggleMode(mode);
-      await refreshUser?.();
-    } catch (e) {
-      console.error('toggle mode failed', e);
-    } finally {
-      setSwitching(false);
-    }
-  }, [refreshUser]);
 
   // Track the current user's application status (to label the CTA).
   useEffect(() => {
@@ -1843,6 +1808,38 @@ export default function LucaPassport() {
     const t = setInterval(pull, 60000);
     return () => { on = false; clearInterval(t); };
   }, []);
+
+  // live badge: pending bookings for approved providers
+  useEffect(() => {
+    let on = true;
+    if (isProvider) {
+      api.getPractitionerBookings()
+        .then((r) => { if (on) setBadges((b) => ({ ...b, bookings: (r.bookings || []).filter((x) => (x.status || 'pending') === 'pending').length })); })
+        .catch(() => {});
+    }
+    return () => { on = false; };
+  }, [isProvider]);
+
+  // Welcome toast once per browser session.
+  useEffect(() => {
+    if (!user) return;
+    try {
+      if (!sessionStorage.getItem('luca_welcomed')) {
+        sessionStorage.setItem('luca_welcomed', '1');
+        const first = user.firstName || (user.fullName || '').split(' ')[0] || '';
+        toast(`Welcome to LUCA Passport${first ? `, ${first}` : ''}! 🌿`, { icon: '🌿', duration: 4000 });
+      }
+    } catch { /* ignore */ }
+  }, [user]);
+
+  // Navigate from a notification (e.g. approval → My Practice).
+  const handleNotificationNavigate = useCallback((n) => {
+    if (!n) return;
+    if (n.type === 'application_approved') go('my-practice');
+    else if (n.type === 'application_rejected') setShowApplication(true);
+    else if (n.type === 'message') go('messages');
+    else if (n.type === 'booking') go(isProvider ? 'my-practice' : 'appointments');
+  }, [go, isProvider]);
 
   const meta = TAB_META[tab] || { title: 'LUCA Passport', sub: '' };
   const displayName = user?.fullName || [user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.email || 'Member';
@@ -1914,15 +1911,14 @@ export default function LucaPassport() {
               <Search size={16} />
               <input placeholder="Search your passport, care, and value…" />
             </div>
-            <ModeToggle user={user} onToggle={handleToggleMode} />
-            <button className="icon-btn" aria-label="Notifications"><Bell size={17} /><span className="ping" /></button>
+            <NotificationCenter onNavigate={handleNotificationNavigate} />
             <Avatar name={displayName} size={39} />
           </header>
 
           <main className="page">
             <PageHead title={meta.title} sub={meta.sub}
               action={<Pill tone="mint" icon={ShieldCheck}>{roleLabel(role)}</Pill>} />
-            <TabPage tab={tab} user={user} go={go} onUnread={(n) => setBadges((b) => ({ ...b, messages: n }))} onBecomeProvider={() => setShowApplication(true)} onApprovalStats={(s) => setBadges((b) => ({ ...b, approvals: s.pending || 0 }))} />
+            <TabPage tab={tab} user={user} go={go} onUnread={(n) => setBadges((b) => ({ ...b, messages: n }))} onBecomeProvider={() => setShowApplication(true)} onApprovalStats={(s) => setBadges((b) => ({ ...b, approvals: s.pending || 0 }))} onBookings={(n) => setBadges((b) => ({ ...b, bookings: n }))} />
           </main>
         </div>
       </div>
