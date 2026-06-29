@@ -95,3 +95,62 @@ CREATE INDEX IF NOT EXISTS idx_pservices_provider  ON provider_services (provide
 CREATE INDEX IF NOT EXISTS idx_pcred_provider      ON provider_credentials (provider_id);
 CREATE INDEX IF NOT EXISTS idx_pratings_provider   ON provider_ratings (provider_id);
 CREATE INDEX IF NOT EXISTS idx_pphotos_provider    ON provider_photos (provider_id);
+
+-- ============================================================
+-- Provider Approval System (see migrations/007_provider_approvals.sql)
+-- Run 007 for ALTERs on existing tables (users, provider_profiles).
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS provider_applications (
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id          UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider_type    VARCHAR(40)  NOT NULL,
+  business_name    VARCHAR(200) NOT NULL,
+  status           VARCHAR(20)  DEFAULT 'pending',
+  application_data JSONB        DEFAULT '{}'::jsonb,
+  admin_notes      TEXT,
+  rejection_reason TEXT,
+  reviewed_by      UUID REFERENCES users(id) ON DELETE SET NULL,
+  reviewed_at      TIMESTAMP,
+  submitted_at     TIMESTAMP DEFAULT now(),
+  created_at       TIMESTAMP DEFAULT now(),
+  updated_at       TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS provider_documents (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  application_id UUID NOT NULL REFERENCES provider_applications(id) ON DELETE CASCADE,
+  document_type  VARCHAR(40) NOT NULL,
+  document_name  VARCHAR(255),
+  document_data  TEXT,
+  mime_type      VARCHAR(120),
+  field_value    VARCHAR(255),
+  expiry_date    DATE,
+  verified       BOOLEAN DEFAULT FALSE,
+  uploaded_at    TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS provider_agreements (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  application_id UUID NOT NULL REFERENCES provider_applications(id) ON DELETE CASCADE,
+  agreement_type VARCHAR(40) NOT NULL,
+  agreed         BOOLEAN DEFAULT FALSE,
+  ip_address     VARCHAR(60),
+  agreed_at      TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS email_notifications (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID REFERENCES users(id) ON DELETE SET NULL,
+  to_email    VARCHAR(255),
+  template    VARCHAR(80),
+  subject     VARCHAR(255),
+  body        TEXT,
+  status      VARCHAR(20) DEFAULT 'logged',
+  created_at  TIMESTAMP DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_provider_applications_user   ON provider_applications(user_id);
+CREATE INDEX IF NOT EXISTS idx_provider_applications_status ON provider_applications(status);
+CREATE INDEX IF NOT EXISTS idx_provider_documents_app       ON provider_documents(application_id);
+CREATE INDEX IF NOT EXISTS idx_provider_agreements_app      ON provider_agreements(application_id);

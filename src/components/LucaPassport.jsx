@@ -18,6 +18,7 @@ import {
   Menu, X, Check, CheckCircle2, Clock, FileText, Plus, Building2, Star, Coins,
   Droplet, Moon, Footprints, Brain, Heart, ArrowUpRight, ArrowDownLeft, Eye,
   BadgeCheck, Zap, MapPin, Layers, RefreshCw, MessageSquare, Globe, Compass, Store,
+  Briefcase, FileCheck, BarChart3,
 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { api } from '../lib/api.js';
@@ -28,7 +29,10 @@ import WalletConnect from './wallet/WalletConnect.jsx';
 import WalletDashboard from './wallet/WalletDashboard.jsx';
 import HealthNFT from './wallet/HealthNFT.jsx';
 import ExploreMarketplace from './marketplace/ExploreMarketplace.jsx';
-import ProviderOnboarding from './ProviderOnboarding.jsx';
+import ProviderApplication from './provider/ProviderApplication.jsx';
+import ModeToggle from './provider/ModeToggle.jsx';
+import ProviderWorkspace from './provider/ProviderWorkspace.jsx';
+import ProviderApprovals from './admin/ProviderApprovals.jsx';
 
 /* ============================== DESIGN SYSTEM ============================== */
 const CSS = `
@@ -85,6 +89,9 @@ const CSS = `
   color:#0A2B29;background:linear-gradient(135deg,#E3AC46,#D69B33);border:1px solid rgba(255,255,255,.18);
   box-shadow:0 8px 20px -10px rgba(214,155,51,.7);transition:transform .15s ease,box-shadow .15s ease}
 .become-provider:hover{transform:translateY(-1px);box-shadow:0 12px 26px -10px rgba(214,155,51,.85)}
+.become-provider.pending{background:rgba(227,172,70,.16);color:rgba(243,222,178,.92);border:1px solid rgba(227,172,70,.32);
+  box-shadow:none;cursor:default}
+.become-provider.pending:hover{transform:none;box-shadow:none}
 .side-foot{padding:12px;border-radius:14px;background:rgba(255,255,255,.06);
   border:1px solid rgba(255,255,255,.08);display:flex;gap:10px;align-items:center}
 .side-foot button{margin-left:auto;background:transparent;border:none;color:rgba(220,239,234,.7);cursor:pointer;display:flex}
@@ -362,7 +369,27 @@ function EconomicPassportIcon({ size = 17, strokeWidth = 2, ...rest }) {
     </span>
   );
 }
-function navForRole(role) {
+function navForRole(role, providerMode) {
+  // Provider mode replaces the patient navigation with a focused workspace.
+  if (providerMode) {
+    return [
+      {
+        group: 'Provider', color: '#E3AC46', items: [
+          { id: 'prov-listings', label: 'My Listings', icon: Store },
+          { id: 'prov-bookings', label: 'Bookings', icon: CalendarDays },
+          { id: 'prov-reviews', label: 'Reviews', icon: Star },
+          { id: 'prov-analytics', label: 'Analytics', icon: BarChart3 },
+          { id: 'prov-settings', label: 'Settings', icon: Settings },
+        ],
+      },
+      {
+        group: 'Account', color: '#9FE7D6', items: [
+          { id: 'explore', label: 'Explore', icon: Compass },
+        ],
+      },
+    ];
+  }
+
   const nav = [
     {
       group: 'Overview', color: '#9FE7D6', items: [
@@ -394,6 +421,7 @@ function navForRole(role) {
     nav.push({
       group: 'System', color: '#8AA09C', items: [
         { id: 'analytics', label: 'Analytics', icon: Activity },
+        { id: 'provider-approvals', label: 'Provider Approvals', icon: FileCheck, badgeKey: 'approvals' },
         { id: 'systimeline', label: 'System Timeline', icon: Clock },
         { id: 'users', label: 'User Management', icon: UserCog },
         { id: 'settings', label: 'System Settings', icon: Settings },
@@ -416,8 +444,15 @@ const TAB_META = {
   schedule: { title: 'Schedule', sub: 'Your appointment calendar and incoming requests.' },
   patients: { title: 'Patients', sub: 'People in your care across the network.' },
   analytics: { title: 'Analytics', sub: 'Platform health at a glance.' },
+  'provider-approvals': { title: 'Provider Approvals', sub: 'Review and verify provider applications before they go live.' },
   users: { title: 'User Management', sub: 'Members, practitioners, and access across Solaris.' },
   settings: { title: 'System Settings', sub: 'Configuration, AI, and platform controls.' },
+  // Provider-mode workspace
+  'prov-listings': { title: 'My Listings', sub: 'Manage your provider profiles and visibility on Solaris Health.' },
+  'prov-bookings': { title: 'Bookings', sub: 'Appointments and requests from patients across your services.' },
+  'prov-reviews': { title: 'Reviews', sub: 'What patients are saying about your services.' },
+  'prov-analytics': { title: 'Provider Analytics', sub: 'Your listings, ratings, and performance at a glance.' },
+  'prov-settings': { title: 'Provider Settings', sub: 'Your provider account, status, and commission.' },
 };
 
 /* ============================== PATIENT — DASHBOARD ============================== */
@@ -1703,7 +1738,7 @@ function SystemTimelinePage() {
 }
 
 /* ============================== PAGE ROUTER ============================== */
-function TabPage({ tab, user, go, onUnread, onBecomeProvider }) {
+function TabPage({ tab, user, go, onUnread, onBecomeProvider, onApprovalStats }) {
   switch (tab) {
     case 'dashboard': return <DashboardPage user={user} go={go} />;
     case 'explore': return <ExploreMarketplace user={user} onBecomeProvider={onBecomeProvider} />;
@@ -1717,25 +1752,75 @@ function TabPage({ tab, user, go, onUnread, onBecomeProvider }) {
     case 'schedule': return <SchedulePage />;
     case 'patients': return <PatientsPage />;
     case 'analytics': return <AnalyticsPage />;
+    case 'provider-approvals': return <ProviderApprovals onStatsChange={onApprovalStats} />;
     case 'systimeline': return <SystemTimelinePage />;
     case 'users': return <UserManagementPage />;
     case 'settings': return <SystemSettingsPage />;
+    case 'prov-listings': return <ProviderWorkspace user={user} view="listings" go={go} />;
+    case 'prov-bookings': return <ProviderWorkspace user={user} view="bookings" go={go} />;
+    case 'prov-reviews': return <ProviderWorkspace user={user} view="reviews" go={go} />;
+    case 'prov-analytics': return <ProviderWorkspace user={user} view="analytics" go={go} />;
+    case 'prov-settings': return <ProviderWorkspace user={user} view="settings" go={go} />;
     default: return <DashboardPage user={user} go={go} />;
   }
 }
 
 /* ============================== MAIN SHELL ============================== */
 export default function LucaPassport() {
-  const { user, logout } = useApp();
+  const { user, logout, refreshUser } = useApp();
   const role = user?.role || 'patient';
-  const nav = navForRole(role);
+  const providerMode = user?.providerMode === true && user?.isProvider === true;
+  const nav = navForRole(role, providerMode);
   const [tab, setTab] = useState('dashboard');
   const [drawer, setDrawer] = useState(false);
   const [badges, setBadges] = useState({});
-  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showApplication, setShowApplication] = useState(false);
+  const [appStatus, setAppStatus] = useState(null); // current user's latest application
+  const [switching, setSwitching] = useState(false);
 
   // close drawer on tab change
   const go = useCallback((id) => { setTab(id); setDrawer(false); }, []);
+
+  // When provider mode turns on/off, jump to a valid default tab for that mode.
+  useEffect(() => {
+    setTab(providerMode ? 'prov-listings' : 'dashboard');
+  }, [providerMode]);
+
+  // Switch account mode (patient <-> provider).
+  const handleToggleMode = useCallback(async (mode) => {
+    setSwitching(true);
+    try {
+      await api.toggleMode(mode);
+      await refreshUser?.();
+    } catch (e) {
+      console.error('toggle mode failed', e);
+    } finally {
+      setSwitching(false);
+    }
+  }, [refreshUser]);
+
+  // Track the current user's application status (to label the CTA).
+  useEffect(() => {
+    let on = true;
+    if (user && !user.isProvider) {
+      api.getApplicationStatus()
+        .then((r) => { if (on) setAppStatus(r.application || null); })
+        .catch(() => {});
+    } else {
+      setAppStatus(null);
+    }
+  }, [user, showApplication]);
+
+  // live badge: pending provider applications for admin
+  useEffect(() => {
+    let on = true;
+    if (role === 'admin') {
+      api.getProviderStats()
+        .then((s) => { if (on) setBadges((b) => ({ ...b, approvals: s.pending || 0 })); })
+        .catch(() => {});
+    }
+    return () => { on = false; };
+  }, [role]);
 
   // live badge: pending triage count for practitioner / admin
   useEffect(() => {
@@ -1797,10 +1882,19 @@ export default function LucaPassport() {
             ))}
           </nav>
 
-          <button className="become-provider" onClick={() => { setShowOnboarding(true); setDrawer(false); }}>
-            <Store size={16} strokeWidth={2} />
-            <span>Become a Provider</span>
-          </button>
+          {!user?.isProvider && (
+            appStatus?.status === 'pending' ? (
+              <div className="become-provider pending" title="Your application is under review">
+                <Clock size={16} strokeWidth={2} />
+                <span>Application under review</span>
+              </div>
+            ) : (
+              <button className="become-provider" onClick={() => { setShowApplication(true); setDrawer(false); }}>
+                <Briefcase size={16} strokeWidth={2} />
+                <span>{appStatus?.status === 'rejected' ? 'Reapply as Provider' : 'Become a Provider'}</span>
+              </button>
+            )
+          )}
 
           <div className="side-foot">
             <Avatar name={displayName} size={36} />
@@ -1820,6 +1914,7 @@ export default function LucaPassport() {
               <Search size={16} />
               <input placeholder="Search your passport, care, and value…" />
             </div>
+            <ModeToggle user={user} onToggle={handleToggleMode} />
             <button className="icon-btn" aria-label="Notifications"><Bell size={17} /><span className="ping" /></button>
             <Avatar name={displayName} size={39} />
           </header>
@@ -1827,16 +1922,16 @@ export default function LucaPassport() {
           <main className="page">
             <PageHead title={meta.title} sub={meta.sub}
               action={<Pill tone="mint" icon={ShieldCheck}>{roleLabel(role)}</Pill>} />
-            <TabPage tab={tab} user={user} go={go} onUnread={(n) => setBadges((b) => ({ ...b, messages: n }))} onBecomeProvider={() => setShowOnboarding(true)} />
+            <TabPage tab={tab} user={user} go={go} onUnread={(n) => setBadges((b) => ({ ...b, messages: n }))} onBecomeProvider={() => setShowApplication(true)} onApprovalStats={(s) => setBadges((b) => ({ ...b, approvals: s.pending || 0 }))} />
           </main>
         </div>
       </div>
 
-      {showOnboarding && (
-        <ProviderOnboarding
+      {showApplication && (
+        <ProviderApplication
           user={user}
-          onClose={() => setShowOnboarding(false)}
-          onCreated={() => setShowOnboarding(false)}
+          onClose={() => setShowApplication(false)}
+          onSubmitted={() => { setShowApplication(false); refreshUser?.(); }}
         />
       )}
     </div>

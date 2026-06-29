@@ -116,4 +116,38 @@ router.post('/upload-photo', authMiddleware, async (req, res) => {
   }
 });
 
+// PUT /api/users/toggle-mode — switch between patient and provider mode.
+// Entering provider mode requires the user to be an approved provider.
+router.put('/toggle-mode', authMiddleware, async (req, res) => {
+  try {
+    const u = await db.query('SELECT * FROM users WHERE id=$1', [req.user.userId]);
+    if (u.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    const user = u.rows[0];
+
+    // Determine target mode. Accept explicit { mode: 'provider'|'patient' } or toggle.
+    let target;
+    const requested = req.body && req.body.mode;
+    if (requested === 'provider' || requested === 'patient') {
+      target = requested === 'provider';
+    } else {
+      target = !(user.provider_mode === true);
+    }
+
+    if (target && user.is_provider !== true) {
+      return res.status(403).json({
+        error: 'You must be an approved provider to switch to provider mode.',
+      });
+    }
+
+    const r = await db.query(
+      'UPDATE users SET provider_mode=$1, updated_at=NOW() WHERE id=$2 RETURNING *',
+      [target, req.user.userId]
+    );
+    res.json({ user: shapeUser(r.rows[0]), providerMode: target });
+  } catch (err) {
+    console.error('toggle-mode', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;

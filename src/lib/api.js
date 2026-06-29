@@ -189,6 +189,28 @@ class ApiClient {
   claimProvider(id) { return this.request(`/marketplace/providers/${id}/claim`, { method: 'POST', body: JSON.stringify({}) }); }
   getMyProviders() { return this.request('/marketplace/my-providers'); }
 
+  // ---- Provider applications (onboarding) ----
+  applyProvider(data) { return this.request('/provider/apply', { method: 'POST', body: JSON.stringify(data) }); }
+  uploadApplicationDocuments(applicationId, documents) {
+    return this.request('/provider/apply/documents', { method: 'POST', body: JSON.stringify({ application_id: applicationId, documents }) });
+  }
+  getApplicationStatus() { return this.request('/provider/apply/status'); }
+  getMyApplications() { return this.request('/provider/applications/me'); }
+  updateApplication(id, data) { return this.request(`/provider/apply/${id}`, { method: 'PUT', body: JSON.stringify(data) }); }
+
+  // ---- Admin: provider approvals ----
+  getPendingApplications(params = {}) {
+    const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '')).toString();
+    return this.request(`/admin/providers/pending${qs ? `?${qs}` : ''}`);
+  }
+  getApplicationReview(id) { return this.request(`/admin/providers/${id}/review`); }
+  approveApplication(id, data = {}) { return this.request(`/admin/providers/${id}/approve`, { method: 'POST', body: JSON.stringify(data) }); }
+  rejectApplication(id, data = {}) { return this.request(`/admin/providers/${id}/reject`, { method: 'POST', body: JSON.stringify(data) }); }
+  getProviderStats() { return this.request('/admin/providers/stats'); }
+
+  // ---- Account mode toggle ----
+  toggleMode(mode) { return this.request('/users/toggle-mode', { method: 'PUT', body: JSON.stringify(mode ? { mode } : {}) }); }
+
   // ---- Profile photo ----
   uploadProfilePhoto(image) { return this.request('/users/upload-photo', { method: 'POST', body: JSON.stringify({ image }) }); }
 }
