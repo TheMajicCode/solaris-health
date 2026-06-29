@@ -161,6 +161,36 @@ class ApiClient {
   markRead(conversationId) { return this.request('/messages/read', { method: 'POST', body: JSON.stringify({ conversationId }) }); }
   reportMessage(payload) { return this.request('/messages/report', { method: 'POST', body: JSON.stringify(payload) }); }
   getUnreadCount() { return this.request('/messages/unread-count'); }
+
+  // ---- Marketplace ----
+  getMarketplaceCategories() { return this.request('/marketplace/categories'); }
+  getProviders(params = {}) {
+    const qs = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')
+    ).toString();
+    return this.request(`/marketplace/providers${qs ? `?${qs}` : ''}`);
+  }
+  searchProviders(params = {}) {
+    const qs = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v !== undefined && v !== null && v !== '')
+    ).toString();
+    return this.request(`/marketplace/search${qs ? `?${qs}` : ''}`);
+  }
+  getProvider(id) { return this.request(`/marketplace/providers/${id}`); }
+  getProviderReviews(id, params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/marketplace/providers/${id}/reviews${qs ? `?${qs}` : ''}`);
+  }
+  createProvider(data) { return this.request('/marketplace/providers', { method: 'POST', body: JSON.stringify(data) }); }
+  updateProvider(id, data) { return this.request(`/marketplace/providers/${id}`, { method: 'PUT', body: JSON.stringify(data) }); }
+  addProviderPhoto(id, data) { return this.request(`/marketplace/providers/${id}/photos`, { method: 'POST', body: JSON.stringify(data) }); }
+  addProviderService(id, data) { return this.request(`/marketplace/providers/${id}/services`, { method: 'POST', body: JSON.stringify(data) }); }
+  addProviderReview(id, data) { return this.request(`/marketplace/providers/${id}/reviews`, { method: 'POST', body: JSON.stringify(data) }); }
+  claimProvider(id) { return this.request(`/marketplace/providers/${id}/claim`, { method: 'POST', body: JSON.stringify({}) }); }
+  getMyProviders() { return this.request('/marketplace/my-providers'); }
+
+  // ---- Profile photo ----
+  uploadProfilePhoto(image) { return this.request('/users/upload-photo', { method: 'POST', body: JSON.stringify({ image }) }); }
 }
 
 export const api = new ApiClient();

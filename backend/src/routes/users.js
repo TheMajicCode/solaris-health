@@ -94,4 +94,26 @@ router.put('/profile', authMiddleware, async (req, res) => {
   }
 });
 
+// POST /api/users/upload-photo — accept a base64 data URL, store as avatar_url
+router.post('/upload-photo', authMiddleware, async (req, res) => {
+  try {
+    const { image } = req.body || {};
+    if (!image || typeof image !== 'string' || !image.startsWith('data:image/')) {
+      return res.status(400).json({ error: 'A base64 image data URL is required' });
+    }
+    // Guard against oversized payloads (~6MB of base64 ≈ 4.5MB image)
+    if (image.length > 6_000_000) {
+      return res.status(413).json({ error: 'Image too large (max ~4MB)' });
+    }
+    const r = await db.query(
+      'UPDATE users SET avatar_url=$1, updated_at=NOW() WHERE id=$2 RETURNING *',
+      [image, req.user.userId]
+    );
+    res.json({ user: shapeUser(r.rows[0]), avatar_url: image });
+  } catch (err) {
+    console.error('upload-photo', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;

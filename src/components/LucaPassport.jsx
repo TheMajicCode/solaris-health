@@ -17,7 +17,7 @@ import {
   Send, Download, Sparkles, Leaf, TrendingUp, Award, Gift, Stethoscope, LogOut,
   Menu, X, Check, CheckCircle2, Clock, FileText, Plus, Building2, Star, Coins,
   Droplet, Moon, Footprints, Brain, Heart, ArrowUpRight, ArrowDownLeft, Eye,
-  BadgeCheck, Zap, MapPin, Layers, RefreshCw, MessageSquare,
+  BadgeCheck, Zap, MapPin, Layers, RefreshCw, MessageSquare, Globe, Compass, Store,
 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { api } from '../lib/api.js';
@@ -27,6 +27,8 @@ import SecureChat from './SecureChat.jsx';
 import WalletConnect from './wallet/WalletConnect.jsx';
 import WalletDashboard from './wallet/WalletDashboard.jsx';
 import HealthNFT from './wallet/HealthNFT.jsx';
+import ExploreMarketplace from './marketplace/ExploreMarketplace.jsx';
+import ProviderOnboarding from './ProviderOnboarding.jsx';
 
 /* ============================== DESIGN SYSTEM ============================== */
 const CSS = `
@@ -78,7 +80,12 @@ const CSS = `
   border-radius:3px;background:var(--mint)}
 .nav-item .badge{margin-left:auto;background:var(--gold);color:#3C2807;font-size:10.5px;font-weight:700;
   border-radius:999px;min-width:18px;height:18px;display:flex;align-items:center;justify-content:center;padding:0 5px}
-.side-foot{margin-top:auto;padding:12px;border-radius:14px;background:rgba(255,255,255,.06);
+.become-provider{margin-top:auto;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;padding:11px 14px;border-radius:12px;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;
+  color:#0A2B29;background:linear-gradient(135deg,#E3AC46,#D69B33);border:1px solid rgba(255,255,255,.18);
+  box-shadow:0 8px 20px -10px rgba(214,155,51,.7);transition:transform .15s ease,box-shadow .15s ease}
+.become-provider:hover{transform:translateY(-1px);box-shadow:0 12px 26px -10px rgba(214,155,51,.85)}
+.side-foot{padding:12px;border-radius:14px;background:rgba(255,255,255,.06);
   border:1px solid rgba(255,255,255,.08);display:flex;gap:10px;align-items:center}
 .side-foot button{margin-left:auto;background:transparent;border:none;color:rgba(220,239,234,.7);cursor:pointer;display:flex}
 .side-foot button:hover{color:#fff}
@@ -342,9 +349,27 @@ const Empty = ({ icon: Icon = Sparkles, title, sub }) => (
 
 
 /* ============================== NAVIGATION (role-based) ============================== */
+// Composite wallet+globe glyph for the Economic Passport tab.
+function EconomicPassportIcon({ size = 17, strokeWidth = 2, ...rest }) {
+  return (
+    <span style={{ position: 'relative', display: 'inline-flex', width: size, height: size }} {...rest}>
+      <Wallet size={size} strokeWidth={strokeWidth} />
+      <Globe
+        size={Math.round(size * 0.62)}
+        strokeWidth={strokeWidth}
+        style={{ position: 'absolute', right: -3, bottom: -3, background: 'var(--teal-d,#06403B)', borderRadius: '50%' }}
+      />
+    </span>
+  );
+}
 function navForRole(role) {
   const nav = [
-    { group: 'Overview', color: '#9FE7D6', items: [{ id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard }] },
+    {
+      group: 'Overview', color: '#9FE7D6', items: [
+        { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+        { id: 'explore', label: 'Explore', icon: Compass },
+      ],
+    },
     {
       group: 'Salud', color: '#36C9A9', items: [
         { id: 'health', label: 'Health Passport', icon: HeartPulse },
@@ -354,7 +379,7 @@ function navForRole(role) {
         { id: 'messages', label: 'Messages', icon: MessageSquare, badgeKey: 'messages' },
       ],
     },
-    { group: 'Tierra', color: '#C58A53', items: [{ id: 'wallet', label: 'Wallet & Rewards', icon: Wallet }] },
+    { group: 'Tierra', color: '#C58A53', items: [{ id: 'wallet', label: 'Economic Passport', icon: EconomicPassportIcon }] },
   ];
   if (role === 'practitioner' || role === 'admin') {
     nav.push({
@@ -379,13 +404,14 @@ function navForRole(role) {
 }
 const TAB_META = {
   dashboard: { title: 'Dashboard', sub: 'Your steering wheel for health, value, and care — one sovereign view.' },
+  explore: { title: 'Explore', sub: 'Discover trusted health & wellness providers near you — clinics, farms, healers, and more.' },
   health: { title: 'Health Passport', sub: 'Your 360° vitality, owned by you and exportable anytime.' },
   timeline: { title: 'Health Timeline', sub: 'Your complete health journey and trends — chronological and exportable.' },
   systimeline: { title: 'System Timeline', sub: 'Platform-wide activity, sign-ups, and usage patterns over time.' },
   coach: { title: 'LUCA Coach', sub: 'Heart-Centered Intelligence — a guide, never a diagnosis.' },
   appointments: { title: 'Appointments', sub: 'Book care and track your visits across the Solaris network.' },
   messages: { title: 'Secure Messages', sub: 'End-to-end encrypted conversations with your care network — only you can read them.' },
-  wallet: { title: 'Wallet & Rewards', sub: 'Your LOVE points, contributions, and value flows.' },
+  wallet: { title: 'Economic Passport', sub: 'Your LOVE points, contributions, crypto wallets, and value flows.' },
   drafts: { title: 'Draft Queue', sub: 'Review and approve AI-prepared triage summaries before they reach patients.' },
   schedule: { title: 'Schedule', sub: 'Your appointment calendar and incoming requests.' },
   patients: { title: 'Patients', sub: 'People in your care across the network.' },
@@ -1677,9 +1703,10 @@ function SystemTimelinePage() {
 }
 
 /* ============================== PAGE ROUTER ============================== */
-function TabPage({ tab, user, go, onUnread }) {
+function TabPage({ tab, user, go, onUnread, onBecomeProvider }) {
   switch (tab) {
     case 'dashboard': return <DashboardPage user={user} go={go} />;
+    case 'explore': return <ExploreMarketplace user={user} onBecomeProvider={onBecomeProvider} />;
     case 'health': return <HealthPage user={user} />;
     case 'timeline': return <TimelinePage user={user} />;
     case 'coach': return <CoachPage user={user} />;
@@ -1705,6 +1732,7 @@ export default function LucaPassport() {
   const [tab, setTab] = useState('dashboard');
   const [drawer, setDrawer] = useState(false);
   const [badges, setBadges] = useState({});
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   // close drawer on tab change
   const go = useCallback((id) => { setTab(id); setDrawer(false); }, []);
@@ -1769,6 +1797,11 @@ export default function LucaPassport() {
             ))}
           </nav>
 
+          <button className="become-provider" onClick={() => { setShowOnboarding(true); setDrawer(false); }}>
+            <Store size={16} strokeWidth={2} />
+            <span>Become a Provider</span>
+          </button>
+
           <div className="side-foot">
             <Avatar name={displayName} size={36} />
             <div style={{ minWidth: 0 }}>
@@ -1794,10 +1827,18 @@ export default function LucaPassport() {
           <main className="page">
             <PageHead title={meta.title} sub={meta.sub}
               action={<Pill tone="mint" icon={ShieldCheck}>{roleLabel(role)}</Pill>} />
-            <TabPage tab={tab} user={user} go={go} onUnread={(n) => setBadges((b) => ({ ...b, messages: n }))} />
+            <TabPage tab={tab} user={user} go={go} onUnread={(n) => setBadges((b) => ({ ...b, messages: n }))} onBecomeProvider={() => setShowOnboarding(true)} />
           </main>
         </div>
       </div>
+
+      {showOnboarding && (
+        <ProviderOnboarding
+          user={user}
+          onClose={() => setShowOnboarding(false)}
+          onCreated={() => setShowOnboarding(false)}
+        />
+      )}
     </div>
   );
 }

@@ -13,6 +13,7 @@ services:
       - ./backend/schema_solaris.sql:/docker-entrypoint-initdb.d/2-schema_solaris.sql
       - ./backend/schema_wallet.sql:/docker-entrypoint-initdb.d/3-schema_wallet.sql
       - ./backend/schema_messaging.sql:/docker-entrypoint-initdb.d/4-schema_messaging.sql
+      - ./backend/schema_marketplace.sql:/docker-entrypoint-initdb.d/5-schema_marketplace.sql
     ports:
       - "5432:5432"
     healthcheck:
