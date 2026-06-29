@@ -23,6 +23,10 @@ const marketplaceRoutes = require('./routes/marketplace');
 const providerApplicationRoutes = require('./routes/provider-application');
 const adminProvidersRoutes = require('./routes/admin/providers');
 const notificationsRoutes = require('./routes/notifications');
+const bookingsRoutes = require('./routes/bookings');
+const providerAvailabilityRoutes = require('./routes/provider/availability');
+const providerBookingsRoutes = require('./routes/provider/bookings');
+const adminBookingsRoutes = require('./routes/admin/bookings');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -97,6 +101,7 @@ app.use('/api/journey', journeyRoutes);
 app.use('/api/luca', lucaRoutes);
 app.use('/api/practitioner', practitionerRoutes);
 app.use('/api/admin/providers', adminProvidersRoutes);
+app.use('/api/admin/bookings', adminBookingsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/timeline', timelineRoutes);
@@ -104,6 +109,9 @@ app.use('/api/trends', trendsRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api/messages', messagesRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
+app.use('/api/bookings', bookingsRoutes);
+app.use('/api/provider/availability', providerAvailabilityRoutes);
+app.use('/api/provider/bookings', providerBookingsRoutes);
 app.use('/api/provider', providerApplicationRoutes);
 app.use('/api/notifications', notificationsRoutes);
 

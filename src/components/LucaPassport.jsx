@@ -18,7 +18,7 @@ import {
   Menu, X, Check, CheckCircle2, Clock, FileText, Plus, Building2, Star, Coins,
   Droplet, Moon, Footprints, Brain, Heart, ArrowUpRight, ArrowDownLeft, Eye,
   BadgeCheck, Zap, MapPin, Layers, RefreshCw, MessageSquare, Globe, Compass, Store,
-  Briefcase, FileCheck, BarChart3,
+  Briefcase, FileCheck, BarChart3, CalendarCheck,
 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { api } from '../lib/api.js';
@@ -32,6 +32,8 @@ import ExploreMarketplace from './marketplace/ExploreMarketplace.jsx';
 import ProviderApplication from './provider/ProviderApplication.jsx';
 import MyPractice from './provider/MyPractice.jsx';
 import ProviderApprovals from './admin/ProviderApprovals.jsx';
+import MyBookings from './booking/MyBookings.jsx';
+import BookingManagement from './admin/BookingManagement.jsx';
 import NotificationCenter from './NotificationCenter.jsx';
 import toast from 'react-hot-toast';
 
@@ -387,6 +389,7 @@ function navForRole(role, isProvider) {
         { id: 'timeline', label: 'Timeline', icon: Clock },
         { id: 'coach', label: 'LUCA Coach', icon: Bot },
         { id: 'appointments', label: 'Appointments', icon: Calendar },
+        { id: 'my-bookings', label: 'My Bookings', icon: CalendarCheck, badgeKey: 'mybookings' },
         { id: 'messages', label: 'Messages', icon: MessageSquare, badgeKey: 'messages' },
       ],
     },
@@ -414,6 +417,7 @@ function navForRole(role, isProvider) {
       group: 'System', color: '#8AA09C', items: [
         { id: 'analytics', label: 'Analytics', icon: Activity },
         { id: 'provider-approvals', label: 'Provider Approvals', icon: FileCheck, badgeKey: 'approvals' },
+        { id: 'booking-oversight', label: 'Booking Oversight', icon: CalendarCheck },
         { id: 'systimeline', label: 'System Timeline', icon: Clock },
         { id: 'users', label: 'User Management', icon: UserCog },
         { id: 'settings', label: 'System Settings', icon: Settings },
@@ -430,6 +434,8 @@ const TAB_META = {
   systimeline: { title: 'System Timeline', sub: 'Platform-wide activity, sign-ups, and usage patterns over time.' },
   coach: { title: 'LUCA Coach', sub: 'Heart-Centered Intelligence — a guide, never a diagnosis.' },
   appointments: { title: 'Appointments', sub: 'Book care and track your visits across the Solaris network.' },
+  'my-bookings': { title: 'My Bookings', sub: 'Your appointments with marketplace providers — upcoming, pending, and past.' },
+  'booking-oversight': { title: 'Booking Oversight', sub: 'Monitor and resolve appointments across every provider on the platform.' },
   messages: { title: 'Secure Messages', sub: 'End-to-end encrypted conversations with your care network — only you can read them.' },
   wallet: { title: 'Economic Passport', sub: 'Your LOVE points, contributions, crypto wallets, and value flows.' },
   drafts: { title: 'Draft Queue', sub: 'Review and approve AI-prepared triage summaries before they reach patients.' },
@@ -1734,6 +1740,8 @@ function TabPage({ tab, user, go, onUnread, onBecomeProvider, onApprovalStats, o
     case 'timeline': return <TimelinePage user={user} />;
     case 'coach': return <CoachPage user={user} />;
     case 'appointments': return <AppointmentsPage user={user} />;
+    case 'my-bookings': return <MyBookings user={user} onExplore={() => go('explore')} />;
+    case 'booking-oversight': return <BookingManagement />;
     case 'messages': return <SecureChat user={user} onUnread={onUnread} />;
     case 'wallet': return <WalletPage user={user} />;
     case 'drafts': return <DraftQueuePage />;
@@ -1798,6 +1806,26 @@ export default function LucaPassport() {
     return () => { on = false; };
   }, [role]);
 
+  // live badge: patient's active marketplace bookings (pending + upcoming confirmed)
+  useEffect(() => {
+    let on = true;
+    const pull = () => api.getMyBookings()
+      .then((r) => {
+        if (!on) return;
+        const now = Date.now();
+        const active = (r.bookings || []).filter((b) => {
+          if (!['pending', 'confirmed'].includes(b.status)) return false;
+          const when = new Date(`${String(b.booking_date).slice(0, 10)}T${(b.start_time || '00:00').slice(0, 8)}`);
+          return when.getTime() >= now - 36e5; // include in-progress within last hour
+        }).length;
+        setBadges((b) => ({ ...b, mybookings: active }));
+      })
+      .catch(() => {});
+    pull();
+    const t = setInterval(pull, 60000);
+    return () => { on = false; clearInterval(t); };
+  }, []);
+
   // live badge: total unread secure messages (all roles), polled periodically
   useEffect(() => {
     let on = true;
@@ -1838,7 +1866,7 @@ export default function LucaPassport() {
     if (n.type === 'application_approved') go('my-practice');
     else if (n.type === 'application_rejected') setShowApplication(true);
     else if (n.type === 'message') go('messages');
-    else if (n.type === 'booking') go(isProvider ? 'my-practice' : 'appointments');
+    else if (n.type === 'booking') go(isProvider ? 'my-practice' : 'my-bookings');
   }, [go, isProvider]);
 
   const meta = TAB_META[tab] || { title: 'LUCA Passport', sub: '' };

@@ -15,8 +15,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   X, MapPin, Phone, Globe, Mail, Clock, ChevronLeft, ChevronRight, Loader2,
-  Award, ShieldCheck, BadgeCheck, Check, Star, ExternalLink, Tag,
+  Award, ShieldCheck, BadgeCheck, Check, Star, ExternalLink, Tag, CalendarPlus,
 } from 'lucide-react';
+import BookingFlow from '../booking/BookingFlow.jsx';
 import { MapContainer, TileLayer, Marker } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -48,6 +49,7 @@ export default function ProviderDetailModal({ providerId, user, onClose, onUpdat
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [mapReady, setMapReady] = useState(false);
+  const [booking, setBooking] = useState(null); // { serviceId? } when booking flow open
 
   const load = useCallback(async () => {
     setLoading(true); setErr('');
@@ -106,6 +108,7 @@ export default function ProviderDetailModal({ providerId, user, onClose, onUpdat
   try { specialties = p?.specialties ? (typeof p.specialties === 'string' ? JSON.parse(p.specialties) : p.specialties) : []; } catch { specialties = []; }
 
   return (
+    <>
     <div className="pdm-overlay" onClick={onClose}>
       <div className="pdm" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <button className="pdm-close" onClick={onClose} aria-label="Close"><X size={20} /></button>
@@ -151,6 +154,11 @@ export default function ProviderDetailModal({ providerId, user, onClose, onUpdat
 
             {/* Contact actions */}
             <div className="pdm-actions">
+              {!p.is_owner && (
+                <button className="pdm-act pdm-act-book" onClick={() => setBooking({})}>
+                  <CalendarPlus size={15} /> Book Appointment
+                </button>
+              )}
               {p.phone && <a className="pdm-act" href={`tel:${p.phone}`}><Phone size={15} /> Call</a>}
               {p.website && <a className="pdm-act" href={p.website} target="_blank" rel="noreferrer"><Globe size={15} /> Website <ExternalLink size={11} /></a>}
               {p.email && <a className="pdm-act" href={`mailto:${p.email}`}><Mail size={15} /> Email</a>}
@@ -191,7 +199,14 @@ export default function ProviderDetailModal({ providerId, user, onClose, onUpdat
                               {s.duration_minutes && <span>· {s.duration_minutes} min</span>}
                             </span>
                           </div>
-                          {s.price != null && <span className="pdm-service-p">${Number(s.price).toFixed(0)}</span>}
+                          <div className="pdm-service-r">
+                            {s.price != null && <span className="pdm-service-p">${Number(s.price).toFixed(0)}</span>}
+                            {!p.is_owner && (
+                              <button className="pdm-service-book" onClick={() => setBooking({ serviceId: s.id })}>
+                                <CalendarPlus size={13} /> Book
+                              </button>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -297,10 +312,31 @@ export default function ProviderDetailModal({ providerId, user, onClose, onUpdat
       </div>
       <style>{CSS}</style>
     </div>
+    {booking && p && (
+      <div className="pdm-bookwrap">
+        <BookingFlow
+          providerId={providerId}
+          provider={p}
+          services={data?.services || []}
+          serviceId={booking.serviceId}
+          user={user}
+          onClose={() => setBooking(null)}
+          onBooked={() => { /* keep modal context; BookingFlow shows its own confirmation */ }}
+        />
+      </div>
+    )}
+    </>
   );
 }
 
 const CSS = `
+.luca .pdm-bookwrap{position:relative;z-index:5000}
+.luca .pdm-act-book{background:var(--teal-d);color:#fff;border:none;cursor:pointer;font-family:inherit}
+.luca .pdm-act-book:hover{background:var(--teal-d2)}
+.luca .pdm-service-r{display:flex;align-items:center;gap:10px}
+.luca .pdm-service-book{display:inline-flex;align-items:center;gap:4px;background:var(--mint-soft);color:var(--teal-d);
+  border:1px solid var(--mint-line);border-radius:8px;padding:5px 10px;font-weight:700;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}
+.luca .pdm-service-book:hover{background:var(--mint-line)}
 .luca .pdm-overlay{position:fixed;inset:0;background:rgba(2,18,24,.55);backdrop-filter:blur(4px);z-index:4000;
   display:flex;align-items:flex-start;justify-content:center;padding:28px 16px;overflow-y:auto}
 .luca .pdm{position:relative;width:100%;max-width:920px;background:var(--surface);border-radius:var(--r-lg);
