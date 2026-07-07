@@ -8,6 +8,7 @@ const db = require('../../db');
 const { authMiddleware } = require('../../middleware/auth');
 const { createNotification } = require('../../lib/notifications');
 const { sendBookingEmail } = require('../../lib/booking-emails');
+const { processGPSSplit } = require('../../lib/gps-engine');
 
 const router = express.Router();
 
@@ -120,7 +121,15 @@ async function transition(req, res, { id, next, requireFrom, reasonDefault, noti
     );
   }
   if (notify) await notify(booking);
-  res.json({ booking: upd.rows[0] });
+
+  // GPS — route value through the ecosystem when a booking completes.
+  let gps = null;
+  if (next === 'completed') {
+    try { gps = await processGPSSplit(upd.rows[0]); }
+    catch (e) { console.warn('[gps] split on complete failed (non-fatal):', e.message); }
+  }
+
+  res.json({ booking: upd.rows[0], gps: gps ? gps.split : null });
 }
 
 // PUT confirm

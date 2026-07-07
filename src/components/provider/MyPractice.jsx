@@ -11,16 +11,18 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   Loader2, Store, Star, Calendar, BarChart3, Eye, EyeOff, MapPin, Settings as SettingsIcon,
-  CheckCircle2, Clock, TrendingUp, MessageSquare, CalendarClock,
+  CheckCircle2, Clock, TrendingUp, MessageSquare, CalendarClock, Coins,
 } from 'lucide-react';
 import { api } from '../../lib/api.js';
 import ProviderBookings from './ProviderBookings.jsx';
 import ProviderCalendar from './ProviderCalendar.jsx';
+import GPSEarnings from '../gps/GPSEarnings.jsx';
 
 const SUBTABS = [
   { id: 'listings', label: 'Listings', icon: Store },
   { id: 'bookings', label: 'Bookings', icon: Calendar },
   { id: 'availability', label: 'Availability', icon: CalendarClock },
+  { id: 'earnings', label: 'GPS Earnings', icon: Coins },
   { id: 'reviews', label: 'Reviews', icon: Star },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
   { id: 'settings', label: 'Settings', icon: SettingsIcon },
@@ -68,6 +70,7 @@ export default function MyPractice({ user, onBookings }) {
           {view === 'listings' && <ListingsView providers={list} onRefresh={load} />}
           {view === 'bookings' && <ProviderBookings onBookings={onBookings} />}
           {view === 'availability' && <ProviderCalendar />}
+          {view === 'earnings' && <GPSEarnings />}
           {view === 'reviews' && <ReviewsView providers={visible} />}
           {view === 'analytics' && <AnalyticsView providers={list} />}
           {view === 'settings' && <SettingsView user={user} />}

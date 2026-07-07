@@ -27,6 +27,7 @@ const bookingsRoutes = require('./routes/bookings');
 const providerAvailabilityRoutes = require('./routes/provider/availability');
 const providerBookingsRoutes = require('./routes/provider/bookings');
 const adminBookingsRoutes = require('./routes/admin/bookings');
+const gpsRoutes = require('./routes/gps');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -114,6 +115,7 @@ app.use('/api/provider/availability', providerAvailabilityRoutes);
 app.use('/api/provider/bookings', providerBookingsRoutes);
 app.use('/api/provider', providerApplicationRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/gps', gpsRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {

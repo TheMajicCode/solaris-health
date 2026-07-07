@@ -18,7 +18,7 @@ import {
   Menu, X, Check, CheckCircle2, Clock, FileText, Plus, Building2, Star, Coins,
   Droplet, Moon, Footprints, Brain, Heart, ArrowUpRight, ArrowDownLeft, Eye,
   BadgeCheck, Zap, MapPin, Layers, RefreshCw, MessageSquare, Globe, Compass, Store,
-  Briefcase, FileCheck, BarChart3, CalendarCheck,
+  Briefcase, FileCheck, BarChart3, CalendarCheck, Sprout,
 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { api } from '../lib/api.js';
@@ -35,6 +35,10 @@ import ProviderApprovals from './admin/ProviderApprovals.jsx';
 import MyBookings from './booking/MyBookings.jsx';
 import BookingManagement from './admin/BookingManagement.jsx';
 import NotificationCenter from './NotificationCenter.jsx';
+import GPSLedger from './gps/GPSLedger.jsx';
+import ReferralHub from './gps/ReferralHub.jsx';
+import RegenerativeTreasury from './gps/RegenerativeTreasury.jsx';
+import GPSStats from './admin/GPSStats.jsx';
 import toast from 'react-hot-toast';
 
 /* ============================== DESIGN SYSTEM ============================== */
@@ -393,7 +397,12 @@ function navForRole(role, isProvider) {
         { id: 'messages', label: 'Messages', icon: MessageSquare, badgeKey: 'messages' },
       ],
     },
-    { group: 'Tierra', color: '#C58A53', items: [{ id: 'wallet', label: 'Economic Passport', icon: EconomicPassportIcon }] },
+    {
+      group: 'Tierra', color: '#C58A53', items: [
+        { id: 'wallet', label: 'Economic Passport', icon: EconomicPassportIcon },
+        { id: 'treasury', label: 'Community Treasury', icon: Sprout },
+      ],
+    },
   ];
   // Approved provider tools — added alongside the patient experience.
   if (isProvider) {
@@ -416,6 +425,7 @@ function navForRole(role, isProvider) {
     nav.push({
       group: 'System', color: '#8AA09C', items: [
         { id: 'analytics', label: 'Analytics', icon: Activity },
+        { id: 'gps-economy', label: 'GPS Economy', icon: Sprout },
         { id: 'provider-approvals', label: 'Provider Approvals', icon: FileCheck, badgeKey: 'approvals' },
         { id: 'booking-oversight', label: 'Booking Oversight', icon: CalendarCheck },
         { id: 'systimeline', label: 'System Timeline', icon: Clock },
@@ -438,6 +448,8 @@ const TAB_META = {
   'booking-oversight': { title: 'Booking Oversight', sub: 'Monitor and resolve appointments across every provider on the platform.' },
   messages: { title: 'Secure Messages', sub: 'End-to-end encrypted conversations with your care network — only you can read them.' },
   wallet: { title: 'Economic Passport', sub: 'Your LOVE points, contributions, crypto wallets, and value flows.' },
+  treasury: { title: 'Community Treasury', sub: 'The regenerative commons — every transaction seeds our shared prosperity.' },
+  'gps-economy': { title: 'GPS Economy', sub: 'The living economy — how value flows, splits, and returns to the commons.' },
   drafts: { title: 'Draft Queue', sub: 'Review and approve AI-prepared triage summaries before they reach patients.' },
   schedule: { title: 'Schedule', sub: 'Your appointment calendar and incoming requests.' },
   patients: { title: 'Patients', sub: 'People in your care across the network.' },
@@ -1166,14 +1178,19 @@ function WalletHub({ user }) {
 
 /* ============================== PATIENT — WALLET (tabbed) ============================== */
 function WalletPage({ user }) {
-  const [view, setView] = useState('web3');
+  const [view, setView] = useState('ledger');
   return (
     <div className="col gap-4">
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-        <Btn variant={view === 'web3' ? 'primary' : 'ghost'} className="sm" icon={Wallet} onClick={() => setView('web3')}>Crypto wallets</Btn>
+        <Btn variant={view === 'ledger' ? 'primary' : 'ghost'} className="sm" icon={Sprout} onClick={() => setView('ledger')}>Value trail</Btn>
+        <Btn variant={view === 'referrals' ? 'primary' : 'ghost'} className="sm" icon={Users} onClick={() => setView('referrals')}>Ecosystem builder</Btn>
         <Btn variant={view === 'rewards' ? 'primary' : 'ghost'} className="sm" icon={Gift} onClick={() => setView('rewards')}>LOVE &amp; rewards</Btn>
+        <Btn variant={view === 'web3' ? 'primary' : 'ghost'} className="sm" icon={Wallet} onClick={() => setView('web3')}>Crypto wallets</Btn>
       </div>
-      {view === 'web3' ? <WalletHub user={user} /> : <RewardsRecognition user={user} />}
+      {view === 'web3' && <WalletHub user={user} />}
+      {view === 'rewards' && <RewardsRecognition user={user} />}
+      {view === 'ledger' && <GPSLedger user={user} />}
+      {view === 'referrals' && <ReferralHub user={user} />}
     </div>
   );
 }
@@ -1744,6 +1761,8 @@ function TabPage({ tab, user, go, onUnread, onBecomeProvider, onApprovalStats, o
     case 'booking-oversight': return <BookingManagement />;
     case 'messages': return <SecureChat user={user} onUnread={onUnread} />;
     case 'wallet': return <WalletPage user={user} />;
+    case 'treasury': return <RegenerativeTreasury user={user} />;
+    case 'gps-economy': return <GPSStats />;
     case 'drafts': return <DraftQueuePage />;
     case 'schedule': return <SchedulePage />;
     case 'patients': return <PatientsPage />;

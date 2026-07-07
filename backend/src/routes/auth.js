@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { generateToken } = require('../middleware/auth');
+const { ensureReferralCode } = require('../lib/gps-engine');
 
 const router = express.Router();
 
@@ -37,7 +38,7 @@ function shapeUser(u) {
 // Register (patient or practitioner)
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, firstName, lastName, role = 'patient', country, language } = req.body;
+    const { email, password, firstName, lastName, role = 'patient', country, language, referralCode } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
     const existing = await db.query('SELECT id FROM users WHERE email = $1', [email]);
@@ -57,6 +58,24 @@ router.post('/register', async (req, res) => {
     await award(user.id, 'account_created', 10, 'onboarding', 'Welcome to Solaris');
     if (role === 'practitioner') {
       await db.query('INSERT INTO practitioner_profiles (user_id) VALUES ($1) ON CONFLICT DO NOTHING', [user.id]);
+    }
+
+    // GPS — mint a unique referral code so every member can become an ecosystem builder.
+    try { await ensureReferralCode(user.id, fullName); } catch (e) { console.warn('[gps] referral code failed:', e.message); }
+
+    // GPS — link this member to their referrer if a valid code was supplied.
+    if (referralCode) {
+      try {
+        const code = String(referralCode).trim().toUpperCase();
+        const ref = await db.query('SELECT id FROM users WHERE referral_code=$1', [code]);
+        if (ref.rows.length && ref.rows[0].id !== user.id) {
+          await db.query('UPDATE users SET referred_by=$1 WHERE id=$2', [ref.rows[0].id, user.id]);
+          await db.query(
+            `INSERT INTO gps_referrals (referrer_id, referred_user_id, reward_amount, status) VALUES ($1,$2,0,'pending')`,
+            [ref.rows[0].id, user.id]
+          );
+        }
+      } catch (e) { console.warn('[gps] apply referral on signup failed:', e.message); }
     }
 
     const token = generateToken(user.id, user.email, user.role);

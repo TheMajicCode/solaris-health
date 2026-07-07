@@ -12,6 +12,7 @@ const db = require('../../db');
 const { authMiddleware } = require('../../middleware/auth');
 const { adminOnly } = require('../../middleware/admin-only');
 const { createNotification } = require('../../lib/notifications');
+const { processGPSSplit } = require('../../lib/gps-engine');
 
 const router = express.Router();
 router.use(authMiddleware, adminOnly);
@@ -100,6 +101,12 @@ router.put('/:id/resolve', async (req, res) => {
     await createNotification(cur.rows[0].patient_id, 'booking', '⚖️ Booking Updated by Support',
       `Your booking status was updated to "${status}" by Solaris Health support. ${reason}`,
       { bookingId: req.params.id, role: 'patient' });
+
+    // GPS — process the ecosystem split if admin marks a booking completed.
+    if (status === 'completed') {
+      try { await processGPSSplit(upd.rows[0]); }
+      catch (e) { console.warn('[gps] split on admin-complete failed (non-fatal):', e.message); }
+    }
 
     res.json({ booking: upd.rows[0] });
   } catch (err) {

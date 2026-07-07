@@ -8,7 +8,7 @@
  *   onBecomeProvider  ()=>void  — optional CTA to open provider onboarding
  */
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Search, MapPin, Map as MapIcon, List as ListIcon, Loader2, Store, Plus, X } from 'lucide-react';
+import { Search, MapPin, Map as MapIcon, List as ListIcon, Loader2, Store, Plus, X, Sprout } from 'lucide-react';
 import { api } from '../../lib/api.js';
 import MapView from './MapView.jsx';
 import SearchFilters from './SearchFilters.jsx';
@@ -43,6 +43,12 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
   // load categories once
   useEffect(() => {
     api.getMarketplaceCategories().then((d) => setCategories(d.categories || [])).catch(() => {});
+  }, []);
+
+  // regenerative treasury balance — every booking here seeds the commons
+  const [treasury, setTreasury] = useState(null);
+  useEffect(() => {
+    api.getGpsTreasury().then((d) => setTreasury(Number(d?.balance ?? d?.treasuryBalance ?? 0))).catch(() => {});
   }, []);
 
   const fetchProviders = useCallback(async () => {
@@ -109,6 +115,12 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
         <button className="exm-filterbtn" onClick={() => setShowFilters((s) => !s)}>
           Filters{activeFilterCount > 0 && <span className="exm-fcount">{activeFilterCount}</span>}
         </button>
+        {treasury != null && treasury > 0 && (
+          <div className="exm-treasury" title="Every booking seeds our regenerative Community Treasury">
+            <Sprout size={15} /> <strong>${treasury.toFixed(2)}</strong>
+            <span>in Community Treasury</span>
+          </div>
+        )}
         {onBecomeProvider && (
           <button className="exm-cta" onClick={onBecomeProvider}>
             <Plus size={16} /> List your practice
@@ -201,6 +213,13 @@ const CSS = `
 .luca .exm-cta{display:inline-flex;align-items:center;gap:7px;background:var(--teal-d);color:#fff;border:none;
   border-radius:13px;padding:11px 18px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;transition:background .15s}
 .luca .exm-cta:hover{background:var(--teal-d2)}
+.luca .exm-treasury{display:inline-flex;align-items:center;gap:6px;background:var(--mint-soft);
+  border:1px solid var(--mint-line);color:var(--mint-ink);border-radius:999px;padding:8px 14px;
+  font-size:13px;white-space:nowrap}
+.luca .exm-treasury svg{color:var(--teal-d)}
+.luca .exm-treasury strong{font-family:'IBM Plex Mono',monospace;color:var(--teal-d)}
+.luca .exm-treasury span{color:var(--mint-ink)}
+@media (max-width:720px){.luca .exm-treasury span{display:none}}
 .luca .exm-body{flex:1;display:grid;grid-template-columns:262px 1fr 1fr;gap:16px;min-height:0}
 .luca .exm-rail{overflow-y:auto;padding-right:2px}
 .luca .exm-list{overflow-y:auto;padding-right:4px}

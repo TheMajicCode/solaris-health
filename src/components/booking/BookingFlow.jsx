@@ -20,6 +20,7 @@ import {
 import toast from 'react-hot-toast';
 import { api } from '../../lib/api.js';
 import TimeSlotPicker from './TimeSlotPicker.jsx';
+import ValueFlowViz from '../gps/ValueFlowViz.jsx';
 import { fmtTime, fmtDateLong, downloadICS, tzLabel } from '../../lib/calendar-utils.js';
 
 const STEPS = ['Service', 'Date & Time', 'Details', 'Review', 'Done'];
@@ -204,8 +205,15 @@ export default function BookingFlow({ providerId, provider: provIn, services: sv
                   <Row label="Time" value={slot ? `${fmtTime(slot.start)} – ${fmtTime(slot.end)} (${tz})` : ''} />
                   <div className="bkf-divider" />
                   <Row label="Service price" value={`$${price.toFixed(2)}`} />
-                  <Row label="Platform fee (10%)" value={`included`} muted />
                   <Row label="Total" value={`$${price.toFixed(2)}`} strong />
+                </div>
+                <div className="bkf-gps">
+                  <div className="bkf-gps-head">🌱 How your payment flows</div>
+                  <p className="bkf-gps-sub">
+                    No hidden platform cut. Through the Generative Prosperity System, every dollar is
+                    transparently shared — and you earn LOVE rewards while seeding the community commons.
+                  </p>
+                  <ValueFlowViz total={price} compact />
                 </div>
                 <p className="bkf-policy">
                   <ShieldCheck size={13} /> Cancellation policy: 24 hours notice required. Payment is collected in person for now —
@@ -230,6 +238,10 @@ export default function BookingFlow({ providerId, provider: provIn, services: sv
                   <div><Clock size={14} /> {fmtTime(result.booking.start_time)} – {fmtTime(result.booking.end_time)} ({tz})</div>
                   <div><Tag size={14} /> {service?.service_name} · {provider?.business_name}</div>
                 </div>
+                <p className="bkf-done-gps">
+                  🌱 When this session completes, {price ? `$${(price * 0.02).toFixed(2)}` : 'your'} LOVE rewards land in your
+                  Economic Passport and a share seeds the Community Treasury. Value flows to where value was created.
+                </p>
                 <div className="bkf-done-actions">
                   <button className="bkf-btn ghost" onClick={() => downloadICS({ ...result.booking, service_name: service?.service_name, business_name: provider?.business_name, address: provider?.address, city: provider?.city })}>
                     <CalendarPlus size={15} /> Add to Calendar
@@ -326,6 +338,11 @@ const CSS = `
 .luca .bkf-row-v.muted{color:var(--muted-2);font-weight:500}
 .luca .bkf-row.strong .bkf-row-l,.luca .bkf-row.strong .bkf-row-v{font-weight:800;font-size:15px;color:var(--teal-d)}
 .luca .bkf-divider{height:1px;background:var(--line);margin:2px 0}
+.luca .bkf-gps{margin-top:16px;background:var(--surface-2);border:1px solid var(--mint-line);border-radius:14px;padding:16px}
+.luca .bkf-gps-head{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:14px;color:var(--ink);margin-bottom:5px}
+.luca .bkf-gps-sub{font-size:12.5px;color:var(--muted);line-height:1.55;margin:0 0 12px}
+.luca .bkf-done-gps{font-size:12.5px;color:var(--mint-ink);background:var(--mint-soft);border:1px solid var(--mint-line);
+  border-radius:12px;padding:12px 14px;max-width:420px;margin:0 auto 18px;line-height:1.55;text-align:left}
 .luca .bkf-foot{display:flex;align-items:center;justify-content:space-between;padding:14px 22px;border-top:1px solid var(--line);gap:10px}
 .luca .bkf-btn{display:inline-flex;align-items:center;gap:6px;border-radius:11px;padding:11px 18px;font-weight:700;font-size:14px;
   cursor:pointer;font-family:inherit;border:1px solid transparent;transition:all .12s}

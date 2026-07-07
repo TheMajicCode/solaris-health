@@ -268,6 +268,18 @@ class ApiClient {
 
   // ---- Profile photo ----
   uploadProfilePhoto(image) { return this.request('/users/upload-photo', { method: 'POST', body: JSON.stringify({ image }) }); }
+
+  // ---- GPS (Generative Prosperity System) ----
+  getGpsLedger(limit = 20, offset = 0) { return this.request(`/gps/my-ledger?limit=${limit}&offset=${offset}`); }
+  getGpsEarnings() { return this.request('/gps/my-earnings'); }
+  getGpsTreasury() { return this.request('/gps/treasury'); }
+  getGpsTreasuryBreakdown() { return this.request('/gps/treasury/breakdown'); }
+  getReferralCode() { return this.request('/gps/referrals/my-code'); }
+  getReferralEarnings() { return this.request('/gps/referrals/my-earnings'); }
+  applyReferralCode(code) { return this.request('/gps/referrals/apply', { method: 'POST', body: JSON.stringify({ code }) }); }
+  processGps(bookingId) { return this.request(`/gps/process/${bookingId}`, { method: 'POST', body: JSON.stringify({}) }); }
+  getGpsStats() { return this.request('/gps/stats'); }
+  getGpsLeaderboard() { return this.request('/gps/leaderboard'); }
 }
 
 export const api = new ApiClient();
