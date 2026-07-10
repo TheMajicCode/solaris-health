@@ -266,12 +266,79 @@ async function ensureReferralCode(userId, username) {
   return code;
 }
 
+/**
+ * The data-driven default split policy for the Solaris sprint, expressed in
+ * basis points (10000 = 100%). Used when an organization has no explicit
+ * `split_policies_v2` row. 90/3/2/2/2/1.
+ */
+const DEFAULT_SPLIT_POLICY_BPS = [
+  { role: 'provider',           recipient_ref: 'org:provider',     share_bps: 9000, immutable: false },
+  { role: 'onboarder',          recipient_ref: 'user:onboarder',   share_bps: 300,  immutable: true },
+  { role: 'infrastructure',     recipient_ref: 'network:infra',    share_bps: 200,  immutable: false },
+  { role: 'community_treasury', recipient_ref: 'community:home',   share_bps: 200,  immutable: false, location_routing: 'home' },
+  { role: 'software',           recipient_ref: 'network:software', share_bps: 200,  immutable: false },
+  { role: 'patient_education',  recipient_ref: 'user:payer',       share_bps: 100,  immutable: false },
+];
+
+/**
+ * Return the active split policy for an organization from `split_policies_v2`.
+ * Falls back to DEFAULT_SPLIT_POLICY_BPS when none is configured.
+ * @param {string} orgId
+ * @returns {Promise<{policyId: string|null, name: string, recipients: Array}>}
+ */
+async function getSplitPolicy(orgId) {
+  if (orgId) {
+    try {
+      const r = await db.query(
+        `SELECT id, name, recipients FROM split_policies_v2
+         WHERE owner_org_id=$1 AND active = TRUE
+         ORDER BY updated_at DESC LIMIT 1`,
+        [orgId]
+      );
+      if (r.rows.length) {
+        const row = r.rows[0];
+        const recipients = typeof row.recipients === 'string' ? JSON.parse(row.recipients) : row.recipients;
+        return { policyId: row.id, name: row.name, recipients };
+      }
+    } catch (err) {
+      console.error('getSplitPolicy error:', err.message);
+    }
+  }
+  return { policyId: null, name: 'Default Split (90/3/2/2/2/1)', recipients: DEFAULT_SPLIT_POLICY_BPS };
+}
+
+/**
+ * Compute exact per-leg amounts (in sats) for a policy so the legs sum to
+ * `amountSats` exactly (largest-remainder rounding).
+ * @param {number} amountSats
+ * @param {Array<{role, recipient_ref, share_bps, immutable?, location_routing?}>} recipients
+ */
+function computePolicyLegs(amountSats, recipients) {
+  const raw = recipients.map((r) => ({ ...r, exact: (amountSats * r.share_bps) / 10000 }));
+  const legs = raw.map((r) => ({ ...r, amount_sats: Math.floor(r.exact), frac: r.exact - Math.floor(r.exact) }));
+  const allocated = legs.reduce((s, r) => s + r.amount_sats, 0);
+  const remainder = amountSats - allocated;
+  legs.sort((a, b) => b.frac - a.frac);
+  for (let i = 0; i < remainder; i++) legs[i % legs.length].amount_sats += 1;
+  return legs.map((r) => ({
+    role: r.role,
+    recipient_ref: r.recipient_ref,
+    share_bps: r.share_bps,
+    amount_sats: r.amount_sats,
+    immutable: !!r.immutable,
+    location_routing: r.location_routing || null,
+  }));
+}
+
 module.exports = {
   GPS_SPLIT,
   TREASURY_FUND_WEIGHTS,
   FUND_LABELS,
   LOVE_POINTS_PER_DOLLAR,
+  DEFAULT_SPLIT_POLICY_BPS,
   computeSplit,
+  computePolicyLegs,
+  getSplitPolicy,
   processGPSSplit,
   awardLovePoints,
   generateReferralCode,

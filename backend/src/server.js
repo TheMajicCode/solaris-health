@@ -28,6 +28,13 @@ const providerAvailabilityRoutes = require('./routes/provider/availability');
 const providerBookingsRoutes = require('./routes/provider/bookings');
 const adminBookingsRoutes = require('./routes/admin/bookings');
 const gpsRoutes = require('./routes/gps');
+// --- Solaris sprint routes ---
+const organizationsRoutes = require('./routes/organizations');
+const paymentsSimRoutes = require('./routes/payments-sim');
+const lucaContextRoutes = require('./routes/luca-context');
+const leaderboardRoutes = require('./routes/leaderboard');
+const contributionEventsRoutes = require('./routes/contribution-events');
+const appointmentsRoutes = require('./routes/appointments');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -116,6 +123,13 @@ app.use('/api/provider/bookings', providerBookingsRoutes);
 app.use('/api/provider', providerApplicationRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/gps', gpsRoutes);
+// --- Solaris sprint routes ---
+app.use('/api/organizations', organizationsRoutes);
+app.use('/api/payments', paymentsSimRoutes);
+app.use('/api/luca', lucaContextRoutes); // GET /api/luca/context (luca.js handles /messages)
+app.use('/api/leaderboard', leaderboardRoutes);
+app.use('/api/contribution-events', contributionEventsRoutes);
+app.use('/api/appointments', appointmentsRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {
