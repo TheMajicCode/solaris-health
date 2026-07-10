@@ -478,23 +478,28 @@ function solarisNav(effectiveRole) {
   return groups;
 }
 
-// Map a Solaris demo role to the closest legacy role the base nav understands.
+// Map a Solaris demo persona to the closest legacy role the base nav understands.
 function legacyRoleFor(effectiveRole) {
-  if (effectiveRole === 'solaris_admin') return 'admin';
-  if (effectiveRole === 'clinic_admin') return 'practitioner';
-  if (effectiveRole === 'vendor' || effectiveRole === 'builder') return 'patient';
+  if (effectiveRole === 'clinic_admin') return 'admin';
   return effectiveRole || 'patient';
 }
 
+// Only three demo personas are supported. Any other role coming from the DB
+// (vendor, builder, solaris_admin, unknown, …) falls back to the patient view.
 const SOLARIS_ROLES = [
   { value: 'patient', label: 'Patient' },
   { value: 'practitioner', label: 'Practitioner' },
   { value: 'clinic_admin', label: 'Clinic Admin' },
-  { value: 'vendor', label: 'Vendor · Farmer' },
-  { value: 'builder', label: 'Builder' },
-  { value: 'solaris_admin', label: 'Solaris Admin' },
 ];
 const SOLARIS_ROLE_LABEL = Object.fromEntries(SOLARIS_ROLES.map((r) => [r.value, r.label]));
+const SOLARIS_ROLE_SET = new Set(SOLARIS_ROLES.map((r) => r.value));
+
+// Normalize any incoming role to one of the three supported personas.
+function normalizeSolarisRole(r) {
+  if (r === 'admin') return 'clinic_admin';
+  if (SOLARIS_ROLE_SET.has(r)) return r;
+  return 'patient';
+}
 const TAB_META = {
   dashboard: { title: 'Dashboard', sub: 'Your steering wheel for health, value, and care — one sovereign view.' },
   explore: { title: 'Explore', sub: 'Discover trusted health & wellness providers near you — clinics, farms, healers, and more.' },
@@ -1884,8 +1889,9 @@ function TabPage({ tab, user, go, effectiveRole, onUnread, onBecomeProvider, onA
 export default function LucaPassport() {
   const { user, logout, refreshUser, demoRole, setDemoRole } = useApp();
   const realRole = user?.role || 'patient';
-  const effectiveRole = demoRole || realRole;
-  const isDemoMode = !!demoRole && demoRole !== realRole;
+  const realPersona = normalizeSolarisRole(realRole);
+  const effectiveRole = normalizeSolarisRole(demoRole || realRole);
+  const isDemoMode = effectiveRole !== realPersona;
   const role = legacyRoleFor(effectiveRole); // legacy role the base nav understands
   const isProvider = user?.isProvider === true;
   const nav = [...navForRole(role, isProvider), ...solarisNav(effectiveRole)];
@@ -2029,10 +2035,10 @@ export default function LucaPassport() {
             <select
               className="role-switch-sel"
               value={effectiveRole}
-              onChange={(e) => setDemoRole(e.target.value === realRole ? null : e.target.value)}
+              onChange={(e) => setDemoRole(e.target.value === realPersona ? null : e.target.value)}
             >
               {SOLARIS_ROLES.map((r) => (
-                <option key={r.value} value={r.value}>{r.label}{r.value === realRole ? ' (your account)' : ''}</option>
+                <option key={r.value} value={r.value}>{r.label}{r.value === realPersona ? ' (your account)' : ''}</option>
               ))}
             </select>
             {isDemoMode && (
