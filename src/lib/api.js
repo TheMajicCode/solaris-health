@@ -280,6 +280,51 @@ class ApiClient {
   processGps(bookingId) { return this.request(`/gps/process/${bookingId}`, { method: 'POST', body: JSON.stringify({}) }); }
   getGpsStats() { return this.request('/gps/stats'); }
   getGpsLeaderboard() { return this.request('/gps/leaderboard'); }
+
+  // ---- Solaris: sovereign auth (mock) ----
+  async nostrLogin(npub) {
+    const data = await this.request('/auth/nostr-mock', { method: 'POST', body: JSON.stringify({ npub }) });
+    this.setToken(data.token); return data;
+  }
+  async googleMockLogin(payload = {}) {
+    const data = await this.request('/auth/google-mock', { method: 'POST', body: JSON.stringify(payload) });
+    this.setToken(data.token); return data;
+  }
+
+  // ---- Solaris: organizations / GPS map ----
+  getOrganizations(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/organizations${qs ? '?' + qs : ''}`);
+  }
+  getOrganization(id) { return this.request(`/organizations/${id}`); }
+
+  // ---- Solaris: simulated payments + value splits ----
+  simulatePayment(payload) { return this.request('/payments/simulate', { method: 'POST', body: JSON.stringify(payload) }); }
+  getMyPayments() { return this.request('/payments/mine'); }
+
+  // ---- Solaris: LUCA context ----
+  getLucaContext(userId) {
+    const qs = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
+    return this.request(`/luca/context${qs}`);
+  }
+
+  // ---- Solaris: leaderboard + contributions ----
+  getLeaderboard(limit = 500) { return this.request(`/leaderboard?limit=${limit}`); }
+  getMyLeaderboardRank() { return this.request('/leaderboard/me'); }
+  getMyContributions() { return this.request('/contribution-events/mine'); }
+  logContribution(payload) { return this.request('/contribution-events', { method: 'POST', body: JSON.stringify(payload) }); }
+
+  // ---- Solaris: appointments + follow-ups ----
+  getAppointments(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/appointments${qs ? '?' + qs : ''}`);
+  }
+  followUp(appointmentId, action, draft) {
+    return this.request(`/appointments/${appointmentId}/follow-up`, { method: 'POST', body: JSON.stringify({ action, draft }) });
+  }
+  followUpDraft(id) { return this.followUp(id, 'draft'); }
+  followUpApprove(id, draft) { return this.followUp(id, 'approve', draft); }
+  followUpSend(id) { return this.followUp(id, 'send'); }
 }
 
 export const api = new ApiClient();

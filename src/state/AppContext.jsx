@@ -10,6 +10,8 @@ export function AppProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('home');        // main app tab
   const [authView, setAuthView] = useState('intro'); // intro | auth
+  const [demoRole, setDemoRole] = useState(null); // null = use real user.role; else overrides for demo
+  const [nostrBanner, setNostrBanner] = useState({ show: false, npub: '' });
 
   const loadUser = useCallback(async () => {
     if (!api.token) { setLoading(false); return; }
@@ -37,7 +39,7 @@ export function AppProvider({ children }) {
     setUser(user);
     return user;
   };
-  const logout = () => { api.logout(); setUser(null); setProfile(null); setTab('home'); setAuthView('intro'); };
+  const logout = () => { api.logout(); setUser(null); setProfile(null); setTab('home'); setAuthView('intro'); setDemoRole(null); setNostrBanner({ show: false, npub: '' }); };
 
   const refreshUser = async () => {
     const { user, profile } = await api.getMe();
@@ -48,6 +50,7 @@ export function AppProvider({ children }) {
     <AppContext.Provider value={{
       user, profile, loading, tab, setTab, authView, setAuthView,
       login, register, logout, refreshUser, setUser, setProfile,
+      demoRole, setDemoRole, nostrBanner, setNostrBanner,
     }}>
       {children}
     </AppContext.Provider>

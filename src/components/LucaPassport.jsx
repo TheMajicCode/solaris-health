@@ -39,6 +39,13 @@ import GPSLedger from './gps/GPSLedger.jsx';
 import ReferralHub from './gps/ReferralHub.jsx';
 import RegenerativeTreasury from './gps/RegenerativeTreasury.jsx';
 import GPSStats from './admin/GPSStats.jsx';
+import GPSMapView from './gps/GPSMapView.jsx';
+import PaymentModal from './gps/PaymentModal.jsx';
+import IdentityCard from './passport/IdentityCard.jsx';
+import WalletCard from './passport/WalletCard.jsx';
+import LevelBadge from './passport/LevelBadge.jsx';
+import ContributionLedger from './contributions/ContributionLedger.jsx';
+import AuraAdmin from './clinic/AuraAdmin.jsx';
 import toast from 'react-hot-toast';
 
 /* ============================== DESIGN SYSTEM ============================== */
@@ -91,6 +98,19 @@ const CSS = `
   border-radius:3px;background:var(--mint)}
 .nav-item .badge{margin-left:auto;background:var(--gold);color:#3C2807;font-size:10.5px;font-weight:700;
   border-radius:999px;min-width:18px;height:18px;display:flex;align-items:center;justify-content:center;padding:0 5px}
+.role-switch{margin:2px 0 14px;padding:11px 12px;border-radius:12px;background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.09)}
+.role-switch-lbl{display:flex;align-items:center;gap:6px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  color:rgba(217,238,232,.6);margin-bottom:7px;font-weight:600}
+.role-switch-sel{width:100%;padding:8px 10px;border-radius:9px;background:rgba(4,32,30,.55);color:#EAFBF4;
+  border:1px solid rgba(159,231,214,.22);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
+.role-switch-sel:focus{outline:none;border-color:#9FE7D6}
+.role-switch-badge{display:flex;align-items:center;gap:6px;margin-top:9px;font-size:10.5px;font-weight:600;
+  color:#F3DEB2;background:rgba(227,172,70,.16);border:1px solid rgba(227,172,70,.3);border-radius:9px;padding:6px 9px}
+.role-switch-dot{width:6px;height:6px;border-radius:50%;background:#E3AC46;flex:none;animation:pulseDot 1.6s ease-in-out infinite}
+@keyframes pulseDot{0%,100%{opacity:1}50%{opacity:.35}}
+.role-switch-reset{margin-left:auto;background:none;border:none;color:#F3DEB2;text-decoration:underline;cursor:pointer;font-size:10.5px;font-family:inherit}
+.side-identity{margin-bottom:10px}
 .become-provider{margin-top:auto;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:8px;
   width:100%;padding:11px 14px;border-radius:12px;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;
   color:#0A2B29;background:linear-gradient(135deg,#E3AC46,#D69B33);border:1px solid rgba(255,255,255,.18);
@@ -436,6 +456,45 @@ function navForRole(role, isProvider) {
   }
   return nav;
 }
+
+// Solaris-native navigation appended for every role. `effectiveRole` is the
+// demo-switched role (may differ from the logged-in account).
+function solarisNav(effectiveRole) {
+  const groups = [];
+  if (effectiveRole === 'clinic_admin') {
+    groups.push({
+      group: 'Clinic Node', color: '#E3AC46', items: [
+        { id: 'aura-admin', label: 'Clinic Console', icon: Building2 },
+      ],
+    });
+  }
+  groups.push({
+    group: 'Sovereign', color: '#9FE7D6', items: [
+      { id: 'gps-map', label: 'The Network', icon: MapPin },
+      { id: 'contributions', label: 'Contributions', icon: Award },
+      { id: 'identity', label: 'Identity & Data', icon: ShieldCheck },
+    ],
+  });
+  return groups;
+}
+
+// Map a Solaris demo role to the closest legacy role the base nav understands.
+function legacyRoleFor(effectiveRole) {
+  if (effectiveRole === 'solaris_admin') return 'admin';
+  if (effectiveRole === 'clinic_admin') return 'practitioner';
+  if (effectiveRole === 'vendor' || effectiveRole === 'builder') return 'patient';
+  return effectiveRole || 'patient';
+}
+
+const SOLARIS_ROLES = [
+  { value: 'patient', label: 'Patient' },
+  { value: 'practitioner', label: 'Practitioner' },
+  { value: 'clinic_admin', label: 'Clinic Admin' },
+  { value: 'vendor', label: 'Vendor · Farmer' },
+  { value: 'builder', label: 'Builder' },
+  { value: 'solaris_admin', label: 'Solaris Admin' },
+];
+const SOLARIS_ROLE_LABEL = Object.fromEntries(SOLARIS_ROLES.map((r) => [r.value, r.label]));
 const TAB_META = {
   dashboard: { title: 'Dashboard', sub: 'Your steering wheel for health, value, and care — one sovereign view.' },
   explore: { title: 'Explore', sub: 'Discover trusted health & wellness providers near you — clinics, farms, healers, and more.' },
@@ -459,6 +518,11 @@ const TAB_META = {
   settings: { title: 'System Settings', sub: 'Configuration, AI, and platform controls.' },
   // Provider workspace (unified — shown alongside patient tabs)
   'my-practice': { title: 'My Practice', sub: 'Manage your listings, bookings, reviews, and analytics — all in one place.' },
+  // Solaris-native pages
+  'gps-map': { title: 'The Network', sub: 'A living map of Solaris nodes and the health, wealth & sovereignty they reclaim.' },
+  contributions: { title: 'Contributions', sub: 'Your attested contribution record and the network leaderboard. Levels reward what you give.' },
+  identity: { title: 'Identity & Data', sub: 'Your sovereign identity, wallet, and one-click data export. You own all of it.' },
+  'aura-admin': { title: 'Clinic Console', sub: "Aura Dental's operations — appointments, simulated payments, follow-ups, and GPS treasury." },
 };
 
 /* ============================== PATIENT — DASHBOARD ============================== */
@@ -1748,9 +1812,49 @@ function SystemTimelinePage() {
   );
 }
 
+/* ============================== SOLARIS — IDENTITY & DATA ============================== */
+function IdentityPage({ user }) {
+  const [payOpen, setPayOpen] = useState(false);
+  return (
+    <div className="col" style={{ gap: 18 }}>
+      <div className="idpage-grid">
+        <IdentityCard user={user} />
+        <WalletCard user={user} />
+      </div>
+
+      <Card>
+        <SectionHead eyebrow="Generative Prosperity System" title="See value flow through the ecosystem" />
+        <p className="small" style={{ color: 'var(--muted)', margin: '4px 0 14px', maxWidth: 620, lineHeight: 1.6 }}>
+          Run a simulated treatment-plan payment and watch it split across the provider, your onboarder,
+          the local node, and the regenerative commons — each leg cryptographically proven. No real funds move.
+        </p>
+        <Btn variant="primary" icon={Zap} onClick={() => setPayOpen(true)}>Simulate a GPS payment</Btn>
+      </Card>
+
+      <PaymentModal
+        open={payOpen}
+        onClose={() => setPayOpen(false)}
+        orgName="Aura Dental"
+        planLabel="Dental Restoration"
+        amountSats={1500000}
+        onPaid={() => toast.success('Value distributed across the ecosystem (simulated)')}
+      />
+
+      <style>{`
+        .luca .idpage-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+        @media(max-width:820px){.luca .idpage-grid{grid-template-columns:1fr}}
+      `}</style>
+    </div>
+  );
+}
+
 /* ============================== PAGE ROUTER ============================== */
-function TabPage({ tab, user, go, onUnread, onBecomeProvider, onApprovalStats, onBookings }) {
+function TabPage({ tab, user, go, effectiveRole, onUnread, onBecomeProvider, onApprovalStats, onBookings }) {
   switch (tab) {
+    case 'gps-map': return <GPSMapView />;
+    case 'contributions': return <ContributionLedger user={user} />;
+    case 'identity': return <IdentityPage user={user} />;
+    case 'aura-admin': return <AuraAdmin />;
     case 'dashboard': return <DashboardPage user={user} go={go} />;
     case 'explore': return <ExploreMarketplace user={user} onBecomeProvider={onBecomeProvider} />;
     case 'health': return <HealthPage user={user} />;
@@ -1778,10 +1882,13 @@ function TabPage({ tab, user, go, onUnread, onBecomeProvider, onApprovalStats, o
 
 /* ============================== MAIN SHELL ============================== */
 export default function LucaPassport() {
-  const { user, logout, refreshUser } = useApp();
-  const role = user?.role || 'patient';
+  const { user, logout, refreshUser, demoRole, setDemoRole } = useApp();
+  const realRole = user?.role || 'patient';
+  const effectiveRole = demoRole || realRole;
+  const isDemoMode = !!demoRole && demoRole !== realRole;
+  const role = legacyRoleFor(effectiveRole); // legacy role the base nav understands
   const isProvider = user?.isProvider === true;
-  const nav = navForRole(role, isProvider);
+  const nav = [...navForRole(role, isProvider), ...solarisNav(effectiveRole)];
   const [tab, setTab] = useState('dashboard');
   const [drawer, setDrawer] = useState(false);
   const [badges, setBadges] = useState({});
@@ -1790,6 +1897,13 @@ export default function LucaPassport() {
 
   // close drawer on tab change
   const go = useCallback((id) => { setTab(id); setDrawer(false); }, []);
+
+  // If the active tab isn't available for the (demo-switched) role, fall back to Dashboard.
+  const validTabIds = nav.flatMap((g) => g.items.map((i) => i.id));
+  useEffect(() => {
+    if (!validTabIds.includes(tab)) setTab('dashboard');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveRole]);
 
   // Track the current user's application status (to label the CTA).
   useEffect(() => {
@@ -1907,6 +2021,28 @@ export default function LucaPassport() {
             </div>
           </div>
 
+          {/* ---- Demo role switcher ---- */}
+          <div className="role-switch">
+            <label className="role-switch-lbl">
+              <Layers size={12} /> Demo: Switch Role
+            </label>
+            <select
+              className="role-switch-sel"
+              value={effectiveRole}
+              onChange={(e) => setDemoRole(e.target.value === realRole ? null : e.target.value)}
+            >
+              {SOLARIS_ROLES.map((r) => (
+                <option key={r.value} value={r.value}>{r.label}{r.value === realRole ? ' (your account)' : ''}</option>
+              ))}
+            </select>
+            {isDemoMode && (
+              <div className="role-switch-badge">
+                <span className="role-switch-dot" /> Demo mode · viewing as {SOLARIS_ROLE_LABEL[effectiveRole]}
+                <button className="role-switch-reset" onClick={() => setDemoRole(null)}>reset</button>
+              </div>
+            )}
+          </div>
+
           <nav className="col" style={{ gap: 1 }}>
             {nav.map((grp) => (
               <div key={grp.group}>
@@ -1940,11 +2076,15 @@ export default function LucaPassport() {
             )
           )}
 
+          <div className="side-identity">
+            <IdentityCard user={user} compact />
+          </div>
+
           <div className="side-foot">
             <Avatar name={displayName} size={36} />
             <div style={{ minWidth: 0 }}>
               <div className="small f6 ellipsis" style={{ color: '#fff' }}>{displayName}</div>
-              <div className="tiny ellipsis" style={{ color: 'rgba(217,238,232,.6)' }}>{roleLabel(role)}</div>
+              <div className="tiny ellipsis" style={{ color: 'rgba(217,238,232,.6)' }}>{SOLARIS_ROLE_LABEL[effectiveRole] || roleLabel(role)}</div>
             </div>
             <button title="Log out" onClick={logout}><LogOut size={17} /></button>
           </div>
@@ -1964,8 +2104,13 @@ export default function LucaPassport() {
 
           <main className="page">
             <PageHead title={meta.title} sub={meta.sub}
-              action={<Pill tone="mint" icon={ShieldCheck}>{roleLabel(role)}</Pill>} />
-            <TabPage tab={tab} user={user} go={go} onUnread={(n) => setBadges((b) => ({ ...b, messages: n }))} onBecomeProvider={() => setShowApplication(true)} onApprovalStats={(s) => setBadges((b) => ({ ...b, approvals: s.pending || 0 }))} onBookings={(n) => setBadges((b) => ({ ...b, bookings: n }))} />
+              action={
+                <div className="row gap-2" style={{ alignItems: 'center' }}>
+                  {isDemoMode && <Pill tone="gold" icon={Layers}>Demo mode</Pill>}
+                  <Pill tone="mint" icon={ShieldCheck}>{SOLARIS_ROLE_LABEL[effectiveRole] || roleLabel(role)}</Pill>
+                </div>
+              } />
+            <TabPage tab={tab} user={user} go={go} effectiveRole={effectiveRole} onUnread={(n) => setBadges((b) => ({ ...b, messages: n }))} onBecomeProvider={() => setShowApplication(true)} onApprovalStats={(s) => setBadges((b) => ({ ...b, approvals: s.pending || 0 }))} onBookings={(n) => setBadges((b) => ({ ...b, bookings: n }))} />
           </main>
         </div>
       </div>
