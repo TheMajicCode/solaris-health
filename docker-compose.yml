@@ -43,10 +43,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.frontend
-      args:
-        VITE_API_URL: ${API_URL:-http://localhost:5000}/api
-    environment:
-      VITE_API_URL: ${API_URL:-http://localhost:5000}/api
+      args: {}
+    environment: {}
     ports:
       - "3000:3000"
     depends_on:

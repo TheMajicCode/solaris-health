@@ -1,0 +1,3 @@
+// API base URL: relative path works on any domain since nginx proxies /api → backend:5000
+// For local dev, set VITE_API_URL=http://localhost:5000/api in .env.local
+const API_URL = import.meta.env.VITE_API_URL || '/api';

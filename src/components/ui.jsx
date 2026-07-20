@@ -1,19 +1,11 @@
 import React from 'react';
 
 export const SolarisMark = ({ size = 36 }) => (
-  <div style={{ width: size, height: size, borderRadius: '50%', position: 'relative',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    background: 'radial-gradient(circle at 50% 35%, #0e3b32, #0a1a2e)',
-    boxShadow: '0 0 22px rgba(78,222,163,0.4)', border: '1px solid rgba(78,222,163,0.3)' }}>
-    <svg width={size * 0.55} height={size * 0.55} viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="13" r="4.2" fill="#ffb95f" />
-      {[...Array(8)].map((_, i) => {
-        const a = (i * Math.PI) / 4;
-        return <line key={i} x1={12 + Math.cos(a) * 6} y1={13 + Math.sin(a) * 6}
-          x2={12 + Math.cos(a) * 8.5} y2={13 + Math.sin(a) * 8.5} stroke="#ffb95f" strokeWidth="1.4" strokeLinecap="round" />;
-      })}
-    </svg>
-  </div>
+  <img
+    src="/solaris-logo.png"
+    alt="Solaris Holistic Health"
+    style={{ width: size, height: size, objectFit: 'contain', display: 'block', filter: 'drop-shadow(0 0 10px rgba(47,190,159,0.35))' }}
+  />
 );
 
 export const Wordmark = ({ size = '1.4rem' }) => (

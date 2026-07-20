@@ -1907,8 +1907,8 @@ function TabPage({ tab, user, go, effectiveRole, onUnread, onBecomeProvider, onA
     case 'contributions': return <ErrorBoundary><ContributionLedger user={user} /></ErrorBoundary>;
     case 'identity': return <ErrorBoundary><IdentityPage user={user} /></ErrorBoundary>;
     case 'aura-admin': return <ErrorBoundary><AuraAdmin /></ErrorBoundary>;
-    case 'dashboard': return <DashboardPage user={user} go={go} />;
-    case 'explore': return <ExploreMarketplace user={user} onBecomeProvider={onBecomeProvider} />;
+    case 'dashboard': return <ErrorBoundary><DashboardPage user={user} go={go} /></ErrorBoundary>;
+    case 'explore': return <ErrorBoundary><ExploreMarketplace user={user} onBecomeProvider={onBecomeProvider} /></ErrorBoundary>;
     case 'health': return <HealthPassportPage user={user} go={go} />;
     case 'timeline': return <TimelinePage user={user} />;
     case 'coach': return <CoachPage user={user} />;
@@ -2065,10 +2065,10 @@ export default function LucaPassport() {
         {/* ---------------- SIDEBAR ---------------- */}
         <aside className={`sidebar ${drawer ? 'open' : ''}`}>
           <div className="brand" style={{ justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
-              <div className="brand-mark"><Leaf size={19} color="#9FE7D6" /></div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <img src="/solaris-logo.png" alt="Solaris" style={{ width: 42, height: 42, objectFit: 'contain', filter: 'drop-shadow(0 0 8px rgba(47,190,159,0.5))' }} />
               <div>
-                <div className="brand-name">LUCA</div>
+                <div className="brand-name" style={{ fontSize: 15 }}>SOLARIS</div>
                 <div className="brand-sub">Sovereign Passport</div>
               </div>
             </div>

@@ -47,16 +47,17 @@ const SkipBtn = ({ onSkip }) => (
 
 function Splash() {
   return (
-    <div className="center col full" style={{ flex: 1, gap: 26 }}>
-      <div className="floaty fade-in" style={{ position: 'relative' }}>
-        <div style={{ position: 'absolute', inset: -40, borderRadius: '50%', background: 'radial-gradient(circle, rgba(78,222,163,0.25), transparent 70%)', animation: 'glowPulse 3s ease-in-out infinite' }} />
-        <SolarisMark size={96} />
+    <div className="center col full" style={{ flex: 1, gap: 20 }}>
+      <div className="floaty fade-in" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ position: 'absolute', inset: -50, borderRadius: '50%', background: 'radial-gradient(circle, rgba(78,222,163,0.22), transparent 65%)', animation: 'glowPulse 3s ease-in-out infinite' }} />
+        <img src="/solaris-logo.png" alt="Solaris Holistic Health" style={{ width: 130, height: 130, objectFit: 'contain', filter: 'drop-shadow(0 0 18px rgba(47,190,159,0.5))' }} />
       </div>
       <div className="text-center fade-up delay-2">
-        <Wordmark size="2.6rem" />
-        <p className="serif gold" style={{ fontStyle: 'italic', fontSize: '1.05rem', marginTop: 6 }}>Enter the Golden Age</p>
+        <p className="wordmark" style={{ fontSize: '2.4rem', letterSpacing: '.18em' }}>SOLARIS</p>
+        <p style={{ color: 'rgba(47,190,159,0.85)', fontSize: '0.82rem', letterSpacing: '.22em', textTransform: 'uppercase', marginTop: 4 }}>Holistic Health</p>
+        <p className="serif gold" style={{ fontStyle: 'italic', fontSize: '1.0rem', marginTop: 10 }}>Enter the Golden Age</p>
       </div>
-      <p className="eyebrow fade-up delay-4" style={{ position: 'absolute', bottom: 40 }}>Autonomous Health Protocol 4.0</p>
+      <p className="eyebrow fade-up delay-4" style={{ position: 'absolute', bottom: 40 }}>Sovereign Health Protocol</p>
     </div>
   );
 }
@@ -87,7 +88,7 @@ function GoldenAge({ onNext, onSkip }) {
   return (
     <div className="center col full text-center" style={{ flex: 1, gap: 20, position: 'relative' }}>
       <SkipBtn onSkip={onSkip} />
-      <div className="floaty"><SolarisMark size={72} /></div>
+      <div className="floaty"><img src="/solaris-logo.png" alt="Solaris" style={{ width: 72, height: 72, objectFit: 'contain', filter: 'drop-shadow(0 0 10px rgba(47,190,159,0.4))' }} /></div>
       <p className="eyebrow fade-up gold">The Golden Age</p>
       <h1 className="display fade-up delay-1" style={{ fontSize: '2.3rem', maxWidth: 340 }}>
         A sanctuary of precision <span className="mint">and wellness</span>
@@ -155,9 +156,9 @@ function SolarisMethod({ onNext, onSkip }) {
 function BodySpeaking({ onNext }) {
   return (
     <div className="center col full text-center" style={{ flex: 1, gap: 24 }}>
-      <div className="floaty" style={{ position: 'relative' }}>
+      <div className="floaty" style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ position: 'absolute', inset: -30, borderRadius: '50%', background: 'radial-gradient(circle, rgba(255,185,95,0.18), transparent 70%)', animation: 'glowPulse 3.5s ease-in-out infinite' }} />
-        <SolarisMark size={80} />
+        <img src="/solaris-logo.png" alt="Solaris" style={{ width: 80, height: 80, objectFit: 'contain', filter: 'drop-shadow(0 0 12px rgba(47,190,159,0.45))' }} />
       </div>
       <h1 className="display fade-up delay-1" style={{ fontSize: '2.1rem', maxWidth: 330 }}>
         Your body is <span className="gold">speaking</span>

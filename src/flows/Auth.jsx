@@ -43,9 +43,12 @@ export default function Auth() {
         </button>
 
         <div className="text-center col center gap-2 fade-up" style={{ marginBottom: 26 }}>
-          <SolarisMark size={56} />
-          <Wordmark size="1.7rem" />
-          <p className="muted" style={{ fontSize: '0.9rem' }}>
+          <img src="/solaris-logo.png" alt="Solaris Holistic Health" style={{ width: 72, height: 72, objectFit: 'contain', filter: 'drop-shadow(0 0 14px rgba(47,190,159,0.45))' }} />
+          <div>
+            <p className="wordmark" style={{ fontSize: '1.7rem', letterSpacing: '.18em' }}>SOLARIS</p>
+            <p style={{ color: 'rgba(47,190,159,0.8)', fontSize: '0.72rem', letterSpacing: '.2em', textTransform: 'uppercase', marginTop: 2 }}>Holistic Health</p>
+          </div>
+          <p className="muted" style={{ fontSize: '0.9rem', marginTop: 4 }}>
             {mode === 'signin' ? 'Welcome back to your sanctuary' : 'Create your sovereign health passport'}
           </p>
         </div>
