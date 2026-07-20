@@ -17,7 +17,7 @@ import {
   Send, Download, Sparkles, Leaf, TrendingUp, Award, Gift, Stethoscope, LogOut,
   Menu, X, Check, CheckCircle2, Clock, FileText, Plus, Building2, Star, Coins,
   Droplet, Moon, Footprints, Brain, Heart, ArrowUpRight, ArrowDownLeft, Eye,
-  BadgeCheck, Zap, MapPin, Layers, RefreshCw, MessageSquare, Globe, Compass, Store,
+  BadgeCheck, Zap, MapPin, RefreshCw, MessageSquare, Globe, Compass, Store,
   Briefcase, FileCheck, BarChart3, CalendarCheck, Sprout,
 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
@@ -98,19 +98,6 @@ const CSS = `
   border-radius:3px;background:var(--mint)}
 .nav-item .badge{margin-left:auto;background:var(--gold);color:#3C2807;font-size:10.5px;font-weight:700;
   border-radius:999px;min-width:18px;height:18px;display:flex;align-items:center;justify-content:center;padding:0 5px}
-.role-switch{margin:2px 0 14px;padding:11px 12px;border-radius:12px;background:rgba(255,255,255,.05);
-  border:1px solid rgba(255,255,255,.09)}
-.role-switch-lbl{display:flex;align-items:center;gap:6px;font-size:10px;letter-spacing:.12em;text-transform:uppercase;
-  color:rgba(217,238,232,.6);margin-bottom:7px;font-weight:600}
-.role-switch-sel{width:100%;padding:8px 10px;border-radius:9px;background:rgba(4,32,30,.55);color:#EAFBF4;
-  border:1px solid rgba(159,231,214,.22);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
-.role-switch-sel:focus{outline:none;border-color:#9FE7D6}
-.role-switch-badge{display:flex;align-items:center;gap:6px;margin-top:9px;font-size:10.5px;font-weight:600;
-  color:#F3DEB2;background:rgba(227,172,70,.16);border:1px solid rgba(227,172,70,.3);border-radius:9px;padding:6px 9px}
-.role-switch-dot{width:6px;height:6px;border-radius:50%;background:#E3AC46;flex:none;animation:pulseDot 1.6s ease-in-out infinite}
-@keyframes pulseDot{0%,100%{opacity:1}50%{opacity:.35}}
-.role-switch-reset{margin-left:auto;background:none;border:none;color:#F3DEB2;text-decoration:underline;cursor:pointer;font-size:10.5px;font-family:inherit}
-.side-identity{margin-bottom:10px}
 .become-provider{margin-top:auto;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:8px;
   width:100%;padding:11px 14px;border-radius:12px;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;
   color:#0A2B29;background:linear-gradient(135deg,#E3AC46,#D69B33);border:1px solid rgba(255,255,255,.18);
@@ -119,10 +106,6 @@ const CSS = `
 .become-provider.pending{background:rgba(227,172,70,.16);color:rgba(243,222,178,.92);border:1px solid rgba(227,172,70,.32);
   box-shadow:none;cursor:default}
 .become-provider.pending:hover{transform:none;box-shadow:none}
-.side-foot{padding:12px;border-radius:14px;background:rgba(255,255,255,.06);
-  border:1px solid rgba(255,255,255,.08);display:flex;gap:10px;align-items:center}
-.side-foot button{margin-left:auto;background:transparent;border:none;color:rgba(220,239,234,.7);cursor:pointer;display:flex}
-.side-foot button:hover{color:#fff}
 
 /* topbar */
 .topbar{display:flex;align-items:center;gap:12px;padding:13px 24px;position:sticky;top:0;z-index:30;
@@ -410,17 +393,13 @@ function navForRole(role, isProvider) {
     {
       group: 'Salud', color: '#36C9A9', items: [
         { id: 'health', label: 'Health Passport', icon: HeartPulse },
-        { id: 'timeline', label: 'Timeline', icon: Clock },
         { id: 'coach', label: 'LUCA Coach', icon: Bot },
-        { id: 'appointments', label: 'Appointments', icon: Calendar },
-        { id: 'my-bookings', label: 'My Bookings', icon: CalendarCheck, badgeKey: 'mybookings' },
         { id: 'messages', label: 'Messages', icon: MessageSquare, badgeKey: 'messages' },
       ],
     },
     {
       group: 'Tierra', color: '#C58A53', items: [
         { id: 'wallet', label: 'Economic Passport', icon: EconomicPassportIcon },
-        { id: 'treasury', label: 'Community Treasury', icon: Sprout },
       ],
     },
   ];
@@ -1853,23 +1832,91 @@ function IdentityPage({ user }) {
   );
 }
 
+/* ============================== ERROR BOUNDARY ============================== */
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(e) { return { error: e }; }
+  componentDidCatch(err) { /* eslint-disable-next-line no-console */ console.error('Section crashed:', err); }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 24, color: '#5b6b66', fontSize: 14 }}>
+          This section failed to load.{' '}
+          <button onClick={() => this.setState({ error: null })}
+            style={{ marginLeft: 8, background: '#0A2B29', color: '#EAFBF4', border: 'none', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>
+            Retry
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+/* ============================== HEALTH PASSPORT (with internal sections) ============================== */
+const HP_TABS = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'timeline', label: 'Timeline' },
+  { id: 'appointments', label: 'Appointments' },
+  { id: 'bookings', label: 'My Bookings' },
+];
+function HealthPassportPage({ user, go }) {
+  const [hpTab, setHpTab] = useState('overview');
+  return (
+    <div className="col gap-4">
+      <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--line,#e3ece8)', marginBottom: 6, flexWrap: 'wrap' }}>
+        {HP_TABS.map((t) => {
+          const active = hpTab === t.id;
+          return (
+            <button key={t.id} onClick={() => setHpTab(t.id)} style={{
+              background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+              fontSize: 13.5, fontWeight: 600, padding: '9px 15px', marginBottom: -1,
+              color: active ? '#0A2B29' : '#6b807a',
+              borderBottom: active ? '2px solid #36C9A9' : '2px solid transparent',
+            }}>{t.label}</button>
+          );
+        })}
+      </div>
+      {hpTab === 'overview' && <ErrorBoundary><HealthPage /></ErrorBoundary>}
+      {hpTab === 'timeline' && <ErrorBoundary><TimelinePage user={user} /></ErrorBoundary>}
+      {hpTab === 'appointments' && <ErrorBoundary><AppointmentsPage /></ErrorBoundary>}
+      {hpTab === 'bookings' && <ErrorBoundary><MyBookings user={user} onExplore={() => go('explore')} /></ErrorBoundary>}
+    </div>
+  );
+}
+
+/* ============================== ECONOMIC PASSPORT (with Community Treasury) ============================== */
+function EconomicPassportPage({ user }) {
+  return (
+    <div className="col gap-4">
+      <ErrorBoundary><WalletPage user={user} /></ErrorBoundary>
+      <div style={{ height: 1, background: 'var(--line,#e3ece8)', margin: '6px 0 2px' }} />
+      <div>
+        <h3 style={{ margin: '0 0 3px', fontSize: 17, color: '#0A2B29', fontFamily: 'inherit', fontWeight: 700 }}>Community Treasury</h3>
+        <p style={{ margin: '0 0 14px', fontSize: 13, color: '#6b807a' }}>Regenerative funds flowing back to the community — all values simulated.</p>
+        <ErrorBoundary><RegenerativeTreasury user={user} /></ErrorBoundary>
+      </div>
+    </div>
+  );
+}
+
 /* ============================== PAGE ROUTER ============================== */
 function TabPage({ tab, user, go, effectiveRole, onUnread, onBecomeProvider, onApprovalStats, onBookings }) {
   switch (tab) {
-    case 'gps-map': return <GPSMapView />;
-    case 'contributions': return <ContributionLedger user={user} />;
-    case 'identity': return <IdentityPage user={user} />;
-    case 'aura-admin': return <AuraAdmin />;
+    case 'gps-map': return <ErrorBoundary><GPSMapView /></ErrorBoundary>;
+    case 'contributions': return <ErrorBoundary><ContributionLedger user={user} /></ErrorBoundary>;
+    case 'identity': return <ErrorBoundary><IdentityPage user={user} /></ErrorBoundary>;
+    case 'aura-admin': return <ErrorBoundary><AuraAdmin /></ErrorBoundary>;
     case 'dashboard': return <DashboardPage user={user} go={go} />;
     case 'explore': return <ExploreMarketplace user={user} onBecomeProvider={onBecomeProvider} />;
-    case 'health': return <HealthPage user={user} />;
+    case 'health': return <HealthPassportPage user={user} go={go} />;
     case 'timeline': return <TimelinePage user={user} />;
     case 'coach': return <CoachPage user={user} />;
     case 'appointments': return <AppointmentsPage user={user} />;
     case 'my-bookings': return <MyBookings user={user} onExplore={() => go('explore')} />;
     case 'booking-oversight': return <BookingManagement />;
     case 'messages': return <SecureChat user={user} onUnread={onUnread} />;
-    case 'wallet': return <WalletPage user={user} />;
+    case 'wallet': return <EconomicPassportPage user={user} />;
     case 'treasury': return <RegenerativeTreasury user={user} />;
     case 'gps-economy': return <GPSStats />;
     case 'drafts': return <DraftQueuePage />;
@@ -1887,11 +1934,9 @@ function TabPage({ tab, user, go, effectiveRole, onUnread, onBecomeProvider, onA
 
 /* ============================== MAIN SHELL ============================== */
 export default function LucaPassport() {
-  const { user, logout, refreshUser, demoRole, setDemoRole } = useApp();
+  const { user, logout, refreshUser } = useApp();
   const realRole = user?.role || 'patient';
-  const realPersona = normalizeSolarisRole(realRole);
-  const effectiveRole = normalizeSolarisRole(demoRole || realRole);
-  const isDemoMode = effectiveRole !== realPersona;
+  const effectiveRole = normalizeSolarisRole(realRole);
   const role = legacyRoleFor(effectiveRole); // legacy role the base nav understands
   const isProvider = user?.isProvider === true;
   const nav = [...navForRole(role, isProvider), ...solarisNav(effectiveRole)];
@@ -2019,34 +2064,15 @@ export default function LucaPassport() {
 
         {/* ---------------- SIDEBAR ---------------- */}
         <aside className={`sidebar ${drawer ? 'open' : ''}`}>
-          <div className="brand">
-            <div className="brand-mark"><Leaf size={19} color="#9FE7D6" /></div>
-            <div>
-              <div className="brand-name">LUCA</div>
-              <div className="brand-sub">Sovereign Passport</div>
-            </div>
-          </div>
-
-          {/* ---- Demo role switcher ---- */}
-          <div className="role-switch">
-            <label className="role-switch-lbl">
-              <Layers size={12} /> Demo: Switch Role
-            </label>
-            <select
-              className="role-switch-sel"
-              value={effectiveRole}
-              onChange={(e) => setDemoRole(e.target.value === realPersona ? null : e.target.value)}
-            >
-              {SOLARIS_ROLES.map((r) => (
-                <option key={r.value} value={r.value}>{r.label}{r.value === realPersona ? ' (your account)' : ''}</option>
-              ))}
-            </select>
-            {isDemoMode && (
-              <div className="role-switch-badge">
-                <span className="role-switch-dot" /> Demo mode · viewing as {SOLARIS_ROLE_LABEL[effectiveRole]}
-                <button className="role-switch-reset" onClick={() => setDemoRole(null)}>reset</button>
+          <div className="brand" style={{ justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+              <div className="brand-mark"><Leaf size={19} color="#9FE7D6" /></div>
+              <div>
+                <div className="brand-name">LUCA</div>
+                <div className="brand-sub">Sovereign Passport</div>
               </div>
-            )}
+            </div>
+            <button title="Log out" onClick={logout} style={{ background: 'transparent', border: 'none', color: 'rgba(217,238,232,.6)', cursor: 'pointer', display: 'flex', padding: 4 }}><LogOut size={16} /></button>
           </div>
 
           <nav className="col" style={{ gap: 1 }}>
@@ -2082,18 +2108,6 @@ export default function LucaPassport() {
             )
           )}
 
-          <div className="side-identity">
-            <IdentityCard user={user} compact />
-          </div>
-
-          <div className="side-foot">
-            <Avatar name={displayName} size={36} />
-            <div style={{ minWidth: 0 }}>
-              <div className="small f6 ellipsis" style={{ color: '#fff' }}>{displayName}</div>
-              <div className="tiny ellipsis" style={{ color: 'rgba(217,238,232,.6)' }}>{SOLARIS_ROLE_LABEL[effectiveRole] || roleLabel(role)}</div>
-            </div>
-            <button title="Log out" onClick={logout}><LogOut size={17} /></button>
-          </div>
         </aside>
 
         {/* ---------------- MAIN ---------------- */}
@@ -2112,7 +2126,6 @@ export default function LucaPassport() {
             <PageHead title={meta.title} sub={meta.sub}
               action={
                 <div className="row gap-2" style={{ alignItems: 'center' }}>
-                  {isDemoMode && <Pill tone="gold" icon={Layers}>Demo mode</Pill>}
                   <Pill tone="mint" icon={ShieldCheck}>{SOLARIS_ROLE_LABEL[effectiveRole] || roleLabel(role)}</Pill>
                 </div>
               } />
