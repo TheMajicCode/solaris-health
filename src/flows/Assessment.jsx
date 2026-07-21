@@ -63,11 +63,23 @@ export default function Assessment() {
     }
   };
 
+  const skipOnboarding = async () => {
+    try {
+      await api.skipOnboarding();
+    } catch (e) {
+      // best-effort — still try to refresh below
+      console.warn('skip-onboarding failed:', e?.message);
+    }
+    try {
+      await refreshUser();
+    } catch { /* noop */ }
+  };
+
   if (phase === 'loading') return <FrameWrap><Spinner label="Preparing your assessment…" /></FrameWrap>;
 
   return (
     <FrameWrap>
-      {phase === 'intro' && <Intro name={user?.firstName} onStart={() => setPhase('goals')} />}
+      {phase === 'intro' && <Intro name={user?.firstName} onStart={() => setPhase('goals')} onSkip={skipOnboarding} />}
       {phase === 'goals' && <GoalsStep goals={goals} setGoals={setGoals} onNext={() => setPhase('aspects')} onBack={() => setPhase('intro')} />}
       {phase === 'aspects' && <AspectsStep aspectQs={aspectQs} aspects={aspects} setAspects={setAspects} onNext={() => setPhase('systems')} onBack={() => setPhase('goals')} />}
       {phase === 'systems' && <SystemsStep systemQs={systemQs} systems={systems} setSystems={setSystems} onNext={() => setPhase('intake')} onBack={() => setPhase('aspects')} />}
@@ -100,7 +112,13 @@ function StepHeader({ title, step, total, onBack }) {
   );
 }
 
-function Intro({ name, onStart }) {
+function Intro({ name, onStart, onSkip }) {
+  const [skipping, setSkipping] = useState(false);
+  const handleSkip = async () => {
+    if (skipping) return;
+    setSkipping(true);
+    try { await onSkip?.(); } finally { setSkipping(false); }
+  };
   return (
     <div className="page center col text-center" style={{ minHeight: '100vh', gap: 22 }}>
       <div className="floaty"><SolarisMark size={76} /></div>
@@ -112,6 +130,14 @@ function Intro({ name, onStart }) {
         This isn't a test — it's a reflection of where you are today. We'll explore your 4 Aspects of Being and 8 Body Systems.
       </p>
       <Button onClick={onStart}>Begin Assessment <ArrowRight size={18} /></Button>
+      <button
+        onClick={handleSkip}
+        disabled={skipping}
+        className="btn-tertiary"
+        style={{ background: 'none', border: 'none', cursor: skipping ? 'default' : 'pointer', color: 'var(--outline)', fontSize: '0.9rem', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 4, opacity: skipping ? 0.6 : 1 }}
+      >
+        {skipping ? 'One moment…' : <>Do this later <ArrowRight size={15} /></>}
+      </button>
     </div>
   );
 }

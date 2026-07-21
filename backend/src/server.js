@@ -36,6 +36,8 @@ const lucaRecommendationsRoutes = require('./routes/luca-recommendations');
 const leaderboardRoutes = require('./routes/leaderboard');
 const contributionEventsRoutes = require('./routes/contribution-events');
 const appointmentsRoutes = require('./routes/appointments');
+const journalRoutes = require('./routes/journal');
+const audioRoutes = require('./routes/audio');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -132,6 +134,8 @@ app.use('/api/luca', lucaRecommendationsRoutes); // GET /api/luca/recommendation
 app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/contribution-events', contributionEventsRoutes);
 app.use('/api/appointments', appointmentsRoutes);
+app.use('/api/journal', journalRoutes);
+app.use('/api/audio', audioRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {

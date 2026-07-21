@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
-const { generateToken } = require('../middleware/auth');
+const { generateToken, authMiddleware } = require('../middleware/auth');
 const { ensureReferralCode } = require('../lib/gps-engine');
 
 const router = express.Router();
@@ -226,6 +226,21 @@ router.post('/google-mock', async (req, res) => {
     });
   } catch (err) {
     console.error('google-mock error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Skip onboarding: mark the current user's onboarding as complete so they can
+// enter the dashboard without finishing the Solaris Method assessment.
+router.patch('/skip-onboarding', authMiddleware, async (req, res) => {
+  try {
+    await db.query(
+      "UPDATE users SET onboarding_status = 'complete', updated_at = NOW() WHERE id = $1",
+      [req.user.userId]
+    );
+    res.json({ ok: true, onboardingStatus: 'complete' });
+  } catch (err) {
+    console.error('skip-onboarding error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

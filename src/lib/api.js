@@ -32,6 +32,18 @@ class ApiClient {
     this.setToken(data.token); return data;
   }
   logout() { this.setToken(null); }
+  skipOnboarding() { return this.request('/auth/skip-onboarding', { method: 'PATCH' }); }
+
+  // ---- Journal ----
+  getJournal() { return this.request('/journal'); }
+  createJournalEntry(data) { return this.request('/journal', { method: 'POST', body: JSON.stringify(data) }); }
+  deleteJournalEntry(id) { return this.request(`/journal/${id}`, { method: 'DELETE' }); }
+
+  // ---- Audio library / media ----
+  getAudioLibrary() { return this.request('/audio/library'); }
+  getMyAudio() { return this.request('/audio/my'); }
+  acceptAudioFromListing(listingId) { return this.request(`/audio/accept/${listingId}`, { method: 'POST', body: JSON.stringify({}) }); }
+  unlockAudio(audioId) { return this.request(`/audio/unlock/${audioId}`, { method: 'POST', body: JSON.stringify({}) }); }
 
   // ---- Users / profile ----
   getMe() { return this.request('/users/me'); }

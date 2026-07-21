@@ -19,6 +19,7 @@ import {
   Droplet, Moon, Footprints, Brain, Heart, ArrowUpRight, ArrowDownLeft, ArrowRight, Eye,
   BadgeCheck, Zap, MapPin, RefreshCw, MessageSquare, Globe, Compass, Store,
   Briefcase, FileCheck, BarChart3, CalendarCheck, Sprout,
+  BookOpen, Headphones, Play, Pause, Lock, Trash2, Music,
 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { api } from '../lib/api.js';
@@ -313,6 +314,26 @@ textarea.input-line{resize:vertical;min-height:64px}
 .luca .coach-input-row input{flex:1;border:none;outline:none;background:transparent;font-size:13.5px;color:var(--ink);font-family:inherit;min-width:0}
 .luca .coach-disclaimer{font-size:11px;color:var(--muted-2);text-align:center;margin-top:9px}
 @media(max-width:1080px){.luca .coach-layout{grid-template-columns:1fr}.luca .coach-shell{height:auto;min-height:60vh}}
+/* Follow-up suggestion chips */
+.luca .luca-chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
+.luca .luca-chip{display:inline-flex;align-items:center;gap:5px;border:1px solid transparent;border-radius:999px;padding:6px 11px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;line-height:1.2;transition:filter .15s,transform .1s}
+.luca .luca-chip:hover{filter:brightness(.97)}
+.luca .luca-chip:active{transform:translateY(1px)}
+.luca .luca-chip:disabled{opacity:.55;cursor:default}
+/* Media library sticky player */
+.luca .media-player{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:60;display:flex;align-items:center;gap:12px;background:var(--surface,#fff);border:1px solid var(--line,#E6EDEA);box-shadow:0 12px 40px rgba(10,40,40,.16);border-radius:16px;padding:10px 14px;width:min(680px,calc(100% - 48px))}
+/* Floating LUCA widget */
+.luca .luca-fab{position:fixed;right:22px;bottom:22px;z-index:9998;display:inline-flex;align-items:center;gap:9px;background:linear-gradient(150deg,#0E5C57,#0A413D);color:#E7F8F3;border:none;border-radius:999px;padding:8px 16px 8px 8px;cursor:pointer;box-shadow:0 10px 30px rgba(10,60,55,.35);font-family:inherit;transition:transform .15s,box-shadow .15s}
+.luca .luca-fab:hover{transform:translateY(-2px);box-shadow:0 14px 38px rgba(10,60,55,.42)}
+.luca .luca-fab-label{font-size:13.5px;font-weight:700;letter-spacing:.2px}
+.luca .luca-widget{position:fixed;right:22px;bottom:22px;z-index:9999;width:380px;max-width:calc(100vw - 32px);height:520px;max-height:calc(100vh - 44px);display:flex;flex-direction:column;background:var(--surface,#fff);border:1px solid var(--line,#E6EDEA);border-radius:20px;overflow:hidden;box-shadow:0 24px 70px rgba(10,40,40,.28)}
+.luca .luca-widget-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;background:linear-gradient(150deg,#0E5C57,#0A413D)}
+.luca .luca-widget-x{background:rgba(255,255,255,.14);border:none;color:#E7F8F3;width:28px;height:28px;border-radius:9px;display:grid;place-items:center;cursor:pointer;flex:none}
+.luca .luca-widget-x:hover{background:rgba(255,255,255,.24)}
+.luca .luca-widget-body{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px;background:var(--surface-2,#F7FAF9)}
+.luca .luca-widget-foot{padding:12px 14px;border-top:1px solid var(--line,#E6EDEA);background:var(--surface,#fff)}
+.luca .luca-widget-foot .btn.primary{padding:8px 12px}
+@media(max-width:520px){.luca .luca-widget{right:12px;left:12px;width:auto}}
 `;
 
 /* ============================== HELPERS ============================== */
@@ -423,6 +444,8 @@ function navForRole(role, isProvider) {
       group: 'Salud', color: '#36C9A9', items: [
         { id: 'health', label: 'Health Passport', icon: HeartPulse },
         { id: 'coach', label: 'LUCA Coach', icon: Bot },
+        { id: 'journal', label: 'Journal', icon: BookOpen },
+        { id: 'media', label: 'Media', icon: Headphones },
         { id: 'messages', label: 'Messages', icon: MessageSquare, badgeKey: 'messages' },
       ],
     },
@@ -515,6 +538,8 @@ const TAB_META = {
   timeline: { title: 'Health Timeline', sub: 'Your complete health journey and trends — chronological and exportable.' },
   systimeline: { title: 'System Timeline', sub: 'Platform-wide activity, sign-ups, and usage patterns over time.' },
   coach: { title: 'LUCA Coach', sub: 'Heart-Centered Intelligence — a guide, never a diagnosis.' },
+  journal: { title: 'Journal', sub: 'A private space to reflect. Capture how you feel, notice patterns, own your story.' },
+  media: { title: 'Media Library', sub: 'Guided audio practices from Solaris practitioners — yours to keep and revisit.' },
   appointments: { title: 'Appointments', sub: 'Book care and track your visits across the Solaris network.' },
   'my-bookings': { title: 'My Bookings', sub: 'Your appointments with marketplace providers — upcoming, pending, and past.' },
   'booking-oversight': { title: 'Booking Oversight', sub: 'Monitor and resolve appointments across every provider on the platform.' },
@@ -623,7 +648,7 @@ function DashboardPage({ user, go }) {
         </Card>
 
         {/* LUCA Recommends */}
-        <LucaRecommends recs={recs} loading={recsLoading} go={go} />
+        <LucaRecommends recs={recs} loading={recsLoading} go={go} user={user} vitality={vitality} focus={focus} />
 
         {/* Focus areas + daily metrics */}
         <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
@@ -707,7 +732,28 @@ function DashboardPage({ user, go }) {
     </div>
   );
 }
-function LucaRecommends({ recs, loading, go }) {
+const CURATED_JOURNEYS = [
+  { key: 'detox', title: 'Detox & Cleanse Journey', tagline: 'Reset your body’s natural detox pathways with gentle, guided support.', match: ['detox', 'liver', 'gut', 'digest'] },
+  { key: 'heavy-metal', title: 'Heavy Metal Release', tagline: 'A careful protocol to reduce toxic load and restore cellular clarity.', match: ['toxin', 'metal', 'fatigue', 'brain fog'] },
+  { key: 'menopause', title: 'Menopause Transition', tagline: 'Move through this passage with balance, warmth, and steady energy.', match: ['hormone', 'menopause', 'sleep', 'mood'] },
+  { key: 'reset', title: 'Optimal Health Reset', tagline: 'A whole-system reboot for energy, focus, and resilient vitality.', match: ['energy', 'vitality', 'stress'] },
+  { key: 'oral', title: 'Smile & Oral Wellness Journey', tagline: 'Whole-body health begins in the mouth — minimally invasive & holistic.', match: ['oral', 'dental', 'smile', 'teeth'] },
+  { key: 'thyroid', title: 'Thyroid Balance', tagline: 'Nourish your metabolism and reclaim steady, grounded energy.', match: ['thyroid', 'metabolism', 'weight'] },
+  { key: 'sugar', title: 'Sugar Balance Reset', tagline: 'Stabilize energy and cravings with a gentle blood-sugar rhythm.', match: ['sugar', 'blood', 'craving', 'nutrition'] },
+  { key: 'mama', title: 'Nurture Mama Journey', tagline: 'Holistic care for the whole arc of motherhood — body, mind, spirit.', match: ['mama', 'pregnan', 'postpartum', 'fertility'] },
+];
+
+function pickJourney(focus) {
+  const names = (focus || []).map((f) => String(f?.name || f || '').toLowerCase()).join(' ');
+  if (names) {
+    const hit = CURATED_JOURNEYS.find((j) => j.match.some((m) => names.includes(m)));
+    if (hit) return hit;
+  }
+  // Stable pick for the session if no focus match.
+  return CURATED_JOURNEYS[Math.floor(Math.random() * CURATED_JOURNEYS.length)];
+}
+
+function LucaRecommends({ recs, loading, go, user, vitality = 0, focus = [] }) {
   if (loading) {
     return (
       <Card>
@@ -719,53 +765,80 @@ function LucaRecommends({ recs, loading, go }) {
       </Card>
     );
   }
-  if (!recs || (!recs.nextStep && !recs.curatedJourney)) return null;
 
-  const ns = recs.nextStep;
-  const cj = recs.curatedJourney;
+  const firstName = user?.firstName || 'friend';
+
+  // ── Card 1: "Your Next Step" (teal) — always resolved to something actionable ──
+  let ns = recs?.nextStep;
+  if (!ns) {
+    if (!vitality) {
+      ns = {
+        title: 'Begin Your Solaris Journey',
+        description: 'Take the Solaris Method assessment to reveal your 360° health map.',
+        cta: 'Start assessment', target: 'health',
+      };
+    } else {
+      ns = {
+        title: 'Journal Your Day',
+        description: 'Capture how you feel right now. 3 minutes, big impact.',
+        cta: 'Open journal', target: 'journal',
+      };
+    }
+  }
+  const nsTarget = ns.target || (!vitality ? 'health' : 'journal');
+  const nsCta = ns.cta || (!vitality ? 'Start assessment' : 'Check in today');
+
+  // ── Card 2: "Curated Journey" (gold) — server value or a smart fallback ──
+  const cj = recs?.curatedJourney;
+  const fallbackJourney = cj ? null : pickJourney(focus);
 
   return (
     <Card>
       <SectionHead eyebrow="Personalized for you" title="LUCA Recommends" action={<Pill tone="mint" icon={Sparkles}>LUCA</Pill>} />
       <div className="grid rec-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        {ns && (
-          <div className="card flat" style={{ padding: 16, background: 'linear-gradient(165deg,#0E5C57,#0A413D)', color: '#E7F8F3', border: 'none', display: 'flex', flexDirection: 'column' }}>
-            <div className="row gap-2" style={{ alignItems: 'center' }}>
-              <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(159,231,214,.16)', display: 'grid', placeItems: 'center', flex: 'none' }}><Zap size={17} color="#9FE7D6" /></div>
-              <div className="tiny" style={{ color: 'rgba(231,248,243,.75)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 700 }}>Your Next Step</div>
-            </div>
-            <div className="dp f7" style={{ fontSize: 15.5, marginTop: 11 }}>{ns.title}</div>
-            <div style={{ fontSize: 13, lineHeight: 1.55, color: 'rgba(231,248,243,.92)', marginTop: 6, flex: 1 }}>{ns.description}</div>
-            {ns.action ? (
-              <div className="tiny" style={{ marginTop: 12, color: 'rgba(231,248,243,.72)', display: 'flex', gap: 6, alignItems: 'flex-start' }}>
-                <ArrowRight size={13} style={{ marginTop: 2, flex: 'none' }} /><span>{ns.action}</span>
-              </div>
-            ) : null}
+        {/* Card 1 — Next Step */}
+        <div className="card flat" style={{ padding: 16, background: 'linear-gradient(165deg,#0E5C57,#0A413D)', color: '#E7F8F3', border: 'none', display: 'flex', flexDirection: 'column' }}>
+          <div className="row gap-2" style={{ alignItems: 'center' }}>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(159,231,214,.16)', display: 'grid', placeItems: 'center', flex: 'none' }}><Zap size={17} color="#9FE7D6" /></div>
+            <div className="tiny" style={{ color: 'rgba(231,248,243,.75)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 700 }}>Your Next Step</div>
           </div>
-        )}
-        {cj && (
-          <div className="card flat" style={{ padding: 16, background: 'linear-gradient(165deg,#7A5A1E,#4E3A12)', color: '#FBF3DF', border: 'none', display: 'flex', flexDirection: 'column' }}>
-            <div className="row gap-2" style={{ alignItems: 'center' }}>
-              <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(240,210,140,.18)', display: 'grid', placeItems: 'center', flex: 'none' }}><Compass size={17} color="#F0D28C" /></div>
-              <div className="tiny" style={{ color: 'rgba(251,243,223,.78)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 700 }}>Curated Journey for You</div>
+          <div className="dp f7" style={{ fontSize: 15.5, marginTop: 11 }}>{ns.title}</div>
+          <div style={{ fontSize: 13, lineHeight: 1.55, color: 'rgba(231,248,243,.92)', marginTop: 6, flex: 1 }}>{ns.description}</div>
+          {ns.action ? (
+            <div className="tiny" style={{ marginTop: 12, color: 'rgba(231,248,243,.72)', display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+              <ArrowRight size={13} style={{ marginTop: 2, flex: 'none' }} /><span>{ns.action}</span>
             </div>
-            <div className="dp f7" style={{ fontSize: 15.5, marginTop: 11 }}>{cj.title}</div>
-            {(cj.specialty || cj.city) && (
-              <div className="tiny" style={{ color: 'rgba(251,243,223,.72)', marginTop: 3, display: 'flex', gap: 6, alignItems: 'center' }}>
-                {cj.specialty ? <span>{cj.specialty}</span> : null}
-                {cj.specialty && cj.city ? <span>·</span> : null}
-                {cj.city ? <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center' }}><MapPin size={11} />{cj.city}</span> : null}
-              </div>
-            )}
-            <div style={{ fontSize: 13, lineHeight: 1.55, color: 'rgba(251,243,223,.92)', marginTop: 8, flex: 1 }}>{cj.reason}</div>
-            <button
-              onClick={() => go('explore')}
-              style={{ marginTop: 13, alignSelf: 'flex-start', padding: '8px 16px', borderRadius: 10, cursor: 'pointer', border: '1px solid rgba(240,210,140,.35)', background: 'rgba(240,210,140,.14)', color: '#FBF3DF', fontSize: 13, fontWeight: 600, display: 'inline-flex', gap: 6, alignItems: 'center' }}
-            >
-              Explore <ArrowRight size={14} />
-            </button>
+          ) : null}
+          <button
+            onClick={() => go(nsTarget)}
+            style={{ marginTop: 13, alignSelf: 'flex-start', padding: '8px 16px', borderRadius: 10, cursor: 'pointer', border: '1px solid rgba(159,231,214,.35)', background: 'rgba(159,231,214,.14)', color: '#E7F8F3', fontSize: 13, fontWeight: 600, display: 'inline-flex', gap: 6, alignItems: 'center' }}
+          >
+            {nsCta} <ArrowRight size={14} />
+          </button>
+        </div>
+
+        {/* Card 2 — Curated Journey */}
+        <div className="card flat" style={{ padding: 16, background: 'linear-gradient(165deg,#7A5A1E,#4E3A12)', color: '#FBF3DF', border: 'none', display: 'flex', flexDirection: 'column' }}>
+          <div className="row gap-2" style={{ alignItems: 'center' }}>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(240,210,140,.18)', display: 'grid', placeItems: 'center', flex: 'none' }}><Compass size={17} color="#F0D28C" /></div>
+            <div className="tiny" style={{ color: 'rgba(251,243,223,.78)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 700 }}>Curated Journey for You</div>
           </div>
-        )}
+          <div className="dp f7" style={{ fontSize: 15.5, marginTop: 11 }}>{cj ? cj.title : fallbackJourney.title}</div>
+          {cj && (cj.specialty || cj.city) && (
+            <div className="tiny" style={{ color: 'rgba(251,243,223,.72)', marginTop: 3, display: 'flex', gap: 6, alignItems: 'center' }}>
+              {cj.specialty ? <span>{cj.specialty}</span> : null}
+              {cj.specialty && cj.city ? <span>·</span> : null}
+              {cj.city ? <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center' }}><MapPin size={11} />{cj.city}</span> : null}
+            </div>
+          )}
+          <div style={{ fontSize: 13, lineHeight: 1.55, color: 'rgba(251,243,223,.92)', marginTop: 8, flex: 1 }}>{cj ? cj.reason : fallbackJourney.tagline}</div>
+          <button
+            onClick={() => go('explore')}
+            style={{ marginTop: 13, alignSelf: 'flex-start', padding: '8px 16px', borderRadius: 10, cursor: 'pointer', border: '1px solid rgba(240,210,140,.35)', background: 'rgba(240,210,140,.14)', color: '#FBF3DF', fontSize: 13, fontWeight: 600, display: 'inline-flex', gap: 6, alignItems: 'center' }}
+          >
+            Explore <ArrowRight size={14} />
+          </button>
+        </div>
       </div>
     </Card>
   );
@@ -940,6 +1013,31 @@ const COACH_SUGGESTIONS = [
 ];
 const msgTime = (d) => (d ? new Date(d).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '');
 
+// Rotating palette for follow-up suggestion chips (bg / text)
+const CHIP_BG = ['#E7F5F1', '#FBF3DC', '#E7F1F7'];
+const CHIP_TEXT = ['#1B5E52', '#7A5B0B', '#1A4A5E'];
+const CHIP_BORDER = ['#B7E4D8', '#EDD79B', '#B7D7E7'];
+
+/* Colored follow-up chips rendered under an assistant bubble */
+function LucaChips({ suggestions, onPick, disabled }) {
+  if (!suggestions || !suggestions.length) return null;
+  return (
+    <div className="luca-chips">
+      {suggestions.map((s, i) => (
+        <button
+          key={s + i}
+          className="luca-chip"
+          disabled={disabled}
+          onClick={() => onPick(s)}
+          style={{ background: CHIP_BG[i % 3], color: CHIP_TEXT[i % 3], borderColor: CHIP_BORDER[i % 3] }}
+        >
+          <Sparkles size={12} strokeWidth={2.4} />{s}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /* LUCA avatar — teal gradient orb with a glowing ring */
 const LucaAvatar = ({ size = 'md' }) => (
   <div className={`luca-avatar ${size === 'lg' ? 'lg' : size === 'sm' ? 'sm' : ''}`}>
@@ -982,7 +1080,7 @@ function CoachPage({ user }) {
     try {
       const res = await api.sendLucaMessage(content);
       setDegraded(!!res?.degraded);
-      setMessages((m) => [...m, { role: 'assistant', content: res?.reply || '…', model: res?.model, created_at: new Date().toISOString() }]);
+      setMessages((m) => [...m, { role: 'assistant', content: res?.reply || '…', model: res?.model, suggestions: res?.suggestions || [], created_at: new Date().toISOString() }]);
     } catch {
       setMessages((m) => [...m, { role: 'assistant', content: 'I had trouble responding just now. Please try again in a moment.', created_at: new Date().toISOString() }]);
     } finally { setSending(false); }
@@ -1033,6 +1131,9 @@ function CoachPage({ user }) {
                 <div style={{ minWidth: 0, maxWidth: '82%' }}>
                   <div className={`msg-bubble ${isUser ? 'user' : 'ai'}`}>{m.content}</div>
                   {m.created_at && <div className={`msg-time ${isUser ? '' : 'ai-time'}`}>{msgTime(m.created_at)}</div>}
+                  {!isUser && i === messages.length - 1 && !sending && (
+                    <LucaChips suggestions={m.suggestions} onPick={send} disabled={sending} />
+                  )}
                 </div>
               </div>
             );
@@ -1115,6 +1216,325 @@ function CoachPage({ user }) {
         </Card>
       </div>
     </div>
+  );
+}
+
+/* ============================== PATIENT — JOURNAL ============================== */
+const JOURNAL_MOODS = [
+  { key: 'great', emoji: '🌟', label: 'Great' },
+  { key: 'good', emoji: '😊', label: 'Good' },
+  { key: 'okay', emoji: '😐', label: 'Okay' },
+  { key: 'low', emoji: '😔', label: 'Low' },
+  { key: 'stormy', emoji: '🌪', label: 'Stormy' },
+];
+const MOOD_MAP = Object.fromEntries(JOURNAL_MOODS.map((m) => [m.key, m]));
+
+function JournalPage({ user }) {
+  const [entries, setEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [mood, setMood] = useState('good');
+  const [content, setContent] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const r = await api.getJournal().catch(() => ({ entries: [] }));
+        if (alive) setEntries(r?.entries || []);
+      } finally { alive && setLoading(false); }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const save = async () => {
+    const text = content.trim();
+    if (!text || saving) return;
+    setSaving(true);
+    try {
+      const r = await api.createJournalEntry({ content: text, mood });
+      if (r?.entry) {
+        setEntries((e) => [r.entry, ...e]);
+        setContent('');
+        setMood('good');
+        toast.success('Entry saved to your journal');
+      }
+    } catch {
+      toast.error('Could not save your entry');
+    } finally { setSaving(false); }
+  };
+
+  const remove = async (id) => {
+    const prev = entries;
+    setEntries((e) => e.filter((x) => x.id !== id));
+    try { await api.deleteJournalEntry(id); }
+    catch { setEntries(prev); toast.error('Could not delete entry'); }
+  };
+
+  const firstName = user?.firstName || 'friend';
+
+  return (
+    <div className="grid-2-1" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1.3fr)', gap: 20, alignItems: 'start' }}>
+      {/* Composer */}
+      <Card className="lg">
+        <SectionHead eyebrow="New entry" title={`How are you, ${firstName}?`} />
+        <div className="tiny muted2" style={{ marginBottom: 8 }}>Today's mood</div>
+        <div className="row wrap gap-2" style={{ marginBottom: 14 }}>
+          {JOURNAL_MOODS.map((m) => (
+            <button
+              key={m.key}
+              type="button"
+              onClick={() => setMood(m.key)}
+              className="mood-pill"
+              aria-pressed={mood === m.key}
+              style={{
+                border: `1.5px solid ${mood === m.key ? 'var(--teal, #36C9A9)' : 'var(--line, #E6EDEA)'}`,
+                background: mood === m.key ? '#E7F5F1' : '#fff',
+                color: 'var(--ink)', borderRadius: 999, padding: '7px 12px',
+                display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer',
+                fontWeight: mood === m.key ? 700 : 500, fontSize: 13,
+              }}
+            >
+              <span style={{ fontSize: 16 }}>{m.emoji}</span>{m.label}
+            </button>
+          ))}
+        </div>
+        <textarea
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          placeholder="Write freely. What happened today, how your body feels, what you're grateful for…"
+          rows={7}
+          maxLength={5000}
+          style={{
+            width: '100%', resize: 'vertical', borderRadius: 12,
+            border: '1.5px solid var(--line, #E6EDEA)', padding: '12px 14px',
+            fontFamily: 'inherit', fontSize: 14, lineHeight: 1.6, color: 'var(--ink)',
+            background: '#fff', outline: 'none',
+          }}
+        />
+        <div className="between" style={{ marginTop: 12, alignItems: 'center' }}>
+          <span className="tiny muted">{content.length}/5000 · Private to you</span>
+          <Btn variant="primary" icon={Check} onClick={save} disabled={saving || !content.trim()}>
+            {saving ? 'Saving…' : 'Save entry'}
+          </Btn>
+        </div>
+      </Card>
+
+      {/* Timeline */}
+      <div className="col gap-3">
+        <SectionHead eyebrow="Your reflections" title="Recent entries" />
+        {loading ? (
+          <><CardSkeleton rows={2} /><CardSkeleton rows={2} /></>
+        ) : entries.length === 0 ? (
+          <Card><Empty icon={BookOpen} title="Your journal is empty" sub="Write your first reflection. Over time, LUCA can help you notice the patterns." /></Card>
+        ) : entries.map((e) => {
+          const m = MOOD_MAP[e.mood];
+          return (
+            <Card key={e.id}>
+              <div className="between" style={{ alignItems: 'flex-start', gap: 10 }}>
+                <div className="row gap-2" style={{ alignItems: 'center' }}>
+                  {m && <span style={{ fontSize: 18 }} title={m.label}>{m.emoji}</span>}
+                  <div>
+                    <div className="small f6" style={{ color: 'var(--ink)' }}>{m ? m.label : 'Entry'}</div>
+                    <div className="tiny muted">{new Date(e.created_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</div>
+                  </div>
+                </div>
+                <button className="icon-btn" title="Delete entry" onClick={() => remove(e.id)}
+                  style={{ border: 'none', background: 'transparent', color: 'var(--muted, #8AA09C)', cursor: 'pointer', padding: 4 }}>
+                  <Trash2 size={15} />
+                </button>
+              </div>
+              <div className="small" style={{ marginTop: 8, color: 'var(--ink)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{e.content}</div>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ============================== PATIENT — MEDIA LIBRARY ============================== */
+const fmtDuration = (s) => {
+  s = Math.max(0, Math.round(s || 0));
+  const m = Math.floor(s / 60), sec = s % 60;
+  return `${m}:${String(sec).padStart(2, '0')}`;
+};
+
+function MediaPage({ user, go }) {
+  const [tracks, setTracks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [current, setCurrent] = useState(null);
+  const [accepting, setAccepting] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+  const audioRef = useRef(null);
+
+  const load = useCallback(async () => {
+    const r = await api.getAudioLibrary().catch(() => ({ tracks: [] }));
+    setTracks(r?.tracks || []);
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => { await load(); if (alive) setLoading(false); })();
+    return () => { alive = false; };
+  }, [load]);
+
+  const play = (t) => {
+    if (!t.unlocked) return;
+    setCurrent(t);
+    setTimeout(() => { audioRef.current?.play?.().catch(() => {}); }, 60);
+  };
+
+  const unlockOne = async (t) => {
+    setBusyId(t.id);
+    try {
+      await api.unlockAudio(t.id);
+      await load();
+      toast.success('Added to your library');
+    } catch {
+      toast.error('This is a premium track — book a session to unlock');
+    } finally { setBusyId(null); }
+  };
+
+  const acceptAll = async () => {
+    const listingId = tracks.find((t) => t.listing_id)?.listing_id;
+    if (!listingId) return;
+    setAccepting(true);
+    try {
+      const r = await api.acceptAudioFromListing(listingId);
+      await load();
+      toast.success(r?.unlocked ? `Added ${r.unlocked} free track${r.unlocked === 1 ? '' : 's'} to your library` : 'Your free tracks are already in your library');
+    } catch {
+      toast.error('Could not add tracks');
+    } finally { setAccepting(false); }
+  };
+
+  const unlocked = tracks.filter((t) => t.unlocked);
+  const locked = tracks.filter((t) => !t.unlocked);
+  const practitioner = tracks.find((t) => t.practitioner_name);
+  const freeLocked = locked.filter((t) => t.is_free).length;
+
+  return (
+    <div className="col gap-4" style={{ paddingBottom: current ? 96 : 0 }}>
+      {/* Practitioner intro */}
+      {practitioner && (
+        <Card className="lg" style={{ background: 'linear-gradient(170deg,#0E5C57,#0A413D)', color: '#E7F8F3', border: 'none' }}>
+          <div className="row gap-3" style={{ alignItems: 'center' }}>
+            <div style={{ width: 54, height: 54, borderRadius: 14, overflow: 'hidden', flex: 'none', background: 'rgba(255,255,255,.12)' }}>
+              {practitioner.practitioner_avatar
+                ? <img src={practitioner.practitioner_avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : <div style={{ display: 'grid', placeItems: 'center', height: '100%' }}><Headphones size={22} /></div>}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="dp f7" style={{ fontSize: 16 }}>{practitioner.practitioner_name}</div>
+              <div className="tiny" style={{ color: 'rgba(231,248,243,.75)' }}>{practitioner.practitioner_specialty || 'Solaris Practitioner'}</div>
+            </div>
+            {freeLocked > 0 && (
+              <Btn icon={Plus} onClick={acceptAll} disabled={accepting}
+                style={{ background: '#F0D28C', color: '#4A3B0F', border: 'none' }}>
+                {accepting ? 'Adding…' : `Accept ${freeLocked} free track${freeLocked === 1 ? '' : 's'}`}
+              </Btn>
+            )}
+          </div>
+          <div style={{ marginTop: 12, fontSize: 13, lineHeight: 1.55, color: 'rgba(231,248,243,.92)' }}>
+            Guided audio practices to support your nervous system between sessions. Free tracks are yours to keep — premium sessions unlock when you book.
+          </div>
+        </Card>
+      )}
+
+      {loading ? (
+        <><CardSkeleton rows={2} /><CardSkeleton rows={2} /></>
+      ) : (
+        <>
+          {/* Your library */}
+          <div>
+            <SectionHead eyebrow="Your library" title={`Saved practices (${unlocked.length})`} />
+            {unlocked.length === 0 ? (
+              <Card><Empty icon={Music} title="No saved audio yet" sub="Add free guided practices below to start building your personal library." /></Card>
+            ) : (
+              <div className="col gap-3">
+                {unlocked.map((t) => (
+                  <TrackRow key={t.id} t={t} playing={current?.id === t.id} onPlay={() => play(t)} />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Discover / unlock */}
+          {locked.length > 0 && (
+            <div>
+              <SectionHead eyebrow="More from the practitioner" title="Discover more practices" />
+              <div className="col gap-3">
+                {locked.map((t) => (
+                  <TrackRow key={t.id} t={t} locked
+                    busy={busyId === t.id}
+                    onUnlock={() => t.is_free ? unlockOne(t) : go && go('explore')} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Explore CTA */}
+          <Card className="between" style={{ alignItems: 'center' }}>
+            <div>
+              <div className="small f6" style={{ color: 'var(--ink)' }}>Looking for more support?</div>
+              <div className="tiny muted" style={{ marginTop: 2 }}>Explore practitioners across the Solaris network.</div>
+            </div>
+            <Btn icon={Compass} onClick={() => go && go('explore')}>Explore</Btn>
+          </Card>
+        </>
+      )}
+
+      {/* Sticky player */}
+      {current && (
+        <div className="media-player">
+          <div className="row gap-3" style={{ alignItems: 'center', flex: 1, minWidth: 0 }}>
+            <div style={{ width: 42, height: 42, borderRadius: 10, overflow: 'hidden', flex: 'none', background: '#EBF3F0' }}>
+              {current.cover_image_url && <img src={current.cover_image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div className="small f6" style={{ color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{current.title}</div>
+              <div className="tiny muted">{current.practitioner_name || 'Solaris'}</div>
+            </div>
+          </div>
+          <audio ref={audioRef} src={current.audio_url} controls style={{ height: 38, maxWidth: '55%' }} />
+          <button className="icon-btn" onClick={() => setCurrent(null)} title="Close player"
+            style={{ border: 'none', background: 'transparent', color: 'var(--muted,#8AA09C)', cursor: 'pointer', padding: 6 }}>
+            <X size={18} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TrackRow({ t, playing, locked, busy, onPlay, onUnlock }) {
+  const tags = Array.isArray(t.tags_json) ? t.tags_json : [];
+  return (
+    <Card className="row gap-3" style={{ alignItems: 'center' }}>
+      <div style={{ width: 56, height: 56, borderRadius: 12, overflow: 'hidden', flex: 'none', background: '#EBF3F0', position: 'relative' }}>
+        {t.cover_image_url && <img src={t.cover_image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: locked ? 0.55 : 1 }} />}
+        {locked && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#fff', background: 'rgba(10,40,40,.35)' }}><Lock size={18} /></div>}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="row gap-2" style={{ alignItems: 'center' }}>
+          <div className="small f6" style={{ color: 'var(--ink)' }}>{t.title}</div>
+          {!t.is_free && <Pill tone="gold" icon={Star}>Premium</Pill>}
+        </div>
+        <div className="tiny muted" style={{ marginTop: 2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{t.description}</div>
+        <div className="row wrap gap-2" style={{ marginTop: 6, alignItems: 'center' }}>
+          <span className="tiny muted2"><Clock size={11} style={{ verticalAlign: -1 }} /> {fmtDuration(t.duration_seconds)}</span>
+          {tags.slice(0, 3).map((tag) => <span key={tag} className="pill mint" style={{ fontSize: 11 }}>{tag}</span>)}
+        </div>
+      </div>
+      <div style={{ flex: 'none' }}>
+        {locked
+          ? <Btn variant={t.is_free ? 'primary' : ''} icon={t.is_free ? Plus : Lock} onClick={onUnlock} disabled={busy}>
+              {busy ? '…' : t.is_free ? 'Add' : 'Book to unlock'}
+            </Btn>
+          : <Btn variant="primary" icon={playing ? Pause : Play} onClick={onPlay}>{playing ? 'Playing' : 'Play'}</Btn>}
+      </div>
+    </Card>
   );
 }
 
@@ -2116,6 +2536,126 @@ function EconomicPassportPage({ user }) {
 }
 
 /* ============================== PAGE ROUTER ============================== */
+/* ============================== LUCA FLOATING WIDGET ============================== */
+function LucaWidget({ user, hidden }) {
+  const [open, setOpen] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const endRef = useRef(null);
+
+  // Lazy-load history the first time the panel is opened
+  useEffect(() => {
+    if (!open || loaded) return;
+    setLoading(true);
+    (async () => {
+      try {
+        const r = await api.getLucaMessages().catch(() => ({ messages: [] }));
+        setMessages(r?.messages || []);
+      } finally { setLoaded(true); setLoading(false); }
+    })();
+  }, [open, loaded]);
+
+  useEffect(() => { if (open) endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, sending, open]);
+
+  const send = async (text) => {
+    const content = (text ?? input).trim();
+    if (!content || sending) return;
+    setInput('');
+    setMessages((m) => [...m, { role: 'user', content, created_at: new Date().toISOString() }]);
+    setSending(true);
+    try {
+      const res = await api.sendLucaMessage(content);
+      setMessages((m) => [...m, { role: 'assistant', content: res?.reply || '…', model: res?.model, suggestions: res?.suggestions || [], created_at: new Date().toISOString() }]);
+    } catch {
+      setMessages((m) => [...m, { role: 'assistant', content: 'I had trouble responding just now. Please try again in a moment.', created_at: new Date().toISOString() }]);
+    } finally { setSending(false); }
+  };
+
+  const firstName = user?.firstName || 'friend';
+  if (hidden) return null;
+
+  return (
+    <>
+      {!open && (
+        <button className="luca-fab" onClick={() => setOpen(true)} aria-label="Ask LUCA">
+          <LucaAvatar size="sm" />
+          <span className="luca-fab-label">Ask LUCA</span>
+        </button>
+      )}
+      {open && (
+        <div className="luca-widget" role="dialog" aria-label="LUCA chat">
+          <div className="luca-widget-head">
+            <div className="row gap-2" style={{ alignItems: 'center', minWidth: 0 }}>
+              <LucaAvatar size="sm" />
+              <div style={{ minWidth: 0 }}>
+                <div className="dp f7" style={{ fontSize: 14, color: '#fff' }}>LUCA</div>
+                <div style={{ fontSize: 11, color: 'rgba(231,248,243,.7)' }}>Heart-Centered Intelligence</div>
+              </div>
+            </div>
+            <button className="luca-widget-x" onClick={() => setOpen(false)} aria-label="Minimize"><X size={16} /></button>
+          </div>
+
+          <div className="luca-widget-body">
+            {loading ? (
+              <><Skel h={40} w="70%" /><Skel h={40} w="55%" style={{ alignSelf: 'flex-end' }} /></>
+            ) : messages.length === 0 ? (
+              <div className="col" style={{ gap: 10, alignItems: 'center', textAlign: 'center', padding: '18px 8px' }}>
+                <LucaAvatar />
+                <div className="small f6" style={{ color: 'var(--ink)' }}>How can I support you today, {firstName}?</div>
+                <div className="tiny muted">I guide and educate — never diagnose.</div>
+                <div className="luca-chips" style={{ justifyContent: 'center' }}>
+                  {COACH_SUGGESTIONS.slice(0, 3).map((s, i) => (
+                    <button key={s} className="luca-chip" onClick={() => send(s)} disabled={sending}
+                      style={{ background: CHIP_BG[i % 3], color: CHIP_TEXT[i % 3], borderColor: CHIP_BORDER[i % 3] }}>
+                      <Sparkles size={12} strokeWidth={2.4} />{s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : messages.map((m, i) => {
+              const isUser = m.role === 'user';
+              return (
+                <div key={i} className={`msg-row ${isUser ? 'user' : 'ai'}`}>
+                  {isUser ? <Avatar name={user?.fullName} size={26} /> : <LucaAvatar size="sm" />}
+                  <div style={{ minWidth: 0, maxWidth: '84%' }}>
+                    <div className={`msg-bubble ${isUser ? 'user' : 'ai'}`} style={{ fontSize: 13 }}>{m.content}</div>
+                    {!isUser && i === messages.length - 1 && !sending && (
+                      <LucaChips suggestions={m.suggestions} onPick={send} disabled={sending} />
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {sending && (
+              <div className="msg-row ai">
+                <LucaAvatar size="sm" />
+                <div className="msg-bubble ai"><span className="dot-typing"><i /><i /><i /></span></div>
+              </div>
+            )}
+            <div ref={endRef} />
+          </div>
+
+          <div className="luca-widget-foot">
+            <div className="coach-input-row">
+              <input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && send()}
+                placeholder="Ask LUCA anything..."
+              />
+              <button className="btn primary" onClick={() => send()} disabled={sending || !input.trim()} aria-label="Send"><Send size={15} strokeWidth={2.2} /></button>
+            </div>
+            <div className="tiny muted" style={{ textAlign: 'center', marginTop: 6 }}>LUCA guides and educates — never diagnoses or prescribes.</div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function TabPage({ tab, user, go, effectiveRole, onUnread, onBecomeProvider, onApprovalStats, onBookings }) {
   switch (tab) {
     case 'gps-map': return <ErrorBoundary><GPSMapView /></ErrorBoundary>;
@@ -2127,6 +2667,8 @@ function TabPage({ tab, user, go, effectiveRole, onUnread, onBecomeProvider, onA
     case 'health': return <HealthPassportPage user={user} go={go} />;
     case 'timeline': return <TimelinePage user={user} />;
     case 'coach': return <CoachPage user={user} />;
+    case 'journal': return <ErrorBoundary><JournalPage user={user} /></ErrorBoundary>;
+    case 'media': return <ErrorBoundary><MediaPage user={user} go={go} /></ErrorBoundary>;
     case 'appointments': return <AppointmentsPage user={user} />;
     case 'my-bookings': return <MyBookings user={user} onExplore={() => go('explore')} />;
     case 'booking-oversight': return <BookingManagement />;
@@ -2348,6 +2890,9 @@ export default function LucaPassport() {
           </main>
         </div>
       </div>
+
+      {/* Floating LUCA assistant — available everywhere except the full Coach page */}
+      <LucaWidget user={user} hidden={tab === 'coach'} />
 
       {showApplication && (
         <ProviderApplication

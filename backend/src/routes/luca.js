@@ -50,7 +50,13 @@ WHAT YOU NEVER DO:
 
 TONE: warm, sovereign, grounded. Speak like a trusted health advisor who actually knows them — because you do. Be brief and actionable: 2-4 short paragraphs, one clear next step per reply. Plain language, no jargon.
 
-SAFETY: If someone describes symptoms that need clinical attention, be warm but clear: guide them to a licensed practitioner and offer to help them find one in the Solaris network. Never minimize urgent concerns.`;
+SAFETY: If someone describes symptoms that need clinical attention, be warm but clear: guide them to a licensed practitioner and offer to help them find one in the Solaris network. Never minimize urgent concerns.
+
+FOLLOW-UP SUGGESTIONS: After your reply, always add 2-3 short follow-up prompts the user might tap next. Write them from the USER's point of view (what they'd ask you), each 2-6 words. Output them at the very end of your message inside a fenced block exactly like this:
+\`\`\`suggestions
+["Log today's check-in", "What should I focus on?", "Find a practitioner"]
+\`\`\`
+The suggestions block must be valid JSON array of strings and must be the last thing in your message.`;
 
 async function buildContext(userId) {
   const parts = [];
@@ -143,6 +149,42 @@ router.get('/messages', authMiddleware, async (req, res) => {
   res.json({ messages: r.rows });
 });
 
+// Default follow-up chips shown when the model doesn't return any
+const DEFAULT_SUGGESTIONS = [
+  "How is my vitality trending?",
+  "Log today's check-in",
+  "What should I focus on?",
+];
+
+// Extract a ```suggestions [...] ``` block from the reply; return cleaned text + array
+function extractSuggestions(text) {
+  if (!text) return { reply: text, suggestions: [] };
+  const re = /```suggestions\s*([\s\S]*?)```/i;
+  const m = text.match(re);
+  let suggestions = [];
+  let reply = text;
+  if (m) {
+    reply = text.replace(re, '').trim();
+    try {
+      const parsed = JSON.parse(m[1].trim());
+      if (Array.isArray(parsed)) {
+        suggestions = parsed
+          .filter((s) => typeof s === 'string' && s.trim())
+          .map((s) => s.trim())
+          .slice(0, 3);
+      }
+    } catch (_) {
+      // Fallback: line-based parse
+      suggestions = m[1]
+        .split('\n')
+        .map((l) => l.replace(/^[-*\d.\[\]"']+\s*/, '').replace(/["',]+$/, '').trim())
+        .filter(Boolean)
+        .slice(0, 3);
+    }
+  }
+  return { reply, suggestions };
+}
+
 router.post('/messages', authMiddleware, async (req, res) => {
   try {
     const { content } = req.body;
@@ -167,15 +209,19 @@ router.post('/messages', authMiddleware, async (req, res) => {
       reply = await fallback.complete({ system: SYSTEM_PROMPT, prompt: content, context });
     }
 
-    // 4. Persist assistant reply (with provenance)
+    // 3b. Parse & strip follow-up suggestions from the raw reply
+    const { reply: cleanReply, suggestions: parsedSuggestions } = extractSuggestions(reply);
+    const suggestions = parsedSuggestions.length ? parsedSuggestions : DEFAULT_SUGGESTIONS;
+
+    // 4. Persist assistant reply (cleaned, with provenance)
     await db.query(
       'INSERT INTO luca_messages (user_id, role, content, model) VALUES ($1,$2,$3,$4)',
-      [userId, 'assistant', reply, ai.id]
+      [userId, 'assistant', cleanReply, ai.id]
     ).catch(async () => {
-      await db.query('INSERT INTO luca_messages (user_id, role, content) VALUES ($1,$2,$3)', [userId, 'assistant', reply]);
+      await db.query('INSERT INTO luca_messages (user_id, role, content) VALUES ($1,$2,$3)', [userId, 'assistant', cleanReply]);
     });
 
-    res.json({ reply, model: ai.id, degraded: ai.degraded || null });
+    res.json({ reply: cleanReply, suggestions, model: ai.id, degraded: ai.degraded || null });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });

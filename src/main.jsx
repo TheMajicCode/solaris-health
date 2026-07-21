@@ -67,8 +67,8 @@ function Root() {
     return authView === 'auth' ? <Auth /> : <Onboarding />;
   }
 
-  // Patient: must complete the Solaris Method assessment first
-  if (user.role === 'patient' && user.onboardingStatus !== 'complete') {
+  // Any new user must complete (or skip) the Solaris Method assessment first
+  if (user.onboardingStatus !== 'complete') {
     return <Assessment />;
   }
 
