@@ -304,6 +304,7 @@ class ApiClient {
   getMyPayments() { return this.request('/payments/mine'); }
 
   // ---- Solaris: LUCA context ----
+  getLucaRecommendations() { return this.request('/luca/recommendations'); }
   getLucaContext(userId) {
     const qs = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
     return this.request(`/luca/context${qs}`);

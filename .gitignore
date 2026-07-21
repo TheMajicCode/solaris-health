@@ -30,3 +30,5 @@ backend/coverage
 # Auto-generated document previews
 docs/*.pdf
 docs/*.docx
+.env
+backend/.env

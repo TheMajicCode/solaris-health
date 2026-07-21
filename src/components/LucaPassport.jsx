@@ -16,7 +16,7 @@ import {
   Users, Activity, UserCog, Settings, Search, Bell, ChevronRight, ShieldCheck,
   Send, Download, Sparkles, Leaf, TrendingUp, Award, Gift, Stethoscope, LogOut,
   Menu, X, Check, CheckCircle2, Clock, FileText, Plus, Building2, Star, Coins,
-  Droplet, Moon, Footprints, Brain, Heart, ArrowUpRight, ArrowDownLeft, Eye,
+  Droplet, Moon, Footprints, Brain, Heart, ArrowUpRight, ArrowDownLeft, ArrowRight, Eye,
   BadgeCheck, Zap, MapPin, RefreshCw, MessageSquare, Globe, Compass, Store,
   Briefcase, FileCheck, BarChart3, CalendarCheck, Sprout,
 } from 'lucide-react';
@@ -515,6 +515,8 @@ function DashboardPage({ user, go }) {
   const [rewards, setRewards] = useState({ events: [], total: 0 });
   const [contribs, setContribs] = useState([]);
   const [checkins, setCheckins] = useState([]);
+  const [recs, setRecs] = useState(null);
+  const [recsLoading, setRecsLoading] = useState(true);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -531,6 +533,21 @@ function DashboardPage({ user, go }) {
         setLatest(l); setRewards(r || { events: [], total: 0 });
         setContribs(Array.isArray(c) ? c : []); setCheckins(ci?.checkins || []);
       } finally { alive && setLoading(false); }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const rec = await api.getLucaRecommendations();
+        if (alive) setRecs(rec || null);
+      } catch {
+        if (alive) setRecs(null);
+      } finally {
+        if (alive) setRecsLoading(false);
+      }
     })();
     return () => { alive = false; };
   }, []);
@@ -575,6 +592,9 @@ function DashboardPage({ user, go }) {
             </div>
           </div>
         </Card>
+
+        {/* LUCA Recommends */}
+        <LucaRecommends recs={recs} loading={recsLoading} go={go} />
 
         {/* Focus areas + daily metrics */}
         <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
@@ -656,6 +676,69 @@ function DashboardPage({ user, go }) {
         </Card>
       </div>
     </div>
+  );
+}
+function LucaRecommends({ recs, loading, go }) {
+  if (loading) {
+    return (
+      <Card>
+        <SectionHead eyebrow="Personalized for you" title="LUCA Recommends" />
+        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <CardSkeleton rows={3} />
+          <CardSkeleton rows={3} />
+        </div>
+      </Card>
+    );
+  }
+  if (!recs || (!recs.nextStep && !recs.curatedJourney)) return null;
+
+  const ns = recs.nextStep;
+  const cj = recs.curatedJourney;
+
+  return (
+    <Card>
+      <SectionHead eyebrow="Personalized for you" title="LUCA Recommends" action={<Pill tone="mint" icon={Sparkles}>LUCA</Pill>} />
+      <div className="grid rec-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        {ns && (
+          <div className="card flat" style={{ padding: 16, background: 'linear-gradient(165deg,#0E5C57,#0A413D)', color: '#E7F8F3', border: 'none', display: 'flex', flexDirection: 'column' }}>
+            <div className="row gap-2" style={{ alignItems: 'center' }}>
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(159,231,214,.16)', display: 'grid', placeItems: 'center', flex: 'none' }}><Zap size={17} color="#9FE7D6" /></div>
+              <div className="tiny" style={{ color: 'rgba(231,248,243,.75)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 700 }}>Your Next Step</div>
+            </div>
+            <div className="dp f7" style={{ fontSize: 15.5, marginTop: 11 }}>{ns.title}</div>
+            <div style={{ fontSize: 13, lineHeight: 1.55, color: 'rgba(231,248,243,.92)', marginTop: 6, flex: 1 }}>{ns.description}</div>
+            {ns.action ? (
+              <div className="tiny" style={{ marginTop: 12, color: 'rgba(231,248,243,.72)', display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+                <ArrowRight size={13} style={{ marginTop: 2, flex: 'none' }} /><span>{ns.action}</span>
+              </div>
+            ) : null}
+          </div>
+        )}
+        {cj && (
+          <div className="card flat" style={{ padding: 16, background: 'linear-gradient(165deg,#7A5A1E,#4E3A12)', color: '#FBF3DF', border: 'none', display: 'flex', flexDirection: 'column' }}>
+            <div className="row gap-2" style={{ alignItems: 'center' }}>
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(240,210,140,.18)', display: 'grid', placeItems: 'center', flex: 'none' }}><Compass size={17} color="#F0D28C" /></div>
+              <div className="tiny" style={{ color: 'rgba(251,243,223,.78)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 700 }}>Curated Journey for You</div>
+            </div>
+            <div className="dp f7" style={{ fontSize: 15.5, marginTop: 11 }}>{cj.title}</div>
+            {(cj.specialty || cj.city) && (
+              <div className="tiny" style={{ color: 'rgba(251,243,223,.72)', marginTop: 3, display: 'flex', gap: 6, alignItems: 'center' }}>
+                {cj.specialty ? <span>{cj.specialty}</span> : null}
+                {cj.specialty && cj.city ? <span>·</span> : null}
+                {cj.city ? <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center' }}><MapPin size={11} />{cj.city}</span> : null}
+              </div>
+            )}
+            <div style={{ fontSize: 13, lineHeight: 1.55, color: 'rgba(251,243,223,.92)', marginTop: 8, flex: 1 }}>{cj.reason}</div>
+            <button
+              onClick={() => go('explore')}
+              style={{ marginTop: 13, alignSelf: 'flex-start', padding: '8px 16px', borderRadius: 10, cursor: 'pointer', border: '1px solid rgba(240,210,140,.35)', background: 'rgba(240,210,140,.14)', color: '#FBF3DF', fontSize: 13, fontWeight: 600, display: 'inline-flex', gap: 6, alignItems: 'center' }}
+            >
+              Explore <ArrowRight size={14} />
+            </button>
+          </div>
+        )}
+      </div>
+    </Card>
   );
 }
 function MiniStat({ icon: Icon, label, value, tone = 'teal' }) {

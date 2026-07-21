@@ -32,6 +32,7 @@ const gpsRoutes = require('./routes/gps');
 const organizationsRoutes = require('./routes/organizations');
 const paymentsSimRoutes = require('./routes/payments-sim');
 const lucaContextRoutes = require('./routes/luca-context');
+const lucaRecommendationsRoutes = require('./routes/luca-recommendations');
 const leaderboardRoutes = require('./routes/leaderboard');
 const contributionEventsRoutes = require('./routes/contribution-events');
 const appointmentsRoutes = require('./routes/appointments');
@@ -127,6 +128,7 @@ app.use('/api/gps', gpsRoutes);
 app.use('/api/organizations', organizationsRoutes);
 app.use('/api/payments', paymentsSimRoutes);
 app.use('/api/luca', lucaContextRoutes); // GET /api/luca/context (luca.js handles /messages)
+app.use('/api/luca', lucaRecommendationsRoutes); // GET /api/luca/recommendations
 app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/contribution-events', contributionEventsRoutes);
 app.use('/api/appointments', appointmentsRoutes);
