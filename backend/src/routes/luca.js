@@ -1,12 +1,17 @@
 'use strict';
 /**
- * LUCA health-coach route — now a REAL AI coach behind the shared AIProvider.
+ * LUCA health-coach route — a REAL AI coach behind the shared AIProvider.
+ *
+ * The in-app LUCA Coach uses the VM LLM directly (cloud mode) so we have full
+ * control over what LUCA knows and can say. A rich [PASSPORT CONTEXT] block is
+ * injected on every turn from the user's real Solaris data, and the system prompt
+ * explicitly grants LUCA the authority to use it.
+ *
+ * (The Abacus Custom Chatbot — a RAG/document-grounded bot — was retired from the
+ * in-app flow because its uploaded docs claim it "can't see health data". Its
+ * routing constants are kept commented below for a future public landing-page widget.)
  *
  * Same API surface as before (GET/POST /messages) so the frontend doesn't change.
- * The regex is gone from the hot path; it survives only as the mock fallback inside the provider.
- * Every reply records which model produced it (provenance) — the same audit instinct as Strategy A.
- *
- * Drop-in: replace backend/src/routes/luca.js with this file.
  */
 const express = require('express');
 const db = require('../db');
@@ -15,42 +20,119 @@ const { getAIProvider } = require('../lib/ai');
 
 const router = express.Router();
 
-const SYSTEM_PROMPT = `You are LUCA — a warm, heart-centered holistic health coach and concierge for the Solaris ecosystem.
+// ── Abacus Custom Chatbot (retired from in-app flow; kept for a future public widget) ──
+// deploymentToken and deploymentId are non-secret routing values (safe as constants).
+// const ABACUS_DEPLOYMENT_TOKEN = 'c77ed09b44dc4728b07dec5afc89c6ff';
+// const ABACUS_DEPLOYMENT_ID = '324938b78';
+// const ABACUS_CHAT_URL = 'https://api.abacus.ai/api/v0/getChatResponse';
 
-Your role: facilitate a person's holistic health journey — listening, educating, encouraging small sustainable habits, and connecting them to the right human care (including Aura, a holistic, minimally-invasive dental and wellness clinic).
+const SYSTEM_PROMPT = `You are LUCA — the Heart-Centered Intelligence guide for the Solaris Sovereign Health Platform.
 
-Hard rules (never break):
-- You NEVER diagnose, prescribe, or replace a licensed clinician. You may educate, organize, and prepare.
-- For anything clinical, urgent, or beyond wellness education, you guide the person to a licensed practitioner (and offer to help them book with Aura or a Solaris practitioner).
-- You never invent facts about the person. Use only the context provided.
-- You are calm, sovereign, and encouraging — the person is always in control of their own care and data.
+WHAT YOU KNOW:
+At the start of every conversation, you receive a [PASSPORT CONTEXT] block containing this user's real health data from their Solaris Passport: their name, vitality score, focus areas, recent daily check-ins (sleep, energy, mood, hydration, movement), LOVE points, and recent activity. USE THIS DATA. It is real. Reference it directly and specifically. Never say you can't see their health data — you have it.
 
-Style: brief, warm, concrete. 2-4 short paragraphs max. Offer one clear next step. Avoid clinical jargon. Never alarmist.`;
+WHAT YOU DO:
+- Give personalized, specific guidance based on the user's actual Passport data
+- Interpret their numbers for them (what does a 67 vitality score mean in plain terms?)
+- Notice patterns across their check-ins (e.g. low sleep + low energy trend)
+- Suggest concrete, small next steps anchored in their real data
+- Name specific focus areas from their assessment and help them act on them
+- Connect them to relevant care in the Solaris network (practitioners, workshops, clinics)
+- Celebrate their LOVE points and contributions as evidence of their commitment
+- Help them understand what their Solaris Passport is doing for them
+
+WHAT YOU NEVER DO:
+- Diagnose, prescribe, or make clinical/legal/financial decisions — those go to licensed practitioners
+- Invent data — use only what is in the [PASSPORT CONTEXT] block
+- Say generic things like "I can't see your data" or "I'm just an AI" — you have their data and you use it
+- Give alarmist or fear-based guidance
+- Be vague when you can be specific
+
+TONE: warm, sovereign, grounded. Speak like a trusted health advisor who actually knows them — because you do. Be brief and actionable: 2-4 short paragraphs, one clear next step per reply. Plain language, no jargon.
+
+SAFETY: If someone describes symptoms that need clinical attention, be warm but clear: guide them to a licensed practitioner and offer to help them find one in the Solaris network. Never minimize urgent concerns.`;
 
 async function buildContext(userId) {
   const parts = [];
 
-  const a = await db.query(
-    'SELECT vitality_score, top_focus_areas_json FROM assessment_responses WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1',
+  // User basics
+  const user = await db.query(
+    'SELECT first_name, full_name, email, love_points, current_phase FROM users WHERE id=$1',
     [userId]
   );
-  if (a.rows[0]) {
-    const focus = (a.rows[0].top_focus_areas_json || []).map((f) => f.name || f).join(', ');
-    parts.push(`Assessment — vitality ${a.rows[0].vitality_score}/100; focus areas: ${focus || 'not specified'}.`);
+  if (user.rows[0]) {
+    const u = user.rows[0];
+    parts.push(`User: ${u.full_name || u.first_name || 'Member'} (${u.email})`);
+    parts.push(`LOVE Points: ${u.love_points || 0} | Phase: ${u.current_phase || 'active'}`);
+  }
+
+  // Latest assessment
+  const assessment = await db.query(
+    `SELECT vitality_score, mental_score, physical_score, emotional_score, spiritual_score,
+            top_focus_areas_json, completed_at
+     FROM assessment_responses WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1`,
+    [userId]
+  );
+  if (assessment.rows[0]) {
+    const a = assessment.rows[0];
+    const focus = (a.top_focus_areas_json || []).map((f) => {
+      if (typeof f === 'string') return f;
+      return `${f.name}${typeof f.score === 'number' ? ` (score: ${f.score})` : ''}`;
+    }).join(', ');
+    parts.push(`\n[PASSPORT CONTEXT — VITALITY ASSESSMENT]
+Vitality Score: ${a.vitality_score}/100
+Mental: ${a.mental_score || '—'} | Physical: ${a.physical_score || '—'} | Emotional: ${a.emotional_score || '—'} | Spiritual: ${a.spiritual_score || '—'}
+Top Focus Areas: ${focus || 'not specified'}
+Last assessed: ${a.completed_at ? new Date(a.completed_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'unknown'}`);
   } else {
-    parts.push('Assessment — not completed yet (encourage completing the Solaris Method assessment).');
+    parts.push('\n[PASSPORT CONTEXT — VITALITY ASSESSMENT]\nNot completed yet. Encourage completing the Solaris Method assessment to unlock their vitality score and focus areas.');
   }
 
-  const recent = await db.query(
-    'SELECT role, content FROM luca_messages WHERE user_id=$1 ORDER BY created_at DESC LIMIT 6',
+  // Last 7 daily check-ins
+  const checkins = await db.query(
+    `SELECT checkin_date, energy_score, mood_score, sleep_hours, hydration_glasses, movement_minutes
+     FROM daily_checkins WHERE user_id=$1 ORDER BY checkin_date DESC LIMIT 7`,
     [userId]
   );
-  if (recent.rows.length) {
-    const history = recent.rows.reverse().map((r) => `${r.role}: ${r.content}`).join('\n');
-    parts.push(`Recent conversation:\n${history}`);
+  if (checkins.rows.length) {
+    const rows = checkins.rows;
+    const avgEnergy = Math.round(rows.reduce((s, r) => s + (r.energy_score || 0), 0) / rows.length);
+    const avgMood = Math.round(rows.reduce((s, r) => s + (r.mood_score || 0), 0) / rows.length);
+    const avgSleep = (rows.reduce((s, r) => s + parseFloat(r.sleep_hours || 0), 0) / rows.length).toFixed(1);
+    const latest = rows[0];
+    parts.push(`\n[PASSPORT CONTEXT — DAILY CHECK-INS (last ${rows.length} days)]
+Latest (${new Date(latest.checkin_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}): Energy ${latest.energy_score}/100, Mood ${latest.mood_score}/100, Sleep ${parseFloat(latest.sleep_hours || 0).toFixed(1)}h, Hydration ${latest.hydration_glasses} glasses, Movement ${latest.movement_minutes}min
+7-day averages: Energy ${avgEnergy}/100, Mood ${avgMood}/100, Sleep ${avgSleep}h`);
+  } else {
+    parts.push('\n[PASSPORT CONTEXT — DAILY CHECK-INS]\nNo check-ins logged yet. Encourage them to start their first check-in from the Health Passport.');
   }
 
-  return parts.join('\n\n');
+  // Recent bookings (last 3) — booking_requests.user_id is the patient; date col is preferred_date
+  const bookings = await db.query(
+    `SELECT br.preferred_date, br.status, l.title as service_title
+     FROM booking_requests br
+     JOIN listings l ON l.id = br.listing_id
+     WHERE br.user_id=$1 ORDER BY br.created_at DESC LIMIT 3`,
+    [userId]
+  );
+  if (bookings.rows.length) {
+    const blist = bookings.rows.map((b) =>
+      `  • ${b.service_title} — ${b.preferred_date ? new Date(b.preferred_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'TBD'} (${b.status})`
+    ).join('\n');
+    parts.push(`\n[PASSPORT CONTEXT — RECENT BOOKINGS]\n${blist}`);
+  }
+
+  // Reward events (last 5)
+  const rewards = await db.query(
+    `SELECT event_type, points, note FROM reward_events WHERE user_id=$1 ORDER BY created_at DESC LIMIT 5`,
+    [userId]
+  );
+  if (rewards.rows.length) {
+    const rlist = rewards.rows.map((r) => `  • ${r.note || r.event_type}: +${r.points} LOVE`).join('\n');
+    parts.push(`\n[PASSPORT CONTEXT — RECENT REWARDS]\n${rlist}`);
+  }
+
+  return parts.join('\n');
 }
 
 router.get('/messages', authMiddleware, async (req, res) => {
@@ -61,39 +143,6 @@ router.get('/messages', authMiddleware, async (req, res) => {
   res.json({ messages: r.rows });
 });
 
-// ── Abacus Custom Chatbot (the LUCA deployment) ──────────────────────────────
-// deploymentToken and deploymentId are non-secret routing values (safe as constants).
-// The apiKey is server-side only (process.env.ABACUS_API_KEY, injected from VM metadata).
-const ABACUS_DEPLOYMENT_TOKEN = 'c77ed09b44dc4728b07dec5afc89c6ff';
-const ABACUS_DEPLOYMENT_ID = '324938b78';
-const ABACUS_CHAT_URL = 'https://api.abacus.ai/api/v0/getChatResponse';
-
-/** Pull the assistant reply text out of the Abacus getChatResponse payload (shape-tolerant). */
-function parseAbacusReply(data) {
-  if (!data) return '';
-  // Common shapes: { success, result: { messages:[{is_user:false,text}], ... } } or { result: "text" }
-  const r = data.result ?? data.response ?? data.reply ?? data;
-  if (typeof r === 'string') return r.trim();
-  if (Array.isArray(r?.messages)) {
-    const last = [...r.messages].reverse().find((m) => m && m.is_user === false && (m.text || m.content));
-    if (last) return String(last.text || last.content).trim();
-  }
-  // some deployments return { result: { text } } or { messages } at top level
-  if (r?.text) return String(r.text).trim();
-  if (Array.isArray(data.messages)) {
-    const last = [...data.messages].reverse().find((m) => m && m.is_user === false && (m.text || m.content));
-    if (last) return String(last.text || last.content).trim();
-  }
-  return '';
-}
-
-/** Fall back to the local AIProvider (mock by default) so the chat never hard-fails. */
-async function fallbackReply(content, context) {
-  const mock = getAIProvider({ ...process.env, LUCA_AI_MODE: 'mock' });
-  const reply = await mock.complete({ system: SYSTEM_PROMPT, prompt: content, context });
-  return { reply, model: mock.id };
-}
-
 router.post('/messages', authMiddleware, async (req, res) => {
   try {
     const { content } = req.body;
@@ -101,79 +150,32 @@ router.post('/messages', authMiddleware, async (req, res) => {
 
     const userId = req.user.userId;
 
-    // 1. persist the user's message
+    // 1. Persist user message
     await db.query('INSERT INTO luca_messages (user_id, role, content) VALUES ($1,$2,$3)', [userId, 'user', content]);
 
-    // 2. health context primer (assessment + recent conversation)
+    // 2. Build rich health context
     const context = await buildContext(userId);
 
-    // 3. load recent conversation thread (ASC, last 20) for the chatbot
-    const hist = await db.query(
-      'SELECT role, content FROM luca_messages WHERE user_id=$1 ORDER BY created_at DESC LIMIT 20',
-      [userId]
-    );
-    const ordered = hist.rows.reverse(); // back to chronological
-
-    // 4. build the Abacus messages array: context primer first, then the thread
-    const messages = [
-      {
-        is_user: false,
-        text: `[Health context for this session — use this to personalize; do not repeat it verbatim to the user]:\n${context}`,
-      },
-      ...ordered.map((m) => ({ is_user: m.role === 'user', text: m.content })),
-    ];
-    // ensure the newest user message is present as the final turn
-    if (!ordered.length || ordered[ordered.length - 1].role !== 'user') {
-      messages.push({ is_user: true, text: content });
+    // 3. Use AIProvider (cloud mode = VM LLM, never the Abacus RAG bot)
+    const ai = getAIProvider();
+    let reply;
+    try {
+      reply = await ai.complete({ system: SYSTEM_PROMPT, prompt: content, context });
+    } catch (e) {
+      console.error('AI provider error, falling back to mock:', e.message);
+      const fallback = getAIProvider({ ...process.env, LUCA_AI_MODE: 'mock' });
+      reply = await fallback.complete({ system: SYSTEM_PROMPT, prompt: content, context });
     }
 
-    // 5. call the Abacus Custom Chatbot
-    let reply = '';
-    let model = 'abacus-luca';
-    let degraded = false;
-
-    const apiKey = process.env.ABACUS_API_KEY;
-    if (!apiKey) {
-      console.error('ABACUS_API_KEY missing — falling back to mock');
-      const fb = await fallbackReply(content, context);
-      reply = fb.reply; model = fb.model; degraded = true;
-    } else {
-      try {
-        const params = new URLSearchParams({
-          deploymentToken: ABACUS_DEPLOYMENT_TOKEN,
-          deploymentId: ABACUS_DEPLOYMENT_ID,
-        });
-        const abRes = await fetch(`${ABACUS_CHAT_URL}?${params.toString()}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', apiKey },
-          body: JSON.stringify({ messages }),
-        });
-        if (!abRes.ok) {
-          const body = await abRes.text().catch(() => '');
-          throw new Error(`Abacus chat ${abRes.status}: ${body.slice(0, 200)}`);
-        }
-        const data = await abRes.json();
-        reply = parseAbacusReply(data);
-        if (!reply) {
-          console.error('Abacus reply empty/unrecognized shape:', JSON.stringify(data).slice(0, 400));
-          throw new Error('Empty reply from Abacus');
-        }
-      } catch (e) {
-        console.error('Abacus chatbot error, falling back to mock:', e.message);
-        const fb = await fallbackReply(content, context);
-        reply = fb.reply; model = fb.model; degraded = true;
-      }
-    }
-
-    // 6. persist the assistant reply (with provenance)
+    // 4. Persist assistant reply (with provenance)
     await db.query(
       'INSERT INTO luca_messages (user_id, role, content, model) VALUES ($1,$2,$3,$4)',
-      [userId, 'assistant', reply, model]
+      [userId, 'assistant', reply, ai.id]
     ).catch(async () => {
       await db.query('INSERT INTO luca_messages (user_id, role, content) VALUES ($1,$2,$3)', [userId, 'assistant', reply]);
     });
 
-    res.json({ reply, model, degraded });
+    res.json({ reply, model: ai.id, degraded: ai.degraded || null });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
