@@ -284,6 +284,35 @@ const CSS = `
   color:var(--ink);background:var(--surface);outline:none;font-family:inherit}
 .input-line:focus{border-color:var(--mint);box-shadow:0 0 0 3px var(--mint-soft)}
 textarea.input-line{resize:vertical;min-height:64px}
+
+/* ---- premium LUCA coach ---- */
+.luca .coach-layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:18px;align-items:start}
+.luca .coach-shell{display:flex;flex-direction:column;height:calc(100vh - 150px);min-height:540px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow)}
+.luca .coach-head{padding:16px 20px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;background:linear-gradient(180deg,var(--mint-soft) 0%,transparent 100%)}
+.luca .luca-avatar{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#0E5C57,#1A8C7D);display:grid;place-items:center;flex-shrink:0;box-shadow:0 0 0 3px rgba(47,190,159,.22),0 4px 16px rgba(10,43,41,.24)}
+.luca .luca-avatar.sm{width:32px;height:32px}
+.luca .luca-avatar.lg{width:74px;height:74px;box-shadow:0 0 0 6px rgba(47,190,159,.16),0 0 34px rgba(47,190,159,.30)}
+.luca .coach-body{flex:1;overflow-y:auto;padding:20px 18px 12px;display:flex;flex-direction:column;gap:16px;scroll-behavior:smooth;background:linear-gradient(180deg,var(--surface-2),var(--surface))}
+.luca .msg-row{display:flex;gap:10px;align-items:flex-end;animation:msgIn .28s ease}
+.luca .msg-row.user{flex-direction:row-reverse}
+.luca .msg-row .avatar{flex:none}
+@keyframes msgIn{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:translateY(0)}}
+.luca .msg-bubble{padding:12px 16px;border-radius:18px;font-size:13.5px;line-height:1.6;white-space:pre-wrap;box-shadow:var(--shadow-sm)}
+.luca .msg-bubble.user{background:linear-gradient(160deg,var(--mint),#0B4E49);color:#EAFBF6;border-bottom-right-radius:5px}
+.luca .msg-bubble.ai{background:var(--surface);border:1px solid var(--line);color:var(--ink);border-bottom-left-radius:5px}
+.luca .msg-time{font-size:10px;color:var(--muted-2);margin-top:4px;text-align:right}
+.luca .msg-time.ai-time{text-align:left}
+.luca .coach-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:32px 18px}
+.luca .coach-suggestions{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;max-width:400px;margin-top:6px}
+.luca .suggest-chip{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:12.5px;color:var(--muted);cursor:pointer;text-align:left;transition:all .15s;font-family:inherit;width:100%}
+.luca .suggest-chip:hover{border-color:var(--mint);color:var(--ink);background:var(--mint-soft)}
+.luca .suggest-chip:disabled{opacity:.55;cursor:default}
+.luca .coach-footer{padding:14px 18px;border-top:1px solid var(--line);background:var(--surface)}
+.luca .coach-input-row{display:flex;gap:10px;align-items:center;background:var(--surface-2);border:1px solid var(--line);border-radius:14px;padding:8px 8px 8px 18px;transition:border-color .15s,box-shadow .15s}
+.luca .coach-input-row:focus-within{border-color:var(--mint);box-shadow:0 0 0 3px var(--mint-soft)}
+.luca .coach-input-row input{flex:1;border:none;outline:none;background:transparent;font-size:13.5px;color:var(--ink);font-family:inherit;min-width:0}
+.luca .coach-disclaimer{font-size:11px;color:var(--muted-2);text-align:center;margin-top:9px}
+@media(max-width:1080px){.luca .coach-layout{grid-template-columns:1fr}.luca .coach-shell{height:auto;min-height:60vh}}
 `;
 
 /* ============================== HELPERS ============================== */
@@ -903,7 +932,20 @@ const vitalityBand = (v) => (v >= 80 ? 'Thriving' : v >= 60 ? 'Balanced' : v >= 
 
 
 /* ============================== PATIENT — LUCA COACH ============================== */
-const COACH_SUGGESTIONS = ['Explain my vitality score', 'Suggest a daily routine', 'Help me sleep better', 'How do I improve hydration?'];
+const COACH_SUGGESTIONS = [
+  'Explain my vitality score',
+  'What should I focus on this week?',
+  'Help me build a sleep routine',
+  'How do I improve my energy?',
+];
+const msgTime = (d) => (d ? new Date(d).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '');
+
+/* LUCA avatar — teal gradient orb with a glowing ring */
+const LucaAvatar = ({ size = 'md' }) => (
+  <div className={`luca-avatar ${size === 'lg' ? 'lg' : size === 'sm' ? 'sm' : ''}`}>
+    <Bot size={size === 'lg' ? 34 : size === 'sm' ? 16 : 22} color="#DAF3EC" strokeWidth={2} />
+  </div>
+);
 
 function CoachPage({ user }) {
   const [messages, setMessages] = useState([]);
@@ -911,14 +953,21 @@ function CoachPage({ user }) {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [degraded, setDegraded] = useState(false);
+  const [latest, setLatest] = useState(null);
   const endRef = useRef(null);
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      try { const r = await api.getLucaMessages(); if (alive) setMessages(r?.messages || []); }
-      catch { /* leave empty */ }
-      finally { alive && setLoading(false); }
+      try {
+        const [r, l] = await Promise.all([
+          api.getLucaMessages().catch(() => ({ messages: [] })),
+          api.getLatestAssessment().catch(() => null),
+        ]);
+        if (!alive) return;
+        setMessages(r?.messages || []);
+        setLatest(l);
+      } finally { alive && setLoading(false); }
     })();
     return () => { alive = false; };
   }, []);
@@ -928,58 +977,141 @@ function CoachPage({ user }) {
     const content = (text ?? input).trim();
     if (!content || sending) return;
     setInput('');
-    setMessages((m) => [...m, { role: 'user', content }]);
+    setMessages((m) => [...m, { role: 'user', content, created_at: new Date().toISOString() }]);
     setSending(true);
     try {
       const res = await api.sendLucaMessage(content);
       setDegraded(!!res?.degraded);
-      setMessages((m) => [...m, { role: 'assistant', content: res?.reply || '…', model: res?.model }]);
+      setMessages((m) => [...m, { role: 'assistant', content: res?.reply || '…', model: res?.model, created_at: new Date().toISOString() }]);
     } catch {
-      setMessages((m) => [...m, { role: 'assistant', content: 'I had trouble responding just now. Please try again in a moment.' }]);
+      setMessages((m) => [...m, { role: 'assistant', content: 'I had trouble responding just now. Please try again in a moment.', created_at: new Date().toISOString() }]);
     } finally { setSending(false); }
   };
 
+  const vitality = latest?.response?.vitality_score ?? 0;
+  const focus = latest?.response?.top_focus_areas_json || [];
+  const firstName = user.firstName || 'friend';
+
   return (
-    <div className="grid" style={{ gridTemplateColumns: 'minmax(0,1fr) 300px', gap: 18, alignItems: 'start' }}>
-      <Card className="lg" style={{ display: 'flex', flexDirection: 'column' }}>
-        <SectionHead eyebrow="Heart-Centered Intelligence" title="Chat with LUCA"
-          action={degraded ? <Pill tone="gold" icon={Clock}>Offline mode</Pill> : <Pill tone="mint" icon={Bot}>Online</Pill>} />
-        <div className="chat-wrap">
-          <div className="chat-scroll">
-            {loading ? (
-              <><Skel h={42} w="60%" /><Skel h={42} w="72%" style={{ alignSelf: 'flex-end' }} /><Skel h={42} w="55%" /></>
-            ) : messages.length === 0 ? (
-              <div className="empty col" style={{ alignItems: 'center', gap: 10, margin: 'auto' }}>
-                <div className="chip mint" style={{ width: 56, height: 56 }}><Bot size={26} /></div>
-                <div className="dp f7" style={{ fontSize: 16, color: 'var(--ink)' }}>How can I support you today?</div>
-                <div className="small muted" style={{ maxWidth: 360 }}>Ask about your results, daily habits, or finding the right care. I guide and educate — never diagnose.</div>
-              </div>
-            ) : messages.map((m, i) => (
-              <div key={i} className={`bubble ${m.role === 'user' ? 'user' : 'ai'}`}>{m.content}</div>
-            ))}
-            {sending && <div className="bubble ai"><span className="dot-typing"><i /><i /><i /></span></div>}
-            <div ref={endRef} />
-          </div>
-          <div className="row wrap gap-2" style={{ margin: '12px 0 10px' }}>
-            {COACH_SUGGESTIONS.map((s) => <button key={s} className="btn sm" onClick={() => send(s)} disabled={sending}>{s}</button>)}
-          </div>
-          <div className="chat-input">
-            <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()} placeholder="Type a message to LUCA…" />
-            <Btn variant="primary" icon={Send} onClick={() => send()} disabled={sending || !input.trim()}>Send</Btn>
+    <div className="coach-layout">
+      {/* Chat area */}
+      <div className="coach-shell">
+        <div className="coach-head">
+          <LucaAvatar />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="row gap-2" style={{ alignItems: 'center' }}>
+              <span className="dp" style={{ fontSize: 17, fontWeight: 700, color: 'var(--gold-ink)' }}>LUCA</span>
+              {degraded
+                ? <Pill tone="gold" icon={Clock}>Offline mode</Pill>
+                : <Pill tone="mint" icon={Bot}>Online</Pill>}
+            </div>
+            <div className="tiny muted" style={{ marginTop: 1 }}>Heart-Centered Intelligence</div>
           </div>
         </div>
-      </Card>
 
-      <div className="col gap-4">
-        <Card>
-          <SectionHead eyebrow="About LUCA" title="Your sovereign guide" />
-          <div className="small muted" style={{ lineHeight: 1.6 }}>
-            LUCA is your Heart-Centered Intelligence companion. It draws on your assessment and check-ins to offer gentle, personalized guidance.
+        <div className="coach-body">
+          {loading ? (
+            <><Skel h={44} w="58%" /><Skel h={44} w="70%" style={{ alignSelf: 'flex-end' }} /><Skel h={44} w="52%" /></>
+          ) : messages.length === 0 ? (
+            <div className="coach-empty">
+              <LucaAvatar size="lg" />
+              <div className="dp f7" style={{ fontSize: 18, color: 'var(--ink)', textAlign: 'center' }}>How can I support you today, {firstName}?</div>
+              <div className="small muted" style={{ maxWidth: 360, textAlign: 'center' }}>I guide and educate — never diagnose. Ask about your results, daily habits, or finding the right care.</div>
+              <div className="coach-suggestions">
+                {COACH_SUGGESTIONS.map((s) => (
+                  <button key={s} className="suggest-chip" onClick={() => send(s)} disabled={sending}>{s}</button>
+                ))}
+              </div>
+            </div>
+          ) : messages.map((m, i) => {
+            const isUser = m.role === 'user';
+            return (
+              <div key={i} className={`msg-row ${isUser ? 'user' : 'ai'}`}>
+                {isUser
+                  ? <Avatar name={user.fullName} size={30} />
+                  : <LucaAvatar size="sm" />}
+                <div style={{ minWidth: 0, maxWidth: '82%' }}>
+                  <div className={`msg-bubble ${isUser ? 'user' : 'ai'}`}>{m.content}</div>
+                  {m.created_at && <div className={`msg-time ${isUser ? '' : 'ai-time'}`}>{msgTime(m.created_at)}</div>}
+                </div>
+              </div>
+            );
+          })}
+          {sending && (
+            <div className="msg-row ai">
+              <LucaAvatar size="sm" />
+              <div className="msg-bubble ai"><span className="dot-typing"><i /><i /><i /></span></div>
+            </div>
+          )}
+          <div ref={endRef} />
+        </div>
+
+        <div className="coach-footer">
+          <div className="coach-input-row">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && send()}
+              placeholder="Ask LUCA anything..."
+            />
+            <Btn variant="primary" icon={Send} onClick={() => send()} disabled={sending || !input.trim()}>Send</Btn>
           </div>
-          <div className="divider" />
-          {[['Guides & educates', Check], ['Never diagnoses', ShieldCheck], ['Private by default', Eye]].map(([t, Ic]) => (
-            <div key={t} className="row gap-2" style={{ padding: '7px 0' }}><Ic size={15} className="t-teal" /><span className="small">{t}</span></div>
-          ))}
+          <div className="coach-disclaimer">LUCA guides and educates — never diagnoses or prescribes.</div>
+        </div>
+      </div>
+
+      {/* Right sidebar */}
+      <div className="col gap-4">
+        <Card className="lg" style={{ background: 'linear-gradient(170deg,#0E5C57,#0A413D)', color: '#E7F8F3', border: 'none' }}>
+          <div className="row gap-3">
+            <LucaAvatar />
+            <div>
+              <div className="dp f7" style={{ fontSize: 15 }}>LUCA Coach</div>
+              <div className="tiny" style={{ color: 'rgba(231,248,243,.7)' }}>Heart-Centered Intelligence</div>
+            </div>
+          </div>
+          <div style={{ marginTop: 12, fontSize: 13, lineHeight: 1.55, color: 'rgba(231,248,243,.92)' }}>
+            Your sovereign guide. LUCA draws on your assessment and check-ins to offer gentle, personalized guidance.
+          </div>
+          <div className="tiny" style={{ marginTop: 10, color: 'rgba(231,248,243,.65)', display: 'flex', gap: 6, alignItems: 'center' }}>
+            <ShieldCheck size={13} /> Suggests only — never diagnoses or prescribes.
+          </div>
+        </Card>
+
+        <Card>
+          <SectionHead eyebrow="What LUCA knows" title="Your health context" />
+          <div className="row" style={{ gap: 14, alignItems: 'center' }}>
+            <div style={{ position: 'relative', width: 64, height: 64, flex: 'none' }}>
+              <Ring value={vitality} max={100} size={64} />
+              <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
+                <div className="dp f7" style={{ fontSize: 17 }}>{vitality}</div>
+              </div>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="tiny muted2">Vitality score</div>
+              <div className="small f6" style={{ marginTop: 2 }}>{vitality ? `${vitality} / 100` : 'Not assessed yet'}</div>
+            </div>
+          </div>
+          {focus.length > 0 && (
+            <>
+              <div className="divider" />
+              <div className="tiny muted2" style={{ marginBottom: 8 }}>Focus areas</div>
+              <div className="row wrap gap-2">
+                {focus.slice(0, 4).map((f, i) => (
+                  <span key={i} className="pill mint"><Leaf size={12} strokeWidth={2.4} />{f.name}</span>
+                ))}
+              </div>
+            </>
+          )}
+        </Card>
+
+        <Card>
+          <SectionHead eyebrow="Try asking" title="Quick prompts" />
+          <div className="col gap-2">
+            {COACH_SUGGESTIONS.map((s) => (
+              <button key={s} className="suggest-chip" onClick={() => send(s)} disabled={sending}>{s}</button>
+            ))}
+          </div>
         </Card>
       </div>
     </div>
