@@ -270,4 +270,21 @@ router.patch('/skip-onboarding', authMiddleware, async (req, res) => {
   }
 });
 
+// Logout — revoke the current token by recording its jti in the blocklist.
+router.post('/logout', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.jti) {
+      const expiresAt = req.user.exp ? new Date(req.user.exp * 1000) : null;
+      await db.query(
+        'INSERT INTO revoked_tokens (jti, user_id, expires_at) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+        [req.user.jti, req.user.userId, expiresAt]
+      );
+    }
+    res.json({ message: 'Logged out successfully.' });
+  } catch (err) {
+    console.error('Logout error:', err.message);
+    res.status(500).json({ error: 'Logout failed — please clear your session manually.' });
+  }
+});
+
 module.exports = router;

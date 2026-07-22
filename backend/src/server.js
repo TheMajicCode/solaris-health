@@ -83,7 +83,9 @@ app.use(cors({
 // Global rate limit: 500 requests / 15 min per IP.
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 500,
+  // Per-IP request cap. Defaults to 500 (production DoS protection); overridable
+  // via RATE_LIMIT_MAX for load testing or higher-traffic deployments.
+  max: parseInt(process.env.RATE_LIMIT_MAX || '500', 10),
   standardHeaders: true,
   legacyHeaders: false,
   // Use real client IP from X-Forwarded-For (set by nginx), fall back to socket IP
@@ -95,7 +97,9 @@ app.use(globalLimiter);
 // Auth endpoints: 60 attempts / 15 min per IP (enough for normal use, blocks brute force)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 60,
+  // Defaults to 60 login attempts / 15 min per IP (brute-force protection);
+  // overridable via AUTH_RATE_LIMIT_MAX for load testing.
+  max: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '60', 10),
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip,
@@ -136,8 +140,38 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-// Lightweight metrics endpoint for uptime monitoring (Prometheus-style text)
+// Metrics endpoint. Defaults to Prometheus-style text for uptime scrapers, but
+// returns a JSON operational summary (uptime, memory, live row counts) when the
+// client asks for JSON via `?format=json` or an `Accept: application/json` header.
 app.get('/api/metrics', async (req, res) => {
+  const wantsJson = req.query.format === 'json' ||
+    (req.headers.accept || '').includes('application/json');
+
+  if (wantsJson) {
+    try {
+      const [userCount, checkinCount, bookingCount, messageCount] = await Promise.all([
+        db.query('SELECT COUNT(*) FROM users'),
+        db.query('SELECT COUNT(*) FROM daily_checkins'),
+        db.query('SELECT COUNT(*) FROM booking_requests'),
+        db.query('SELECT COUNT(*) FROM luca_messages'),
+      ]);
+      return res.json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        uptime_seconds: Math.floor((Date.now() - START_TIME) / 1000),
+        memory_mb: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+        counts: {
+          users: parseInt(userCount.rows[0].count, 10),
+          checkins: parseInt(checkinCount.rows[0].count, 10),
+          bookings: parseInt(bookingCount.rows[0].count, 10),
+          luca_messages: parseInt(messageCount.rows[0].count, 10),
+        },
+      });
+    } catch (err) {
+      return res.status(500).json({ status: 'degraded', error: err.message });
+    }
+  }
+
   const mem = process.memoryUsage();
   let dbUp = 0;
   try { await db.query('SELECT 1'); dbUp = 1; } catch { dbUp = 0; }
@@ -210,10 +244,25 @@ app.use('/api/health-documents', healthDocumentsRoutes);
 app.use('/api/public', publicRoutes); // public practitioner directory (no auth)
 app.use('/api/intake', intakeRoutes); // new-patient intake forms + patient inbox
 
-// Error handler
+// Structured error handler (must be the last middleware). Emits a single JSON
+// log line per error so it can be parsed by log aggregators, and returns a safe
+// message to the client (never leaks internals on 5xx).
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'Something went wrong!' });
+  const status = err.status || err.statusCode || 500;
+  const isOperational = status < 500; // 4xx = client/operational, 5xx = server fault
+  console.error(JSON.stringify({
+    level: isOperational ? 'warn' : 'error',
+    timestamp: new Date().toISOString(),
+    method: req.method,
+    path: req.path,
+    status,
+    message: err.message,
+    stack: process.env.NODE_ENV === 'production' ? undefined : err.stack,
+    userId: req.user && req.user.userId,
+  }));
+  res.status(status).json({
+    error: isOperational ? err.message : 'Something went wrong — our team has been notified.',
+  });
 });
 
 // Only start the HTTP listener when run directly (not when imported by tests)
@@ -235,6 +284,12 @@ if (require.main === module) {
     // unavailable in a minimal runtime. Log and continue serving.
     console.warn('Migration runner warning:', err.message);
   }
+
+  // ---- Clean up expired revoked tokens on startup (Gate 6) ----
+  // Rows for tokens that would have expired on their own are no longer useful.
+  db.query('DELETE FROM revoked_tokens WHERE expires_at < NOW()')
+    .then((r) => { if (r.rowCount > 0) console.log(`Cleaned ${r.rowCount} expired revoked tokens`); })
+    .catch((err) => console.warn('Token cleanup warning:', err.message));
 
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`✓ LUCA Passport Backend running on port ${PORT}`);

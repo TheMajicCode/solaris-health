@@ -31,7 +31,19 @@ class ApiClient {
     const data = await this.request('/auth/register', { method: 'POST', body: JSON.stringify(payload) });
     this.setToken(data.token); return data;
   }
-  logout() { this.setToken(null); }
+  logout() {
+    // Revoke the session server-side (Gate 6 blocklist), then clear locally.
+    // Fire-and-forget with the captured token so local logout stays instant and
+    // never blocks on the network; failures are non-fatal.
+    const token = this.token;
+    this.setToken(null);
+    if (token) {
+      fetch(`${API_URL}/auth/logout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => {});
+    }
+  }
   skipOnboarding() { return this.request('/auth/skip-onboarding', { method: 'PATCH' }); }
 
   // ---- Journal ----

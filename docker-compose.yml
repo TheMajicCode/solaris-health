@@ -34,6 +34,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:-2f4e1b87f1cc5bf971470dd66e42b6a6356828491a3336fe3d7ef1422088cc9a76329516f40e44c60a9869b94e9cd4ff65cc96975fcaa1a654cd5427003778ab}
       PORT: 5000
       NODE_ENV: production
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-500}
+      AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-60}
     ports:
       - "5000:5000"
     depends_on:

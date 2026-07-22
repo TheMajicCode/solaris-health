@@ -14,6 +14,7 @@
  * Same API surface as before (GET/POST /messages) so the frontend doesn't change.
  */
 const express = require('express');
+const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const db = require('../db');
 const { authMiddleware } = require('../middleware/auth');
@@ -437,10 +438,16 @@ router.post('/messages', authMiddleware, async (req, res) => {
     const cleanReply = parsedReply || 'I had trouble responding just now. Please try again in a moment.';
     const suggestions = parsedSuggestions.length ? parsedSuggestions : DEFAULT_SUGGESTIONS;
 
-    // 4. Persist assistant reply (cleaned, with provenance)
+    // 4. Persist assistant reply (cleaned, with provenance + AI audit trail).
+    //    inputs_hash = non-reversible SHA-256 of the system-prompt prefix + user
+    //    message, so we can audit *what shaped* a reply without storing raw prompts.
+    const inputsHash = crypto.createHash('sha256')
+      .update(JSON.stringify({ systemPrompt: SYSTEM_PROMPT.slice(0, 200), userMessage: content }))
+      .digest('hex');
+    const modelId = process.env.LUCA_AI_MODEL || ai.id || 'unknown';
     await db.query(
-      'INSERT INTO luca_messages (user_id, role, content, model) VALUES ($1,$2,$3,$4)',
-      [userId, 'assistant', cleanReply, ai.id]
+      'INSERT INTO luca_messages (user_id, role, content, model, model_id, inputs_hash) VALUES ($1,$2,$3,$4,$5,$6)',
+      [userId, 'assistant', cleanReply, ai.id, modelId, inputsHash]
     ).catch(async () => {
       await db.query('INSERT INTO luca_messages (user_id, role, content) VALUES ($1,$2,$3)', [userId, 'assistant', cleanReply]);
     });

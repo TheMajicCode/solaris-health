@@ -117,3 +117,61 @@ safety net. `dumb-init` in `Dockerfile.backend` ensures the signal actually reac
 ## Migrating the live database to managed Postgres
 
 See [`NEON_MIGRATION.md`](NEON_MIGRATION.md) for a step-by-step `pg_dump` → Neon → cutover.
+
+---
+
+## Disaster recovery: rebuild the schema from committed source
+
+The entire database schema is reproducible from git alone — no snapshot required. The
+committed `backend/schema*.sql` files build the base schema and `backend/migrations/*.sql`
+apply every change on top, in filename order. On a fresh Postgres, apply them like so:
+
+```bash
+# 1. create an empty database
+createdb solaris                       # or: psql -c "CREATE DATABASE solaris;"
+
+# 2. base schema (order matters — foreign keys)
+for f in schema schema_solaris schema_wallet schema_messaging schema_marketplace \
+         schema_notifications schema_bookings schema_gps schema_sprint; do
+  psql -d solaris -f backend/$f.sql
+done
+
+# 3. incremental migrations, in order
+cd backend && DATABASE_URL=postgresql://.../solaris npm run migrate
+```
+
+(On the Docker VM, `schema.sql`, `schema_solaris.sql`, `schema_wallet.sql`,
+`schema_messaging.sql` and `schema_marketplace.sql` are auto-applied by the Postgres
+`docker-entrypoint-initdb.d` mount on first boot; the remaining four schema files are
+covered by their equivalent migrations, and the backend runs `npm run migrate` on startup.)
+
+### Verified recovery test — 2026-07-22
+
+Executed a full clean rebuild into a throwaway `solaris_recovery_test` database on the live
+VM's Postgres 15, applying only committed source (9 `schema*.sql` files + 18 migrations):
+
+| Check | Result |
+|-------|--------|
+| Base schema files applied (9) | ✅ 0 errors |
+| Migrations applied (`001`–`018`) | ✅ 0 errors |
+| Tables rebuilt | **77** |
+| Parity vs live DB (78 tables) | ✅ only `pgmigrations` (node-pg-migrate's runtime tracking table) differs |
+| Gate-critical tables present | ✅ `revoked_tokens`; `luca_messages.model_id` + `luca_messages.inputs_hash` |
+
+This test surfaced and fixed a real gap: `journal_entries`, `audio_library` and `user_audio`
+were used by application routes but had no committed `CREATE TABLE` (they existed only in the
+live DB). Migration `018_journal_and_audio.sql` now creates them, so committed source fully
+reproduces production. The throwaway database was dropped after verification.
+
+**Regression command** (safe to re-run; creates and drops a temp DB):
+
+```bash
+psql -c "CREATE DATABASE solaris_recovery_test;"
+for f in schema schema_solaris schema_wallet schema_messaging schema_marketplace \
+         schema_notifications schema_bookings schema_gps schema_sprint; do
+  psql -d solaris_recovery_test -f backend/$f.sql; done
+for f in backend/migrations/*.sql; do psql -d solaris_recovery_test -f "$f"; done
+psql -d solaris_recovery_test -tAc \
+  "SELECT count(*) FROM information_schema.tables WHERE table_schema='public';"  # -> 77
+psql -c "DROP DATABASE solaris_recovery_test;"
+```

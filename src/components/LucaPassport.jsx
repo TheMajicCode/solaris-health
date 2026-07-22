@@ -1785,6 +1785,11 @@ function CoachPage({ user, go }) {
                   : <LucaAvatar size="sm" />}
                 <div style={{ minWidth: 0, maxWidth: '82%' }}>
                   <div className={`msg-bubble ${isUser ? 'user' : 'ai'}`}>{m.content}</div>
+                  {!isUser && (
+                    <span style={{ fontSize: '10px', color: 'var(--muted-2)', display: 'block', marginTop: '4px' }}>
+                      AI · Not medical advice
+                    </span>
+                  )}
                   <div className={`msg-meta ${isUser ? '' : 'ai-meta'}`}>
                     {m.created_at && <span className={`msg-time ${isUser ? '' : 'ai-time'}`}>{msgTime(m.created_at)}</span>}
                     {!isUser && m.content && !ttsFailed.has(i) && (
@@ -3748,6 +3753,11 @@ function LucaWidget({ user, hidden, go }) {
                   {isUser ? <Avatar name={user?.fullName} size={26} /> : <LucaAvatar size="sm" />}
                   <div style={{ minWidth: 0, maxWidth: '84%' }}>
                     <div className={`msg-bubble ${isUser ? 'user' : 'ai'}`} style={{ fontSize: 13 }}>{m.content}</div>
+                    {!isUser && (
+                      <span style={{ fontSize: '10px', color: 'var(--muted-2)', display: 'block', marginTop: '4px' }}>
+                        AI · Not medical advice
+                      </span>
+                    )}
                     {!isUser && i === messages.length - 1 && !sending && (
                       <LucaChips suggestions={m.suggestions} onAction={(s) => executeChipAction(s, { go, setInput, send, playAudio: playFromLibrary })} disabled={sending} />
                     )}
