@@ -11,6 +11,7 @@ const contributionsRoutes = require('./routes/contributions');
 const assessmentRoutes = require('./routes/assessment');
 const listingsRoutes = require('./routes/listings');
 const journeyRoutes = require('./routes/journey');
+const journeysRoutes = require('./routes/journeys');
 const lucaRoutes = require('./routes/luca');
 const practitionerRoutes = require('./routes/practitioner');
 const adminRoutes = require('./routes/admin');
@@ -115,6 +116,7 @@ app.use('/api/contributions', contributionsRoutes);
 app.use('/api/assessment', assessmentRoutes);
 app.use('/api/listings', listingsRoutes);
 app.use('/api/journey', journeyRoutes);
+app.use('/api/journeys', journeysRoutes);
 app.use('/api/luca', lucaRoutes);
 app.use('/api/luca', lucaPractitionerRoutes); // GET/POST /api/luca/practitioner/messages
 app.use('/api/consent', consentRoutes);

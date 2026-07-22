@@ -18,6 +18,20 @@ const db = require('../db');
 const { authMiddleware } = require('../middleware/auth');
 const { getAIProvider } = require('../lib/ai');
 const { computeTriggers, buildTriggerInstructions } = require('../lib/luca-triggers');
+const { MILESTONE_DEFS_COUNT } = require('./journeys');
+
+// Warm labels for journey types (kept in sync with the frontend).
+const JOURNEY_LABELS = {
+  optimal_health: 'Optimal Health',
+  detox: 'Gentle Detox',
+  menopause: 'Menopause Support',
+  heavy_metal: 'Heavy Metal Release',
+  smile: 'The Smile Journey',
+  thyroid: 'Thyroid Balance',
+  sugar: 'Sugar Balance',
+  nurture_mama: 'Nurture Mama',
+  your_path: 'Your Path',
+};
 
 const router = express.Router();
 
@@ -274,6 +288,33 @@ Latest (${new Date(latest.checkin_date).toLocaleDateString('en-US', { weekday: '
       lines.push(`Active habits (last 7 days):\n${hlist}`);
     }
     parts.push(`\n[PASSPORT CONTEXT — HABITS & STREAK]\n${lines.join('\n')}`);
+  }
+
+  // Active journeys — the guided program(s) the member is walking.
+  const journeyRes = await db
+    .query(
+      `SELECT journey_type, status, milestones_json, started_at
+       FROM member_journeys WHERE user_id=$1 AND status='active'
+       ORDER BY started_at DESC`,
+      [userId]
+    )
+    .catch(() => ({ rows: [] }));
+  if (journeyRes.rows.length > 0) {
+    const jlines = journeyRes.rows.map((j) => {
+      const done = (Array.isArray(j.milestones_json) ? j.milestones_json : []).filter(
+        (m) => m.completed
+      ).length;
+      const total = MILESTONE_DEFS_COUNT[j.journey_type] || 4;
+      const label = JOURNEY_LABELS[j.journey_type] || j.journey_type;
+      return `  • ${label}: ${done}/${total} milestones complete (started ${new Date(
+        j.started_at
+      ).toLocaleDateString()})`;
+    });
+    parts.push(
+      `\n[PASSPORT CONTEXT — ACTIVE JOURNEY]\n${jlines.join(
+        '\n'
+      )}\nGently encourage progress toward the next milestone when it feels natural.`
+    );
   }
 
   return parts.join('\n');

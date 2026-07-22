@@ -484,11 +484,12 @@ const CardSkeleton = ({ rows = 3 }) => (
     {Array.from({ length: rows }).map((_, i) => <Skel key={i} h={12} w={`${90 - i * 12}%`} />)}
   </Card>
 );
-const Empty = ({ icon: Icon = Sparkles, title, sub }) => (
+const Empty = ({ icon: Icon = Sparkles, title, sub, children }) => (
   <div className="empty col" style={{ alignItems: 'center', gap: 8 }}>
     <div className="chip mint" style={{ width: 48, height: 48 }}><Icon size={22} /></div>
     <div className="f6" style={{ color: 'var(--ink)' }}>{title}</div>
     {sub && <div className="small muted" style={{ maxWidth: 360 }}>{sub}</div>}
+    {children && <div style={{ marginTop: 10 }}>{children}</div>}
   </div>
 );
 
@@ -609,6 +610,26 @@ function normalizeSolarisRole(r) {
   if (SOLARIS_ROLE_SET.has(r)) return r;
   return 'patient';
 }
+// Warm, human labels for each member journey type (mirrors backend JOURNEY_LABELS).
+const JOURNEY_LABELS = {
+  optimal_health: 'Optimal Health',
+  detox: 'Gentle Detox',
+  menopause: 'Menopause Support',
+  heavy_metal: 'Heavy Metal Release',
+  smile: 'The Smile Journey',
+  thyroid: 'Thyroid Balance',
+  sugar: 'Sugar Balance',
+  nurture_mama: 'Nurture Mama',
+  your_path: 'Your Path',
+};
+
+// The journeys offered as a starting grid on Explore (and its empty state).
+const JOURNEY_OFFERS = [
+  { type: 'detox', label: 'Gentle Detox', blurb: 'Ease your system into cleaner rhythms — food, rest, and breath.' },
+  { type: 'optimal_health', label: 'Optimal Health', blurb: 'A steady path to your fullest Mind, Body, Heart & Spirit.' },
+  { type: 'menopause', label: 'Menopause Support', blurb: 'Grounded, warm guidance through a season of change.' },
+];
+
 const TAB_META = {
   dashboard: { title: 'Dashboard', sub: 'Your steering wheel for health, value, and care — one sovereign view.' },
   explore: { title: 'Explore', sub: 'Discover trusted health & wellness providers near you — clinics, farms, healers, and more.' },
@@ -849,6 +870,7 @@ function DashboardPage({ user, go }) {
   const [checkins, setCheckins] = useState([]);
   const [recs, setRecs] = useState(null);
   const [recsLoading, setRecsLoading] = useState(true);
+  const [journeys, setJourneys] = useState([]);
   const [loading, setLoading] = useState(true);
   const [checkinOpen, setCheckinOpen] = useState(false);
   const [consentReqs, setConsentReqs] = useState([]);
@@ -897,6 +919,14 @@ function DashboardPage({ user, go }) {
       } finally { alive && setLoading(false); }
     })();
     loadConsents();
+    return () => { alive = false; };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    api.getMyJourneys()
+      .then((r) => { if (alive) setJourneys(r?.journeys || []); })
+      .catch(() => { if (alive) setJourneys([]); });
     return () => { alive = false; };
   }, []);
 
@@ -985,6 +1015,41 @@ function DashboardPage({ user, go }) {
 
         {/* LUCA Recommends */}
         <LucaRecommends recs={recs} loading={recsLoading} go={go} user={user} vitality={vitality} focus={focus} />
+
+        {/* Active journey */}
+        {(() => {
+          const aj = journeys.find((j) => j.status === 'active');
+          if (!aj) return null;
+          const total = aj.totalCount || 0;
+          const done = aj.completedCount || 0;
+          const pct = total ? Math.round((done / total) * 100) : 0;
+          const name = JOURNEY_LABELS[aj.journeyType] || 'Your journey';
+          return (
+            <Card className="tint" style={{ borderColor: 'var(--mint-line, var(--line))' }}>
+              <div className="between" style={{ gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                <div>
+                  <div className="eyebrow">Your active journey</div>
+                  <div className="card-title" style={{ marginTop: 3 }}>{name}</div>
+                </div>
+                <Pill tone="mint" icon={Compass}>{done} of {total} milestones</Pill>
+              </div>
+              <div style={{ marginTop: 14 }}><Progress v={pct} /></div>
+              {aj.nextMilestone ? (
+                <div className="small muted" style={{ marginTop: 12, lineHeight: 1.55 }}>
+                  <span className="f6" style={{ color: 'var(--ink)' }}>Next:</span> {aj.nextMilestone.label}
+                  {aj.nextMilestone.description ? ` — ${aj.nextMilestone.description}` : ''}
+                </div>
+              ) : (
+                <div className="small muted" style={{ marginTop: 12, lineHeight: 1.55 }}>
+                  Every milestone complete — beautifully done. LUCA will help you choose what's next.
+                </div>
+              )}
+              <div className="row" style={{ marginTop: 14 }}>
+                <Btn variant="primary" icon={ChevronRight} onClick={() => go('explore')}>Continue journey</Btn>
+              </div>
+            </Card>
+          );
+        })()}
 
         {/* Weekly check-in strip */}
         <Card>
@@ -1464,7 +1529,7 @@ function CoachPage({ user, go }) {
       setDegraded(!!res?.degraded);
       setMessages((m) => [...m, { role: 'assistant', content: res?.reply || '…', model: res?.model, suggestions: res?.suggestions || [], created_at: new Date().toISOString() }]);
     } catch {
-      setMessages((m) => [...m, { role: 'assistant', content: 'I had trouble responding just now. Please try again in a moment.', created_at: new Date().toISOString() }]);
+      setMessages((m) => [...m, { role: 'assistant', content: 'LUCA is taking a moment — try again shortly.', created_at: new Date().toISOString() }]);
     } finally { setSending(false); }
   };
 
@@ -2097,7 +2162,9 @@ function MediaPage({ user, go }) {
           <div>
             <SectionHead eyebrow="Your library" title={`Saved practices (${unlocked.length})`} />
             {unlocked.length === 0 ? (
-              <Card><Empty icon={Music} title="No saved audio yet" sub="Add free guided practices below to start building your personal library." /></Card>
+              <Card><Empty icon={Music} title="Your library is empty" sub="Explore wellness audio below — add free guided practices to start building your personal library.">
+                <Btn icon={Compass} onClick={() => go && go('explore')}>Explore wellness audio</Btn>
+              </Empty></Card>
             ) : (
               <div className="col gap-3">
                 {unlocked.map((t) => (
@@ -3355,7 +3422,7 @@ function LucaWidget({ user, hidden, go }) {
       const res = await api.sendLucaMessage(content);
       setMessages((m) => [...m, { role: 'assistant', content: res?.reply || '…', model: res?.model, suggestions: res?.suggestions || [], created_at: new Date().toISOString() }]);
     } catch {
-      setMessages((m) => [...m, { role: 'assistant', content: 'I had trouble responding just now. Please try again in a moment.', created_at: new Date().toISOString() }]);
+      setMessages((m) => [...m, { role: 'assistant', content: 'LUCA is taking a moment — try again shortly.', created_at: new Date().toISOString() }]);
     } finally { setSending(false); }
   };
 

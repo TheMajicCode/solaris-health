@@ -86,6 +86,12 @@ class ApiClient {
   tickHabit(body) { return this.request('/journey/habits/tick', { method: 'POST', body: JSON.stringify(body) }); }
   getWeekStrip() { return this.request('/journey/week-strip'); }
   getStreak() { return this.request('/journey/streak'); }
+  // ---- Member journeys (guided programs) ----
+  getMyJourneys() { return this.request('/journeys/mine'); }
+  startJourney(journeyType) { return this.request('/journeys/start', { method: 'POST', body: JSON.stringify({ journeyType }) }); }
+  pauseJourney(id) { return this.request(`/journeys/${id}/pause`, { method: 'POST', body: JSON.stringify({}) }); }
+  completeJourney(id) { return this.request(`/journeys/${id}/complete`, { method: 'POST', body: JSON.stringify({}) }); }
+  getJourneyMilestones(journeyType) { return this.request(`/journeys/milestones/${journeyType}`); }
   getDocuments() { return this.request('/journey/documents'); }
   getDocument(id) { return this.request(`/journey/documents/${id}`); }
   uploadDocument(data) { return this.request('/journey/documents', { method: 'POST', body: JSON.stringify(data) }); }

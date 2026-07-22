@@ -152,6 +152,8 @@ async function resetFull(userId) {
     'recommendations',       // FK → assessment_responses; must be cleared first
     'assessment_responses',
     'booking_requests',
+    'member_journeys',
+    'notifications',
   ];
   for (const t of tables) {
     await db.query(`DELETE FROM ${t} WHERE user_id=$1`, [userId]).catch((e) => {
@@ -251,6 +253,33 @@ const CARO_JOURNAL = [
   { daysBack: 12, mood: 'great', content: "Felt genuinely rested this morning. The evening audio practice is a keeper. Recommending the free tracks to a few of my own clients." },
 ];
 
+async function seedJourney(userId, journeyType, { daysAgo = 0, milestones = [] } = {}) {
+  const started = new Date();
+  started.setDate(started.getDate() - daysAgo);
+  const json = milestones.map((key) => ({
+    key,
+    completed: true,
+    completed_at: started.toISOString(),
+  }));
+  await db.query(
+    `INSERT INTO member_journeys (user_id, journey_type, status, started_at, milestones_json)
+     VALUES ($1,$2,'active',$3,$4)
+     ON CONFLICT (user_id, journey_type)
+     DO UPDATE SET status='active', started_at=EXCLUDED.started_at, milestones_json=EXCLUDED.milestones_json`,
+    [userId, journeyType, started, JSON.stringify(json)]
+  );
+}
+
+async function seedNotification(userId, { type, title, message, data = null, daysAgo = 0, read = false }) {
+  const created = new Date();
+  created.setDate(created.getDate() - daysAgo);
+  await db.query(
+    `INSERT INTO notifications (user_id, type, title, message, data, read, created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+    [userId, type, title, message, data ? JSON.stringify(data) : null, read, created]
+  );
+}
+
 async function seedSarah(user) {
   await db.query(`UPDATE users SET onboarding_status='complete', updated_at=NOW() WHERE id=$1`, [user.id]);
   if (RESET) await resetFull(user.id);
@@ -322,7 +351,18 @@ async function seedSofia() {
     { event_type: 'checkin_streak', points: 30, category: 'consistency', note: '7-day check-in streak', daysBack: 3 },
   ]);
   const n = await unlockTracks(sofia.id, 3);
-  console.log(`✓ Sofia Herrera (${SOFIA_EMAIL} / ${DEMO_PASSWORD}): patient, assessment, 14 check-ins, ${SOFIA_JOURNAL.length} journal entries, 2 habits, ${n} audio tracks`);
+  // Active Optimal Health journey, started 14 days ago; intake + 7-day streak done.
+  await seedJourney(sofia.id, 'optimal_health', { daysAgo: 14, milestones: ['intake', 'streak7'] });
+  // A warm welcome notification so the bell is never empty.
+  await seedNotification(sofia.id, {
+    type: 'welcome',
+    title: 'Your Optimal Health journey is underway',
+    message: "Beautiful start, Sofia — you've completed your intake and a 7-day check-in streak. Your next milestone is your first practitioner session.",
+    data: { tab: 'dashboard' },
+    daysAgo: 1,
+    read: false,
+  });
+  console.log(`✓ Sofia Herrera (${SOFIA_EMAIL} / ${DEMO_PASSWORD}): patient, assessment, 14 check-ins, ${SOFIA_JOURNAL.length} journal entries, 2 habits, ${n} audio tracks, Optimal Health journey, 1 notification`);
   return sofia;
 }
 

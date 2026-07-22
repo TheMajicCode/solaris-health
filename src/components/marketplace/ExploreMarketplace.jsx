@@ -8,7 +8,8 @@
  *   onBecomeProvider  ()=>void  — optional CTA to open provider onboarding
  */
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Search, MapPin, Map as MapIcon, List as ListIcon, Loader2, Store, Plus, X, Sprout, Sparkles, RefreshCw, ArrowRight } from 'lucide-react';
+import { Search, MapPin, Map as MapIcon, List as ListIcon, Loader2, Store, Plus, X, Sprout, Sparkles, RefreshCw, ArrowRight, Compass } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { api } from '../../lib/api.js';
 import { useApp } from '../../state/AppContext.jsx';
 import MapView from './MapView.jsx';
@@ -20,8 +21,31 @@ const DEFAULT_FILTERS = {
   types: [], minRating: 0, vtv: false, verified: false, price: [], radius: 25, sort: 'rating',
 };
 
+// Guided member journeys offered on Explore (mirrors JOURNEY_LABELS on the backend).
+const JOURNEY_OFFERS = [
+  { type: 'detox', label: 'Gentle Detox', blurb: 'Ease your system into cleaner rhythms — food, rest, and breath.' },
+  { type: 'optimal_health', label: 'Optimal Health', blurb: 'A steady path to your fullest Mind, Body, Heart & Spirit.' },
+  { type: 'menopause', label: 'Menopause Support', blurb: 'Grounded, warm guidance through a season of change.' },
+];
+
 export default function ExploreMarketplace({ user, onBecomeProvider }) {
-  const { exploreFilter, setExploreFilter } = useApp() || {};
+  const { exploreFilter, setExploreFilter, setTab } = useApp() || {};
+
+  // ── Guided journeys ──
+  const [startingJourney, setStartingJourney] = useState('');
+  const beginJourney = useCallback(async (journeyType) => {
+    if (startingJourney) return;
+    setStartingJourney(journeyType);
+    try {
+      await api.startJourney(journeyType);
+      toast.success('Journey started! Find it on your dashboard.');
+      setTab?.('dashboard');
+    } catch (e) {
+      toast.error(e?.message || 'Could not start that journey — try again shortly.');
+    } finally {
+      setStartingJourney('');
+    }
+  }, [startingJourney, setTab]);
   const [filters, setFilters] = useState(() => (
     exploreFilter ? { ...DEFAULT_FILTERS, types: [exploreFilter] } : DEFAULT_FILTERS
   ));
@@ -214,6 +238,9 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
         </div>
       )}
 
+      {/* Guided journeys rail */}
+      <JourneyOffers starting={startingJourney} onBegin={beginJourney} />
+
       <div className="exm-body">
         {/* Filter rail */}
         <div className={`exm-rail${showFilters ? ' open' : ''}`}>
@@ -235,8 +262,9 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
             <div className="exm-empty">
               <Store size={34} />
               <h4>No providers match your filters</h4>
-              <p>Try widening your search or resetting the filters.</p>
+              <p>Try widening your search or resetting the filters — or begin a guided journey below.</p>
               <button className="exm-resetbtn" onClick={reset}>Reset filters</button>
+              <JourneyOffers starting={startingJourney} onBegin={beginJourney} compact />
             </div>
           ) : (
             <div className="exm-cards">
@@ -286,8 +314,47 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
   );
 }
 
+function JourneyOffers({ starting, onBegin, compact }) {
+  return (
+    <div className={`exm-journeys${compact ? ' compact' : ''}`}>
+      <div className="exm-journeys-head"><Compass size={16} /> Begin a guided journey</div>
+      <p className="exm-journeys-sub">A gentle, milestone-based path LUCA walks beside you — start any time.</p>
+      <div className="exm-journeys-grid">
+        {JOURNEY_OFFERS.map((j) => (
+          <div key={j.type} className="exm-jc">
+            <h5>{j.label}</h5>
+            <p>{j.blurb}</p>
+            <button className="exm-jc-btn" disabled={!!starting} onClick={() => onBegin(j.type)}>
+              {starting === j.type ? <Loader2 size={14} className="exm-spin" /> : <Compass size={14} />}
+              Begin journey
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const CSS = `
 .luca .exm{display:flex;flex-direction:column;height:calc(100vh - 132px);min-height:560px}
+.luca .exm-journeys{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;
+  margin-bottom:14px;box-shadow:var(--shadow-sm)}
+.luca .exm-journeys.compact{box-shadow:none;background:transparent;border:none;padding:0;margin-top:18px;text-align:left;width:100%;max-width:640px}
+.luca .exm-journeys-head{display:inline-flex;align-items:center;gap:8px;font-family:'Space Grotesk',sans-serif;
+  font-weight:700;font-size:16px;color:var(--ink)}
+.luca .exm-journeys-head svg{color:var(--teal-d)}
+.luca .exm-journeys-sub{font-size:13px;color:var(--muted);margin:4px 0 12px;line-height:1.5}
+.luca .exm-journeys-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media(max-width:900px){.luca .exm-journeys-grid{grid-template-columns:1fr}}
+.luca .exm-jc{border:1px solid var(--line);border-radius:14px;padding:14px 15px;background:var(--bg);display:flex;
+  flex-direction:column;gap:6px}
+.luca .exm-jc h5{font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;color:var(--ink);margin:0}
+.luca .exm-jc p{font-size:12.5px;color:var(--muted);margin:0;line-height:1.5;flex:1}
+.luca .exm-jc-btn{align-self:flex-start;margin-top:8px;display:inline-flex;align-items:center;gap:7px;background:var(--teal-d);
+  color:#fff;border:none;border-radius:10px;padding:9px 15px;font-weight:700;font-size:13px;cursor:pointer;
+  font-family:inherit;transition:background .15s}
+.luca .exm-jc-btn:hover{background:var(--teal-d2)}
+.luca .exm-jc-btn:disabled{opacity:.6;cursor:default}
 .luca .exm-bar{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
 .luca .exm-search{flex:1;min-width:240px;display:flex;align-items:center;gap:9px;background:var(--surface);
   border:1px solid var(--line);border-radius:13px;padding:11px 15px;box-shadow:var(--shadow-sm);color:var(--muted)}

@@ -279,3 +279,20 @@ CREATE INDEX IF NOT EXISTS idx_checkins_user ON daily_checkins(user_id);
 CREATE INDEX IF NOT EXISTS idx_rewards_user ON reward_events(user_id);
 CREATE INDEX IF NOT EXISTS idx_docs_user ON documents(user_id);
 CREATE INDEX IF NOT EXISTS idx_luca_user ON luca_messages(user_id);
+
+
+
+-- ============================================================
+-- Phase 2B: member journeys (guided wellness programs)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS member_journeys (
+  id SERIAL PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  journey_type VARCHAR(50) NOT NULL CHECK (journey_type IN ('detox','heavy_metal','menopause','optimal_health','smile','thyroid','sugar','nurture_mama','your_path')),
+  status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active','paused','complete')),
+  started_at TIMESTAMPTZ DEFAULT NOW(),
+  milestones_json JSONB DEFAULT '[]',
+  notes TEXT,
+  UNIQUE(user_id, journey_type)
+);
+CREATE INDEX IF NOT EXISTS idx_member_journeys_user ON member_journeys(user_id);
