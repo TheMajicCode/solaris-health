@@ -266,6 +266,29 @@ router.get('/me', authMiddleware, async (req, res) => {
   }
 });
 
+/* ------------------------------ GET mine ---------------------------- */
+// GET /api/bookings/mine — the patient's own bookings (alias of /me, kept as a
+// stable, explicitly-named endpoint for the dashboard bookings-status view).
+router.get('/mine', authMiddleware, async (req, res) => {
+  try {
+    const r = await db.query(
+      `SELECT b.*, s.service_name, s.duration_minutes,
+              p.business_name, p.address, p.city, p.phone AS provider_phone,
+              p.profile_photo_url, p.latitude, p.longitude
+         FROM bookings b
+         LEFT JOIN provider_services s ON s.id = b.service_id
+         LEFT JOIN provider_profiles p ON p.id = b.provider_id
+        WHERE b.patient_id = $1
+        ORDER BY b.booking_date DESC, b.start_time DESC`,
+      [req.user.userId]
+    );
+    res.json({ bookings: r.rows });
+  } catch (err) {
+    console.error('bookings/mine', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 /* ---------------------------- GET :id ------------------------------- */
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
@@ -389,29 +412,6 @@ router.put('/:id/reschedule', authMiddleware, async (req, res) => {
     res.json({ booking: upd.rows[0] });
   } catch (err) {
     console.error('reschedule booking', err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-/* ------------------------------ GET mine ---------------------------- */
-// GET /api/bookings/mine — the patient's own bookings (alias of /me, kept as a
-// stable, explicitly-named endpoint for the dashboard bookings-status view).
-router.get('/mine', authMiddleware, async (req, res) => {
-  try {
-    const r = await db.query(
-      `SELECT b.*, s.service_name, s.duration_minutes,
-              p.business_name, p.address, p.city, p.phone AS provider_phone,
-              p.profile_photo_url, p.latitude, p.longitude
-         FROM bookings b
-         LEFT JOIN provider_services s ON s.id = b.service_id
-         LEFT JOIN provider_profiles p ON p.id = b.provider_id
-        WHERE b.patient_id = $1
-        ORDER BY b.booking_date DESC, b.start_time DESC`,
-      [req.user.userId]
-    );
-    res.json({ bookings: r.rows });
-  } catch (err) {
-    console.error('bookings/mine', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

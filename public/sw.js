@@ -1,4 +1,4 @@
-const CACHE_NAME = 'solaris-v1';
+const CACHE_NAME = 'solaris-v3';
 const SHELL_ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', event => {

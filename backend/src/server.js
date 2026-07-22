@@ -80,23 +80,30 @@ app.use(cors({
   credentials: true,
 }));
 
-// Global rate limit: 200 requests / 15 min per IP.
+// Global rate limit: 500 requests / 15 min per IP.
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 200,
+  max: 500,
   standardHeaders: true,
   legacyHeaders: false,
+  // Use real client IP from X-Forwarded-For (set by nginx), fall back to socket IP
+  keyGenerator: (req) => req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip,
   message: { error: 'Too many requests — please slow down.' },
 });
 app.use(globalLimiter);
 
-// Auth endpoints: strict limit — 10 attempts / 15 min per IP.
+// Auth endpoints: 60 attempts / 15 min per IP (enough for normal use, blocks brute force)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 60,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip,
   message: { error: 'Too many login attempts — please wait 15 minutes.' },
+  skip: (req) => {
+    // Never rate-limit health checks or OPTIONS preflight
+    return req.method === 'OPTIONS';
+  },
 });
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
