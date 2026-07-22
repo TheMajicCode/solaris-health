@@ -76,6 +76,14 @@ class ApiClient {
   getCheckins() { return this.request('/journey/checkins'); }
   createCheckin(data) { return this.request('/journey/checkins', { method: 'POST', body: JSON.stringify(data) }); }
   getRewards() { return this.request('/journey/rewards'); }
+  // ---- Habits, streaks & weekly strip ----
+  getHabits() { return this.request('/journey/habits'); }
+  createHabit(body) { return this.request('/journey/habits', { method: 'POST', body: JSON.stringify(body) }); }
+  deleteHabit(id) { return this.request(`/journey/habits/${id}`, { method: 'DELETE' }); }
+  getHabitTicks(from, to) { return this.request(`/journey/habits/ticks?from=${from}&to=${to}`); }
+  tickHabit(body) { return this.request('/journey/habits/tick', { method: 'POST', body: JSON.stringify(body) }); }
+  getWeekStrip() { return this.request('/journey/week-strip'); }
+  getStreak() { return this.request('/journey/streak'); }
   getDocuments() { return this.request('/journey/documents'); }
   getDocument(id) { return this.request(`/journey/documents/${id}`); }
   uploadDocument(data) { return this.request('/journey/documents', { method: 'POST', body: JSON.stringify(data) }); }

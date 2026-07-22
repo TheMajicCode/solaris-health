@@ -334,6 +334,57 @@ textarea.input-line{resize:vertical;min-height:64px}
 .luca .luca-widget-foot{padding:12px 14px;border-top:1px solid var(--line,#E6EDEA);background:var(--surface,#fff)}
 .luca .luca-widget-foot .btn.primary{padding:8px 12px}
 @media(max-width:520px){.luca .luca-widget{right:12px;left:12px;width:auto}}
+/* Daily check-in modal */
+.luca .ci-overlay{position:fixed;inset:0;z-index:10000;background:rgba(8,32,30,.55);backdrop-filter:blur(3px);display:flex;align-items:flex-end;justify-content:center;animation:ciFade .2s ease}
+@keyframes ciFade{from{opacity:0}to{opacity:1}}
+.luca .ci-modal{width:min(560px,100%);max-height:92vh;overflow-y:auto;background:var(--surface,#fff);border-radius:22px 22px 0 0;box-shadow:0 -18px 60px rgba(8,40,38,.3);animation:ciUp .32s cubic-bezier(.2,.8,.2,1)}
+@media(min-width:640px){.luca .ci-overlay{align-items:center}.luca .ci-modal{border-radius:22px}}
+@keyframes ciUp{from{transform:translateY(40px);opacity:.4}to{transform:translateY(0);opacity:1}}
+.luca .ci-head{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;padding:18px 20px 14px;background:linear-gradient(160deg,#0E5C57,#0A413D);color:#EAFBF6;border-radius:22px 22px 0 0}
+@media(max-width:639px){.luca .ci-head{border-radius:22px 22px 0 0}}
+.luca .ci-head h3{margin:0;font-size:16px;font-weight:700;font-family:var(--serif,inherit)}
+.luca .ci-head .ci-x{margin-left:auto;background:rgba(255,255,255,.15);border:none;color:#EAFBF6;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;cursor:pointer}
+.luca .ci-head .ci-x:hover{background:rgba(255,255,255,.26)}
+.luca .ci-body{padding:18px 20px 22px;display:flex;flex-direction:column;gap:20px}
+.luca .ci-slider{display:flex;flex-direction:column;gap:8px}
+.luca .ci-slider .ci-slabel{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--ink)}
+.luca .ci-slider .ci-sval{margin-left:auto;font-size:13px;font-weight:700;color:var(--mint);min-width:26px;text-align:right}
+.luca input[type=range].ci-range{-webkit-appearance:none;appearance:none;width:100%;height:8px;border-radius:999px;background:linear-gradient(90deg,var(--mint) 0%,var(--mint) var(--pct,50%),#E6EDEA var(--pct,50%),#E6EDEA 100%);outline:none;cursor:pointer}
+.luca input[type=range].ci-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:22px;height:22px;border-radius:50%;background:#fff;border:3px solid var(--mint);box-shadow:0 2px 8px rgba(10,60,55,.3);cursor:pointer}
+.luca input[type=range].ci-range::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#fff;border:3px solid var(--mint);box-shadow:0 2px 8px rgba(10,60,55,.3);cursor:pointer}
+.luca .ci-question{background:var(--mint-soft,#E9F7F2);border:1px solid var(--line,#E6EDEA);border-radius:14px;padding:14px}
+.luca .ci-question .ci-q{font-size:13.5px;color:var(--ink);font-weight:600;display:flex;gap:8px;align-items:flex-start;line-height:1.5}
+.luca .ci-question textarea{width:100%;margin-top:10px;border:1px solid var(--line,#E6EDEA);border-radius:10px;padding:10px;font-family:inherit;font-size:13px;resize:vertical;min-height:56px;background:var(--surface,#fff);color:var(--ink);outline:none}
+.luca .ci-question textarea:focus{border-color:var(--mint)}
+.luca .ci-habits{display:flex;flex-direction:column;gap:8px}
+.luca .ci-habit{display:flex;align-items:center;gap:10px;border:1px solid var(--line,#E6EDEA);border-radius:12px;padding:10px 12px;cursor:pointer;background:var(--surface,#fff);transition:all .15s;font-family:inherit;text-align:left;width:100%}
+.luca .ci-habit:hover{border-color:var(--mint)}
+.luca .ci-habit.on{background:var(--mint-soft,#E9F7F2);border-color:var(--mint)}
+.luca .ci-habit .ci-hcheck{width:22px;height:22px;border-radius:7px;border:2px solid #CBD9D5;display:grid;place-items:center;flex:none;color:#fff}
+.luca .ci-habit.on .ci-hcheck{background:var(--mint);border-color:var(--mint)}
+.luca .ci-habit .ci-hname{font-size:13.5px;color:var(--ink);font-weight:500}
+.luca .ci-eyebrow{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-2,#8AA39E);margin-bottom:2px}
+.luca .ci-sleeprow{display:flex;align-items:center;gap:12px}
+.luca .ci-sleeprow input[type=number]{width:90px;border:1px solid var(--line,#E6EDEA);border-radius:10px;padding:9px 10px;font-family:inherit;font-size:14px;color:var(--ink);outline:none}
+.luca .ci-sleeprow input[type=number]:focus{border-color:var(--mint)}
+/* Celebration */
+.luca .ci-celebrate{padding:44px 24px 52px;display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center}
+.luca .ci-love-badge{font-size:34px;font-weight:800;color:#159C7E;animation:loveFloat 1.8s ease forwards}
+@keyframes loveFloat{0%{opacity:0;transform:translateY(18px) scale(.8)}25%{opacity:1;transform:translateY(0) scale(1.05)}75%{opacity:1;transform:translateY(-4px) scale(1)}100%{opacity:.9;transform:translateY(-10px) scale(1)}}
+.luca .ci-bonus{font-size:14px;font-weight:700;color:#CC8E27;background:#FCF3E1;border-radius:999px;padding:6px 14px;animation:loveFloat 1.8s ease .15s both}
+.luca .ci-streak-line{font-size:15px;font-weight:700;color:var(--ink);margin-top:4px}
+.luca .ci-spark{font-size:40px;animation:sparkPop .6s ease}
+@keyframes sparkPop{0%{transform:scale(0) rotate(-20deg)}60%{transform:scale(1.2) rotate(8deg)}100%{transform:scale(1) rotate(0)}}
+/* Weekly strip */
+.luca .week-strip{display:flex;gap:8px;justify-content:space-between}
+.luca .week-day{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px}
+.luca .week-day .wd-letter{font-size:11px;font-weight:700;color:var(--muted-2,#8AA39E)}
+.luca .week-day .wd-dot{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:#EEF3F1;color:#B4C4C0;font-size:13px;border:1px solid var(--line,#E6EDEA)}
+.luca .week-day.done .wd-dot{background:linear-gradient(150deg,#36C9A9,#159C7E);color:#fff;border-color:transparent;box-shadow:0 3px 10px rgba(21,156,126,.35)}
+.luca .week-day.today .wd-letter{color:var(--mint)}
+.luca .week-day.today .wd-dot{outline:2px solid var(--mint);outline-offset:2px}
+.luca .checkin-cta{display:inline-flex;align-items:center;gap:7px;background:linear-gradient(150deg,#36C9A9,#159C7E);color:#fff;border:none;border-radius:12px;padding:10px 16px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 6px 18px rgba(21,156,126,.32);transition:transform .15s,box-shadow .15s}
+.luca .checkin-cta:hover{transform:translateY(-1px);box-shadow:0 9px 24px rgba(21,156,126,.4)}
 `;
 
 /* ============================== HELPERS ============================== */
@@ -563,6 +614,206 @@ const TAB_META = {
   'aura-admin': { title: 'Clinic Console', sub: "Aura Dental's operations — appointments, simulated payments, follow-ups, and GPS treasury." },
 };
 
+/* ============================== DAILY CHECK-IN ============================== */
+const CI_DIMENSIONS = [
+  { key: 'mind', label: 'Mind', emoji: '🧠', hint: 'Clarity & focus' },
+  { key: 'body', label: 'Body', emoji: '💪', hint: 'Energy & vitality' },
+  { key: 'heart', label: 'Heart', emoji: '💛', hint: 'Mood & connection' },
+  { key: 'spirit', label: 'Spirit', emoji: '✨', hint: 'Faith, purpose & peace' },
+];
+const LUCA_QUESTIONS = [
+  "What intention do you carry into the new week?",       // Sun (0)
+  "What's one thing you're grateful for this week?",      // Mon (1)
+  "What's one thing you want to let go of today?",        // Tue (2)
+  "What did your body ask for this morning?",             // Wed (3)
+  "When did you feel most at peace recently?",            // Thu (4)
+  "What are you most proud of this week?",                // Fri (5)
+  "What nourished you most today — food, rest, connection?", // Sat (6)
+];
+
+// Mon–Sun strip of check-ins for the current week.
+function WeekStrip() {
+  const [days, setDays] = useState(null);
+  const load = () => api.getWeekStrip().then((r) => setDays(r?.days || [])).catch(() => setDays([]));
+  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    const h = () => load();
+    window.addEventListener('solaris:checkin', h);
+    return () => window.removeEventListener('solaris:checkin', h);
+  }, []);
+  const todayKey = new Date().toISOString().slice(0, 10);
+  if (!days) return <div className="week-strip">{Array.from({ length: 7 }).map((_, i) => <div key={i} className="week-day"><Skel h={11} w={12} /><Skel h={26} w={26} style={{ borderRadius: 999 }} /></div>)}</div>;
+  return (
+    <div className="week-strip">
+      {days.map((d) => (
+        <div key={d.date} className={`week-day ${d.hasCheckin ? 'done' : ''} ${d.date === todayKey ? 'today' : ''}`}>
+          <span className="wd-letter">{d.letter}</span>
+          <span className="wd-dot">{d.hasCheckin ? <Check size={14} strokeWidth={3} /> : '○'}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CheckinSlider({ dim, value, onChange }) {
+  const pct = ((value - 1) / 9) * 100;
+  return (
+    <div className="ci-slider">
+      <div className="ci-slabel">
+        <span style={{ fontSize: 18 }}>{dim.emoji}</span>
+        <span>{dim.label}</span>
+        <span className="tiny muted" style={{ fontWeight: 500 }}>· {dim.hint}</span>
+        <span className="ci-sval">{value}</span>
+      </div>
+      <input
+        type="range" min="1" max="10" step="1" value={value}
+        className="ci-range" style={{ '--pct': `${pct}%` }}
+        onChange={(e) => onChange(Number(e.target.value))}
+        aria-label={dim.label}
+      />
+    </div>
+  );
+}
+
+function DailyCheckinModal({ user, open, onClose, onSaved }) {
+  const [scores, setScores] = useState({ mind: 5, body: 5, heart: 5, spirit: 5 });
+  const [answer, setAnswer] = useState('');
+  const [sleep, setSleep] = useState('');
+  const [habits, setHabits] = useState([]);
+  const [ticked, setTicked] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [celebrate, setCelebrate] = useState(null);
+
+  const dow = new Date().getDay();
+  const question = LUCA_QUESTIONS[dow];
+
+  useEffect(() => {
+    if (!open) return;
+    // reset each open
+    setScores({ mind: 5, body: 5, heart: 5, spirit: 5 });
+    setAnswer(''); setSleep(''); setTicked({}); setCelebrate(null);
+    const today = new Date().toISOString().slice(0, 10);
+    (async () => {
+      try {
+        const [h, t] = await Promise.all([
+          api.getHabits().catch(() => ({ habits: [] })),
+          api.getHabitTicks(today, today).catch(() => ({ ticks: [] })),
+        ]);
+        setHabits(h?.habits || []);
+        const pre = {};
+        (t?.ticks || []).forEach((x) => { pre[x.habit_id] = true; });
+        setTicked(pre);
+      } catch { /* noop */ }
+    })();
+  }, [open]);
+
+  if (!open) return null;
+
+  const setScore = (k, v) => setScores((s) => ({ ...s, [k]: v }));
+  const toggleHabit = (id) => setTicked((t) => ({ ...t, [id]: !t[id] }));
+
+  const submit = async () => {
+    setSaving(true);
+    try {
+      const habitIds = Object.keys(ticked).filter((id) => ticked[id]);
+      const res = await api.createCheckin({
+        mindScore: scores.mind, bodyScore: scores.body, heartScore: scores.heart, spiritScore: scores.spirit,
+        // keep energy/mood in sync so existing widgets stay populated (0–100 scale)
+        energyScore: scores.body * 10, moodScore: scores.heart * 10,
+        sleepHours: sleep === '' ? null : Number(sleep),
+        lucaQuestionAnswer: answer.trim() || null,
+        habitIds,
+      });
+      setCelebrate({
+        awards: res.awards || [{ points: 5, label: 'Daily check-in' }],
+        currentStreak: res.currentStreak || 0,
+      });
+      window.dispatchEvent(new CustomEvent('solaris:checkin'));
+      if (onSaved) onSaved(res);
+      setTimeout(() => { onClose(); }, 2200);
+    } catch (e) {
+      toast.error(e.message || 'Could not save check-in');
+      setSaving(false);
+    }
+  };
+
+  const totalPoints = celebrate ? celebrate.awards.reduce((s, a) => s + a.points, 0) : 0;
+  const bonus = celebrate ? celebrate.awards.find((a) => a.points > 5) : null;
+
+  return (
+    <div className="ci-overlay" onClick={(e) => { if (e.target === e.currentTarget && !saving) onClose(); }}>
+      <div className="ci-modal" role="dialog" aria-modal="true" aria-label="Daily check-in">
+        {celebrate ? (
+          <div className="ci-celebrate">
+            <div className="ci-spark">🌟</div>
+            <div className="ci-love-badge">+{totalPoints} LOVE</div>
+            {bonus && <div className="ci-bonus">+{bonus.points} LOVE • {bonus.label}</div>}
+            {celebrate.currentStreak >= 2 && (
+              <div className="ci-streak-line">Your streak: {celebrate.currentStreak} days 🔥</div>
+            )}
+            <div className="small muted" style={{ marginTop: 6 }}>Beautifully done, {user.firstName || 'friend'}. See you tomorrow.</div>
+          </div>
+        ) : (
+          <>
+            <div className="ci-head">
+              <LucaAvatar size="sm" />
+              <h3>How are you feeling today, {user.firstName || 'friend'}?</h3>
+              <button className="ci-x" onClick={onClose} aria-label="Close"><X size={17} /></button>
+            </div>
+            <div className="ci-body">
+              <div>
+                <div className="ci-eyebrow">Mind · Body · Heart · Spirit</div>
+                <div className="col" style={{ gap: 16, marginTop: 10 }}>
+                  {CI_DIMENSIONS.map((dim) => (
+                    <CheckinSlider key={dim.key} dim={dim} value={scores[dim.key]} onChange={(v) => setScore(dim.key, v)} />
+                  ))}
+                </div>
+              </div>
+
+              <div className="ci-question">
+                <div className="ci-q"><Sparkles size={16} className="t-teal" style={{ flex: 'none', marginTop: 1 }} /> {question}</div>
+                <textarea
+                  maxLength={300} value={answer} onChange={(e) => setAnswer(e.target.value)}
+                  placeholder="A word or two is plenty (optional)…"
+                />
+              </div>
+
+              {habits.length > 0 && (
+                <div>
+                  <div className="ci-eyebrow">Today's habits</div>
+                  <div className="ci-habits" style={{ marginTop: 10 }}>
+                    {habits.map((h) => (
+                      <button key={h.id} type="button" className={`ci-habit ${ticked[h.id] ? 'on' : ''}`} onClick={() => toggleHabit(h.id)}>
+                        <span className="ci-hcheck">{ticked[h.id] && <Check size={14} strokeWidth={3} />}</span>
+                        <span style={{ fontSize: 17 }}>{h.icon}</span>
+                        <span className="ci-hname">{h.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <div className="ci-eyebrow">Sleep last night</div>
+                <div className="ci-sleeprow" style={{ marginTop: 10 }}>
+                  <Moon size={18} className="t-teal" />
+                  <input type="number" min="0" max="12" step="0.5" value={sleep}
+                    onChange={(e) => setSleep(e.target.value)} placeholder="7.5" />
+                  <span className="small muted">hours</span>
+                </div>
+              </div>
+
+              <Btn variant="primary block" icon={Check} onClick={submit} disabled={saving}>
+                {saving ? 'Saving…' : 'Save my check-in'}
+              </Btn>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ============================== PATIENT — DASHBOARD ============================== */
 function DashboardPage({ user, go }) {
   const [latest, setLatest] = useState(null);
@@ -572,6 +823,16 @@ function DashboardPage({ user, go }) {
   const [recs, setRecs] = useState(null);
   const [recsLoading, setRecsLoading] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [checkinOpen, setCheckinOpen] = useState(false);
+
+  const reloadDaily = async () => {
+    const [r, ci] = await Promise.all([
+      api.getRewards().catch(() => ({ events: [], total: 0 })),
+      api.getCheckins().catch(() => ({ checkins: [] })),
+    ]);
+    setRewards(r || { events: [], total: 0 });
+    setCheckins(ci?.checkins || []);
+  };
 
   useEffect(() => {
     let alive = true;
@@ -650,6 +911,18 @@ function DashboardPage({ user, go }) {
         {/* LUCA Recommends */}
         <LucaRecommends recs={recs} loading={recsLoading} go={go} user={user} vitality={vitality} focus={focus} />
 
+        {/* Weekly check-in strip */}
+        <Card>
+          <div className="between" style={{ marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
+            <div>
+              <div className="eyebrow">This week</div>
+              <div className="card-title" style={{ marginTop: 3 }}>Your check-in rhythm</div>
+            </div>
+            <button className="checkin-cta" onClick={() => setCheckinOpen(true)}><Plus size={16} strokeWidth={2.4} /> Check in</button>
+          </div>
+          <WeekStrip />
+        </Card>
+
         {/* Focus areas + daily metrics */}
         <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
           <Card>
@@ -666,7 +939,7 @@ function DashboardPage({ user, go }) {
             )) : <Empty icon={Activity} title="No assessment yet" sub="Complete the Solaris Method to reveal your focus areas." />}
           </Card>
           <Card>
-            <SectionHead eyebrow="Latest check-in" title="Daily signals" action={<Btn variant="ghost sm" icon={Plus} onClick={() => go('health')}>Log</Btn>} />
+            <SectionHead eyebrow="Latest check-in" title="Daily signals" action={<Btn variant="ghost sm" icon={Plus} onClick={() => setCheckinOpen(true)}>Log</Btn>} />
             <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
               <MiniStat icon={Moon} tone="teal" label="Sleep" value={today ? `${Number(today.sleep_hours).toFixed(1)}h` : '—'} />
               <MiniStat icon={Droplet} tone="mint" label="Hydration" value={today ? `${today.hydration_glasses}` : '—'} />
@@ -729,6 +1002,8 @@ function DashboardPage({ user, go }) {
           )) : <Empty icon={Gift} title="No rewards yet" sub="Earn LOVE points by checking in and engaging with care." />}
         </Card>
       </div>
+
+      <DailyCheckinModal user={user} open={checkinOpen} onClose={() => setCheckinOpen(false)} onSaved={reloadDaily} />
     </div>
   );
 }
@@ -860,6 +1135,7 @@ const SYS_SHORT = { bioelectrical: 'Bio', hydration: 'Hydr', circadian: 'Circ', 
 const ASPECT_ICONS = { physical: Activity, mental: Brain, emotional: Heart, spiritual: Sparkles };
 
 function HealthPage() {
+  const { user } = useApp();
   const [data, setData] = useState(null);
   const [docs, setDocs] = useState([]);
   const [checkins, setCheckins] = useState([]);
@@ -867,6 +1143,12 @@ function HealthPage() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [exportMsg, setExportMsg] = useState('');
+  const [checkinOpen, setCheckinOpen] = useState(false);
+
+  const reloadCheckins = async () => {
+    const ci = await api.getCheckins().catch(() => ({ checkins: [] }));
+    setCheckins(ci?.checkins || []);
+  };
 
   useEffect(() => {
     let alive = true;
@@ -988,16 +1270,25 @@ function HealthPage() {
           )) : <Empty icon={FileText} title="No documents yet" sub="Upload labs, imaging, and photos to keep everything in one sovereign place." />}
         </Card>
         <Card>
-          <SectionHead eyebrow="Progress" title="Recent check-ins" />
+          <div className="between" style={{ marginBottom: 12, gap: 12, flexWrap: 'wrap' }}>
+            <div>
+              <div className="eyebrow">Progress</div>
+              <div className="card-title" style={{ marginTop: 3 }}>Recent check-ins</div>
+            </div>
+            <button className="checkin-cta" onClick={() => setCheckinOpen(true)}><Plus size={16} strokeWidth={2.4} /> Check in</button>
+          </div>
+          <div style={{ marginBottom: 14 }}><WeekStrip /></div>
           {checkins.length ? checkins.slice(0, 8).map((c) => (
             <div key={c.id} className="list-row" style={{ padding: '10px 0' }}>
               <Chip icon={Calendar} tone="mint" sm />
               <div style={{ flex: 1 }}><div className="small f6">{fmtShort(c.checkin_date)}</div><div className="tiny muted">Energy {c.energy_score} · Mood {c.mood_score}</div></div>
-              <span className="tiny muted2">{Number(c.sleep_hours).toFixed(1)}h</span>
+              <span className="tiny muted2">{c.sleep_hours != null ? `${Number(c.sleep_hours).toFixed(1)}h` : '—'}</span>
             </div>
           )) : <Empty icon={Calendar} title="No check-ins yet" sub="Daily check-ins help LUCA track your vitality over time." />}
         </Card>
       </div>
+
+      {user && <DailyCheckinModal user={user} open={checkinOpen} onClose={() => setCheckinOpen(false)} onSaved={reloadCheckins} />}
     </div>
   );
 }
