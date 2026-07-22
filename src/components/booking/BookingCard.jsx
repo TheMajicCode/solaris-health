@@ -17,12 +17,14 @@
 import React from 'react';
 import {
   Calendar, Clock, Tag, User, MapPin, CalendarPlus, Check, X,
-  CheckCircle2, UserX, RotateCcw, ChevronRight, DollarSign,
+  CheckCircle2, UserX, RotateCcw, ChevronRight, DollarSign, CalendarClock,
 } from 'lucide-react';
 import { fmtDate, fmtTime, countdown, downloadICS } from '../../lib/calendar-utils.js';
 
 const STATUS = {
   pending:   { label: 'Pending',    cls: 'pending' },
+  proposed:  { label: 'New time proposed', cls: 'proposed' },
+  scheduled: { label: 'Scheduled',  cls: 'confirmed' },
   confirmed: { label: 'Confirmed',  cls: 'confirmed' },
   cancelled: { label: 'Cancelled',  cls: 'cancelled' },
   completed: { label: 'Completed',  cls: 'completed' },
@@ -37,6 +39,7 @@ function initials(name) {
 export default function BookingCard({
   booking: b, perspective = 'patient', busy,
   onView, onCancel, onReschedule, onConfirm, onDecline, onComplete, onNoShow,
+  onProposeTime, onConfirmTime,
 }) {
   const st = STATUS[b.status] || { label: b.status, cls: 'pending' };
   const isPatient = perspective === 'patient';
@@ -47,13 +50,16 @@ export default function BookingCard({
   const photo = isPatient ? b.profile_photo_url : null;
   const cd = countdown(b.booking_date, b.start_time);
   const isFuture = cd !== 'Past';
+  const activeStatuses = ['pending', 'proposed', 'confirmed', 'scheduled'];
 
   // Action availability.
-  const canCancel = isPatient && (b.status === 'pending' || b.status === 'confirmed') && isFuture;
-  const canReschedule = isPatient && (b.status === 'pending' || b.status === 'confirmed') && isFuture;
+  const canCancel = isPatient && activeStatuses.includes(b.status) && isFuture;
+  const canReschedule = isPatient && (b.status === 'pending' || b.status === 'confirmed' || b.status === 'scheduled') && isFuture;
   const canConfirmDecline = !isPatient && b.status === 'pending';
-  const canComplete = !isPatient && b.status === 'confirmed';
-  const canNoShow = !isPatient && b.status === 'confirmed';
+  const canPropose = !isPatient && (b.status === 'pending' || b.status === 'proposed');
+  const canConfirmTime = isPatient && b.status === 'proposed';
+  const canComplete = !isPatient && (b.status === 'confirmed' || b.status === 'scheduled');
+  const canNoShow = !isPatient && (b.status === 'confirmed' || b.status === 'scheduled');
 
   const addToCal = () => downloadICS({
     ...b,
@@ -89,6 +95,16 @@ export default function BookingCard({
           {isPatient && b.address && (
             <div className="bkc-sub"><MapPin size={11} /> {[b.address, b.city].filter(Boolean).join(', ')}</div>
           )}
+          {b.status === 'proposed' && b.proposed_date && (
+            <div className="bkc-proposed">
+              <CalendarClock size={13} />
+              <span>
+                {isPatient
+                  ? <>New time proposed: <b>{fmtDate(b.proposed_date)}{b.proposed_start_time ? ` at ${fmtTime(b.proposed_start_time)}` : ''}</b>{b.practitioner_notes ? ` — ${b.practitioner_notes}` : ''}</>
+                  : <>You proposed: <b>{fmtDate(b.proposed_date)}{b.proposed_start_time ? ` at ${fmtTime(b.proposed_start_time)}` : ''}</b> — awaiting confirmation</>}
+              </span>
+            </div>
+          )}
         </div>
         <ChevronRight className="bkc-chev" size={18} />
       </div>
@@ -117,6 +133,16 @@ export default function BookingCard({
           {canCancel && (
             <button className="bkc-btn danger" disabled={isBusy} onClick={() => onCancel && onCancel(b)}>
               <X size={14} /> Cancel
+            </button>
+          )}
+          {canConfirmTime && (
+            <button className="bkc-btn primary" disabled={isBusy} onClick={() => onConfirmTime && onConfirmTime(b)}>
+              <Check size={14} /> Confirm new time
+            </button>
+          )}
+          {canPropose && onProposeTime && (
+            <button className="bkc-btn ghost" disabled={isBusy} onClick={() => onProposeTime(b)}>
+              <CalendarClock size={14} /> {b.status === 'proposed' ? 'Change time' : 'Propose time'}
             </button>
           )}
           {canConfirmDecline && (
@@ -166,6 +192,12 @@ const CSS = `
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .luca .bkc-badge{font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:999px;text-transform:uppercase;letter-spacing:.04em;flex:none}
 .luca .bkc-badge.pending{background:#fef3d7;color:#9a6b00}
+.luca .bkc-badge.proposed{background:#fbeecf;color:#9a6b00}
+.luca .bkc-proposed{display:flex;align-items:flex-start;gap:6px;margin-top:8px;font-size:12px;line-height:1.45;
+  color:#8a5d00;background:#fdf6e6;border:1px solid #f0dfb2;border-radius:9px;padding:7px 10px}
+.luca .bkc-proposed svg{color:var(--gold);flex:none;margin-top:1px}
+.luca .bkc-proposed b{font-weight:700;color:#7a5100}
+.luca .bkc-proposed{border-left:3px solid var(--gold)}
 .luca .bkc-badge.confirmed{background:var(--mint-soft);color:var(--teal-d)}
 .luca .bkc-badge.completed{background:#e3f3ec;color:var(--mint-ink)}
 .luca .bkc-badge.cancelled{background:var(--surface-2);color:var(--muted)}

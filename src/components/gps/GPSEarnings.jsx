@@ -7,11 +7,12 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Coins, TrendingUp, Clock, CheckCircle2, Users, Info, Wallet } from 'lucide-react';
+import { Coins, TrendingUp, Clock, CheckCircle2, Users, Info, Wallet, Sparkles, Bitcoin } from 'lucide-react';
 import { api } from '../../lib/api.js';
 import ValueFlowViz from './ValueFlowViz.jsx';
 
 const money = (n) => `$${(Number(n) || 0).toFixed(2)}`;
+const sats = (n) => `${(Number(n) || 0).toLocaleString()} sats`;
 const fmtDate = (d) => {
   if (!d) return '';
   try { return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
@@ -23,6 +24,7 @@ export default function GPSEarnings() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
   const [showHow, setShowHow] = useState(false);
+  const [splits, setSplits] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -36,6 +38,9 @@ export default function GPSEarnings() {
         if (alive) setLoading(false);
       }
     })();
+    api.getProviderEarnings()
+      .then((s) => { if (alive) setSplits(s || null); })
+      .catch(() => { if (alive) setSplits(null); });
     return () => { alive = false; };
   }, []);
 
@@ -146,6 +151,61 @@ export default function GPSEarnings() {
             )}
           </section>
 
+          {splits && Array.isArray(splits.earnings) && splits.earnings.length > 0 && (
+            <section className="gpe-sec">
+              <div className="gpe-split-head">
+                <h3 className="gpe-sec-title" style={{ margin: 0 }}><Bitcoin size={16} /> Payment splits</h3>
+                <span className="gpe-sim-badge"><Sparkles size={12} /> Simulated</span>
+              </div>
+
+              <div className="gpe-split-banner">
+                <Coins size={18} />
+                <p>
+                  These are <strong>simulated</strong> value splits — a preview of how the Generative
+                  Prosperity System will route real Bitcoin (sats) to you as sessions settle. Nothing
+                  here has moved real funds yet; it's here so you can see your sovereign income take shape.
+                </p>
+              </div>
+
+              <div className="gpe-split-totals">
+                <div className="gpe-split-total">
+                  <span className="gpe-split-total-lbl">Simulated in sats</span>
+                  <span className="gpe-split-total-val">{sats(splits.totalSimulatedSats)}</span>
+                </div>
+                <div className="gpe-split-total">
+                  <span className="gpe-split-total-lbl">Simulated in USD</span>
+                  <span className="gpe-split-total-val">{money(splits.totalSimulatedUsd)}</span>
+                </div>
+              </div>
+
+              <div className="gpe-list">
+                <div className="gpe-split-list-head">
+                  <span>From</span>
+                  <span>Type</span>
+                  <span>Date</span>
+                  <span>Sats</span>
+                  <span>USD</span>
+                  <span>Status</span>
+                </div>
+                {splits.earnings.map((e) => (
+                  <div className="gpe-split-row" key={e.id}>
+                    <span className="gpe-row-svc">{e.patientName || 'Member'}</span>
+                    <span className="gpe-row-muted">{(e.splitType || 'session_fee').replace(/_/g, ' ')}</span>
+                    <span className="gpe-row-muted">{fmtDate(e.createdAt)}</span>
+                    <span className="gpe-row-share">{sats(e.amountSats)}</span>
+                    <span className="gpe-row-muted">{money(e.amountUsd)}</span>
+                    <span className="gpe-sim-badge sm"><Sparkles size={10} /> Simulated</span>
+                  </div>
+                ))}
+              </div>
+
+              <p className="gpe-split-note">
+                <Info size={13} /> In the Generative Prosperity System, value flows directly to the people
+                who create it — practitioners keep the majority share, and every split is visible, never hidden.
+              </p>
+            </section>
+          )}
+
           <div className="gpe-payout">
             <div className="gpe-payout-txt">
               <strong>Direct payouts</strong>
@@ -219,4 +279,26 @@ const CSS = `
 .luca .gpe-payout-txt span { font-size:12.5px; color:var(--muted); }
 .luca .gpe-payout-btn { background:var(--teal-d); color:#fff; border:none; border-radius:var(--r-sm);
   padding:10px 18px; font-size:13px; font-weight:600; cursor:not-allowed; opacity:.55; font-family:inherit; }
+
+.luca .gpe-split-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; flex-wrap:wrap; }
+.luca .gpe-sim-badge { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700;
+  padding:4px 10px; border-radius:999px; background:#fbf1da; color:#9a7420; border:1px solid #ecd9a8; white-space:nowrap; }
+.luca .gpe-sim-badge.sm { justify-self:start; font-size:10px; padding:3px 8px; }
+.luca .gpe-split-banner { display:flex; gap:11px; align-items:flex-start; background:linear-gradient(90deg,#fdf6e6,#fbf7ee);
+  border:1px solid #ecd9a8; border-radius:var(--r-sm); padding:14px 16px; margin-bottom:16px; color:#8a6a1e; }
+.luca .gpe-split-banner svg { flex:none; margin-top:1px; color:#c79433; }
+.luca .gpe-split-banner p { font-size:13px; line-height:1.6; margin:0; color:#7a5f22; }
+.luca .gpe-split-totals { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:16px; }
+.luca .gpe-split-total { background:var(--surface-2); border:1px solid var(--line); border-radius:var(--r-sm); padding:14px 16px;
+  display:flex; flex-direction:column; gap:3px; }
+.luca .gpe-split-total-lbl { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted-2); }
+.luca .gpe-split-total-val { font-family:'Space Grotesk',sans-serif; font-size:22px; font-weight:700; color:var(--ink); }
+.luca .gpe-split-list-head, .luca .gpe-split-row { display:grid; grid-template-columns:1.4fr 1.1fr 1fr 1.1fr .9fr 1fr;
+  gap:10px; align-items:center; padding:11px 6px; }
+.luca .gpe-split-list-head { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted-2); border-bottom:1px solid var(--line); }
+.luca .gpe-split-row { border-bottom:1px solid var(--line); font-size:13px; }
+.luca .gpe-split-row:last-child { border-bottom:none; }
+.luca .gpe-split-note { display:flex; gap:7px; align-items:flex-start; font-size:12.5px; line-height:1.6; color:var(--muted);
+  margin:16px 0 0; padding-top:14px; border-top:1px solid var(--line); }
+.luca .gpe-split-note svg { flex:none; margin-top:2px; color:var(--teal-d); }
 `;

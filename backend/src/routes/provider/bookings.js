@@ -177,4 +177,52 @@ router.put('/:id/no-show', authMiddleware, (req, res) => transition(req, res, {
   id: req.params.id, next: 'no_show', requireFrom: ['confirmed', 'pending'], reasonDefault: 'Patient did not show',
 }));
 
+/* --------------------------- propose a new time --------------------------- */
+// POST /api/provider/bookings/:id/propose-time
+// The practitioner suggests an alternate time for a pending request. The booking
+// moves to 'proposed' and the patient is notified to confirm it.
+router.post('/:id/propose-time', authMiddleware, async (req, res) => {
+  try {
+    const { booking, error } = await loadOwnedBooking(req, req.params.id);
+    if (error) return res.status(error).json({ error: error === 403 ? 'Forbidden' : 'Not found' });
+    if (!['pending', 'proposed'].includes(booking.status)) {
+      return res.status(400).json({ error: `Cannot propose a new time for a ${booking.status} booking.` });
+    }
+
+    const { proposedDatetime, proposedEndTime, notes } = req.body || {};
+    if (!proposedDatetime) return res.status(400).json({ error: 'proposedDatetime is required' });
+
+    // Accept an ISO datetime ("2026-07-25T14:30") or a date + separate time.
+    const dt = new Date(proposedDatetime);
+    if (Number.isNaN(dt.getTime())) return res.status(400).json({ error: 'Invalid proposedDatetime' });
+    const date = dt.toISOString().slice(0, 10);
+    const startTime = dt.toISOString().slice(11, 16); // HH:MM (UTC-normalised)
+    const endTime = proposedEndTime || null;
+
+    const upd = await db.query(
+      `UPDATE bookings
+          SET status='proposed', proposed_date=$2, proposed_start_time=$3, proposed_end_time=$4,
+              practitioner_notes=$5, proposed_at=now(), updated_at=now()
+        WHERE id=$1 RETURNING *`,
+      [booking.id, date, startTime, endTime, notes || null]
+    );
+
+    await db.query(
+      `INSERT INTO booking_status_history (booking_id, status, changed_by, reason) VALUES ($1,'proposed',$2,$3)`,
+      [booking.id, req.user.userId, notes || 'Alternate time proposed by practitioner']
+    ).catch(() => {});
+
+    await createNotification(
+      booking.patient_id, 'booking', '🕊️ A new time was proposed',
+      `${booking.business_name} proposed a new time for your ${booking.service_name || 'appointment'}: ${date} at ${startTime}. Open your bookings to confirm.`,
+      { bookingId: booking.id, role: 'patient', prompt: 'confirm-time' }
+    ).catch(() => {});
+
+    res.json({ booking: upd.rows[0] });
+  } catch (err) {
+    console.error('propose-time', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;

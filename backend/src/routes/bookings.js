@@ -393,4 +393,75 @@ router.put('/:id/reschedule', authMiddleware, async (req, res) => {
   }
 });
 
+/* ------------------------------ GET mine ---------------------------- */
+// GET /api/bookings/mine — the patient's own bookings (alias of /me, kept as a
+// stable, explicitly-named endpoint for the dashboard bookings-status view).
+router.get('/mine', authMiddleware, async (req, res) => {
+  try {
+    const r = await db.query(
+      `SELECT b.*, s.service_name, s.duration_minutes,
+              p.business_name, p.address, p.city, p.phone AS provider_phone,
+              p.profile_photo_url, p.latitude, p.longitude
+         FROM bookings b
+         LEFT JOIN provider_services s ON s.id = b.service_id
+         LEFT JOIN provider_profiles p ON p.id = b.provider_id
+        WHERE b.patient_id = $1
+        ORDER BY b.booking_date DESC, b.start_time DESC`,
+      [req.user.userId]
+    );
+    res.json({ bookings: r.rows });
+  } catch (err) {
+    console.error('bookings/mine', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/* -------------------------- POST :id/confirm-time -------------------------
+   Patient accepts the practitioner's proposed time. The proposed_* values become
+   the booking's real time and the booking moves to 'scheduled'. */
+router.post('/:id/confirm-time', authMiddleware, async (req, res) => {
+  try {
+    const booking = await loadBookingFull(req.params.id);
+    if (!booking) return res.status(404).json({ error: 'Not found' });
+    if (booking.patient_id !== req.user.userId && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    if (booking.status !== 'proposed') {
+      return res.status(400).json({ error: 'There is no proposed time to confirm on this booking.' });
+    }
+    if (!booking.proposed_date || !booking.proposed_start_time) {
+      return res.status(400).json({ error: 'No proposed time is set on this booking.' });
+    }
+
+    const date = String(booking.proposed_date).slice(0, 10);
+    const startTime = booking.proposed_start_time;
+    const endTime = booking.proposed_end_time || booking.end_time || null;
+
+    const upd = await db.query(
+      `UPDATE bookings
+          SET booking_date=$2, start_time=$3, end_time=COALESCE($4, end_time),
+              status='scheduled', confirmed_at=now(), updated_at=now()
+        WHERE id=$1 RETURNING *`,
+      [booking.id, date, startTime, endTime]
+    );
+    await db.query(
+      `INSERT INTO booking_status_history (booking_id, status, changed_by, reason) VALUES ($1,'scheduled',$2,$3)`,
+      [booking.id, req.user.userId, `Patient confirmed proposed time ${date} ${startTime}`]
+    ).catch(() => {});
+
+    if (booking.provider_user_id) {
+      await createNotification(
+        booking.provider_user_id, 'booking', '✅ Time confirmed by member',
+        `${booking.patient_name || 'Your member'} confirmed the ${booking.service_name || 'appointment'} for ${date} at ${startTime}.`,
+        { bookingId: booking.id, role: 'provider' }
+      ).catch(() => {});
+    }
+
+    res.json({ booking: upd.rows[0] });
+  } catch (err) {
+    console.error('confirm-time', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;

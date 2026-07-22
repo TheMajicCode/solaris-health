@@ -460,8 +460,38 @@ async function seedAlejandro(sofia) {
     );
   }
 
+  // Simulated GPS payment splits (Sofia → Alejandro) — a preview of sovereign income.
+  if (sofia) await seedPaymentSplits(alejandro, sofia);
+
   console.log(`✓ Dr. Alejandro Reyes (${ALEJANDRO_EMAIL} / ${DEMO_PASSWORD}): practitioner, approved provider, published listing, ${sofia ? '1 pending booking from Sofia' : 'no booking (Sofia missing)'}`);
   return alejandro;
+}
+
+// Seed 3 simulated payment splits from Sofia to Alejandro. Idempotent: clears
+// this provider's prior simulated splits first. The payment_splits table is
+// created by migration 014; if it's absent we skip quietly.
+async function seedPaymentSplits(alejandro, sofia) {
+  try {
+    await db.query('DELETE FROM payment_splits WHERE provider_id=$1', [alejandro.id]);
+    const rows = [
+      { sats: 42000, usd: 2800, type: 'session_fee', days: 21, note: 'Initial vitality consultation — sovereign session fee.' },
+      { sats: 42000, usd: 2800, type: 'session_fee', days: 12, note: 'Follow-up session — stress & sleep protocol.' },
+      { sats: 18000, usd: 1200, type: 'contribution_bonus', days: 4, note: 'Community contribution bonus — regenerative commons share.' },
+    ];
+    for (const r of rows) {
+      const created = new Date();
+      created.setDate(created.getDate() - r.days);
+      await db.query(
+        `INSERT INTO payment_splits
+           (provider_id, patient_id, amount_sats, amount_usd_cents, split_type, status, note, created_at)
+         VALUES ($1,$2,$3,$4,$5,'simulated',$6,$7)`,
+        [alejandro.id, sofia.id, r.sats, r.usd, r.type, r.note, created.toISOString()]
+      );
+    }
+    console.log(`  ↳ seeded ${rows.length} simulated payment splits (Sofia → Alejandro)`);
+  } catch (e) {
+    console.warn(`  ! payment_splits seed skipped: ${e.message}`);
+  }
 }
 
 async function seedDemoPair() {

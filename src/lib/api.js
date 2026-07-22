@@ -99,6 +99,24 @@ class ApiClient {
   // ---- LUCA AI ----
   getLucaMessages() { return this.request('/luca/messages'); }
   sendLucaMessage(content) { return this.request('/luca/messages', { method: 'POST', body: JSON.stringify({ content }) }); }
+  // Text-to-speech: returns an audio Blob, or null if voice is unavailable
+  // (the endpoint degrades gracefully with { fallback:true } — never throws here).
+  async ttsSpeak(text) {
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (this.token) headers.Authorization = `Bearer ${this.token}`;
+      const res = await fetch(`${API_URL}/luca/tts`, {
+        method: 'POST', headers, body: JSON.stringify({ text }),
+      });
+      if (!res.ok) return null;
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('audio')) return null; // fallback JSON { fallback:true }
+      const blob = await res.blob();
+      return blob && blob.size ? blob : null;
+    } catch {
+      return null;
+    }
+  }
 
   // ---- LUCA Copilot (practitioner) ----
   getPractitionerLucaMessages() { return this.request('/luca/practitioner/messages'); }
@@ -276,8 +294,9 @@ class ApiClient {
     return this.request(`/bookings/available-slots/${providerId}/${serviceId}?days=${days}`);
   }
   requestBooking(data) { return this.request('/bookings/request', { method: 'POST', body: JSON.stringify(data) }); }
-  getMyBookings() { return this.request('/bookings/me'); }
+  getMyBookings() { return this.request('/bookings/mine'); }
   getBooking(id) { return this.request(`/bookings/${id}`); }
+  confirmBookingTime(id) { return this.request(`/bookings/${id}/confirm-time`, { method: 'POST', body: JSON.stringify({}) }); }
   cancelBooking(id, reason) { return this.request(`/bookings/${id}/cancel`, { method: 'PUT', body: JSON.stringify({ reason }) }); }
   rescheduleBooking(id, data) { return this.request(`/bookings/${id}/reschedule`, { method: 'PUT', body: JSON.stringify(data) }); }
 
@@ -307,6 +326,12 @@ class ApiClient {
   declineBooking(id, reason) { return this.request(`/provider/bookings/${id}/cancel`, { method: 'PUT', body: JSON.stringify({ reason }) }); }
   completeBooking(id, clinicalNotes) { return this.request(`/provider/bookings/${id}/complete`, { method: 'PUT', body: JSON.stringify({ clinicalNotes }) }); }
   noShowBooking(id) { return this.request(`/provider/bookings/${id}/no-show`, { method: 'PUT', body: JSON.stringify({}) }); }
+  proposeBookingTime(id, { proposedDatetime, proposedEndTime, notes } = {}) {
+    return this.request(`/provider/bookings/${id}/propose-time`, {
+      method: 'POST', body: JSON.stringify({ proposedDatetime, proposedEndTime, notes }),
+    });
+  }
+  getProviderEarnings() { return this.request('/provider/earnings'); }
 
   // ---- Admin booking oversight ----
   getAdminBookingList(params = {}) {
@@ -322,6 +347,9 @@ class ApiClient {
   // ---- GPS (Generative Prosperity System) ----
   getGpsLedger(limit = 20, offset = 0) { return this.request(`/gps/my-ledger?limit=${limit}&offset=${offset}`); }
   getGpsEarnings() { return this.request('/gps/my-earnings'); }
+
+  // ---- Sovereign Passport completeness ----
+  getPassportCompleteness() { return this.request('/passport/completeness'); }
   getGpsTreasury() { return this.request('/gps/treasury'); }
   getGpsTreasuryBreakdown() { return this.request('/gps/treasury/breakdown'); }
   getReferralCode() { return this.request('/gps/referrals/my-code'); }

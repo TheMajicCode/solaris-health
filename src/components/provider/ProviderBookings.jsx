@@ -11,7 +11,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Loader2, CalendarClock, X, Check, CheckCircle2, Calendar, Clock, Tag,
-  User, Mail, FileText, TrendingUp, DollarSign,
+  User, Mail, FileText, TrendingUp, DollarSign, Send,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '../../lib/api.js';
@@ -33,6 +33,7 @@ export default function ProviderBookings({ providerId, onBookings }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(null);
   const [complete, setComplete] = useState(null); // booking being completed
+  const [propose, setPropose] = useState(null); // booking being proposed a new time
   const tz = tzLabel();
 
   const loadStats = useCallback(async () => {
@@ -85,6 +86,12 @@ export default function ProviderBookings({ providerId, onBookings }) {
     return act(() => api.completeBooking(b.id, notes || undefined), b, 'Appointment completed');
   }
 
+  async function submitPropose({ proposedDatetime, notes }) {
+    const b = propose;
+    setPropose(null);
+    return act(() => api.proposeBookingTime(b.id, { proposedDatetime, notes }), b, 'New time proposed — the member will confirm');
+  }
+
   return (
     <div className="pbk">
       {stats && (
@@ -128,6 +135,7 @@ export default function ProviderBookings({ providerId, onBookings }) {
               onDecline={decline}
               onComplete={(bk) => setComplete(bk)}
               onNoShow={noShow}
+              onProposeTime={(bk) => setPropose(bk)}
             />
           ))}
         </div>
@@ -135,6 +143,9 @@ export default function ProviderBookings({ providerId, onBookings }) {
 
       {complete && (
         <CompleteModal booking={complete} tz={tz} onClose={() => setComplete(null)} onSubmit={submitComplete} />
+      )}
+      {propose && (
+        <ProposeModal booking={propose} tz={tz} onClose={() => setPropose(null)} onSubmit={submitPropose} />
       )}
       <style>{CSS}</style>
     </div>
@@ -181,8 +192,44 @@ function CompleteModal({ booking: b, tz, onClose, onSubmit }) {
   );
 }
 
+function ProposeModal({ booking: b, tz, onClose, onSubmit }) {
+  const [dt, setDt] = useState('');
+  const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
+  const canSubmit = !!dt && !saving;
+  return (
+    <div className="pbk-scrim" onClick={onClose}>
+      <div className="pbk-modal" onClick={(e) => e.stopPropagation()}>
+        <button className="pbk-x" onClick={onClose}><X size={18} /></button>
+        <h2 className="pbk-m-title">Propose a new time</h2>
+        <div className="pbk-m-rows">
+          <div><User size={14} /> {b.patient_name || 'Member'}</div>
+          <div><Tag size={14} /> {b.service_name || 'Appointment'}</div>
+          <div><Calendar size={14} /> Requested: {fmtDateLong(b.booking_date)}</div>
+          <div><Clock size={14} /> {fmtTime(b.start_time)}{b.end_time ? ` – ${fmtTime(b.end_time)}` : ''} ({tz})</div>
+        </div>
+        <label className="pbk-label">Suggested date &amp; time</label>
+        <input className="pbk-input" type="datetime-local" value={dt} onChange={(e) => setDt(e.target.value)} />
+        <label className="pbk-label" style={{ marginTop: 12 }}>Note to member <span>(optional)</span></label>
+        <textarea className="pbk-textarea" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)}
+          placeholder="A warm note about why this time works better…" />
+        <div className="pbk-m-actions">
+          <button className="pbk-btn ghost" onClick={onClose}>Cancel</button>
+          <button className="pbk-btn primary" disabled={!canSubmit}
+            onClick={async () => { setSaving(true); await onSubmit({ proposedDatetime: dt, notes }); }}>
+            {saving ? <><Loader2 className="pbk-spin" size={15} /> Sending…</> : <><Send size={15} /> Send proposal</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const CSS = `
 .luca .pbk{max-width:780px}
+.luca .pbk-input{width:100%;border:1px solid var(--line);border-radius:11px;padding:11px 13px;font-family:inherit;
+  font-size:14px;color:var(--ink);background:var(--surface);outline:none}
+.luca .pbk-input:focus{border-color:var(--teal-d)}
 .luca .pbk-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:18px}
 @media(max-width:640px){.luca .pbk-stats{grid-template-columns:repeat(2,1fr)}}
 .luca .pbk-stat{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:12px 13px}

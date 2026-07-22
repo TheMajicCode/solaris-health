@@ -14,6 +14,7 @@
  * Same API surface as before (GET/POST /messages) so the frontend doesn't change.
  */
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const db = require('../db');
 const { authMiddleware } = require('../middleware/auth');
 const { getAIProvider } = require('../lib/ai');
@@ -448,6 +449,91 @@ router.post('/messages', authMiddleware, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/* ================================ LUCA TTS ================================
+ * POST /api/luca/tts  { text }
+ * Speaks a LUCA message aloud via an OpenAI-compatible /audio/speech endpoint.
+ * This is a *progressive enhancement*: on ANY failure (no key, endpoint down,
+ * unsupported) it responds 200 with { error, fallback:true } so the client can
+ * silently hide the speaker button — it must NEVER crash the request path.
+ */
+const MAX_TTS_CHARS = 500;
+
+// Rate-limit: 20 requests / minute / user (falls back to IP if unauthenticated).
+const ttsLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => (req.user && req.user.userId) || req.ip,
+  handler: (req, res) => res.status(200).json({ error: 'Too many voice requests, please pause a moment.', fallback: true }),
+});
+
+// Strip lightweight markdown so the voice reads clean prose, not symbols.
+function stripMarkdownForSpeech(s) {
+  return String(s || '')
+    .replace(/```[\s\S]*?```/g, ' ')        // code fences
+    .replace(/`([^`]+)`/g, '$1')            // inline code
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')  // images
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')// links -> text
+    .replace(/^#{1,6}\s+/gm, '')            // headings
+    .replace(/(\*\*|__)(.*?)\1/g, '$2')     // bold
+    .replace(/(\*|_)(.*?)\1/g, '$2')        // italic
+    .replace(/^\s*[-*+]\s+/gm, '')          // bullets
+    .replace(/^\s*\d+\.\s+/gm, '')          // numbered lists
+    .replace(/^\s*>\s?/gm, '')              // blockquotes
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+router.post('/tts', authMiddleware, ttsLimiter, async (req, res) => {
+  try {
+    const raw = (req.body && req.body.text) || '';
+    const text = stripMarkdownForSpeech(raw).slice(0, MAX_TTS_CHARS);
+    if (!text) return res.status(200).json({ error: 'Nothing to speak', fallback: true });
+
+    // TTS config: dedicated env vars fall back to the shared LUCA cloud creds.
+    const baseUrl = (process.env.LUCA_TTS_BASE_URL || process.env.LUCA_AI_BASE_URL || '').replace(/\/$/, '');
+    const apiKey = process.env.LUCA_TTS_API_KEY || process.env.LUCA_AI_API_KEY;
+    const model = process.env.LUCA_TTS_MODEL || 'tts-1';
+    const voice = process.env.LUCA_TTS_VOICE || 'nova';
+    if (!baseUrl || !apiKey) {
+      return res.status(200).json({ error: 'Voice is not configured', fallback: true });
+    }
+
+    // Guard against a hung upstream so the request never blocks indefinitely.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    let upstream;
+    try {
+      upstream = await fetch(`${baseUrl}/audio/speech`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({ model, voice, input: text, response_format: 'mp3' }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (!upstream || !upstream.ok) {
+      const detail = upstream ? `${upstream.status}` : 'no response';
+      console.warn('[luca tts] upstream failed:', detail);
+      return res.status(200).json({ error: 'Voice unavailable right now', fallback: true });
+    }
+
+    const buf = Buffer.from(await upstream.arrayBuffer());
+    if (!buf.length) return res.status(200).json({ error: 'Empty audio', fallback: true });
+
+    res.set('Content-Type', 'audio/mpeg');
+    res.set('Cache-Control', 'no-store');
+    return res.send(buf);
+  } catch (err) {
+    // Never crash — always degrade gracefully.
+    console.warn('[luca tts] error (non-fatal):', err.message);
+    return res.status(200).json({ error: 'Voice unavailable right now', fallback: true });
   }
 });
 

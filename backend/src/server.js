@@ -30,6 +30,8 @@ const notificationsRoutes = require('./routes/notifications');
 const bookingsRoutes = require('./routes/bookings');
 const providerAvailabilityRoutes = require('./routes/provider/availability');
 const providerBookingsRoutes = require('./routes/provider/bookings');
+const providerEarningsRoutes = require('./routes/provider/earnings');
+const passportRoutes = require('./routes/passport');
 const adminBookingsRoutes = require('./routes/admin/bookings');
 const gpsRoutes = require('./routes/gps');
 // --- Solaris sprint routes ---
@@ -180,7 +182,9 @@ app.use('/api/bookings', bookingsRoutes);
 app.use('/api/provider/availability', providerAvailabilityRoutes);
 app.use('/api/provider/bookings', providerBookingsRoutes);
 app.use('/api/provider/patients', providerPatientsRoutes);
+app.use('/api/provider/earnings', providerEarningsRoutes);
 app.use('/api/provider', providerApplicationRoutes);
+app.use('/api/passport', passportRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/gps', gpsRoutes);
 // --- Solaris sprint routes ---

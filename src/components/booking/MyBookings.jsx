@@ -10,7 +10,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Loader2, CalendarX2, Compass, X, Calendar, Clock, Tag, MapPin, Phone,
-  FileText, ShieldCheck, ChevronLeft, Check, CalendarPlus,
+  FileText, ShieldCheck, ChevronLeft, Check, CalendarPlus, CalendarClock,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '../../lib/api.js';
@@ -27,10 +27,10 @@ const TABS = [
 ];
 
 function isUpcoming(b) {
-  return (b.status === 'confirmed') && countdown(b.booking_date, b.start_time) !== 'Past';
+  return (b.status === 'confirmed' || b.status === 'scheduled') && countdown(b.booking_date, b.start_time) !== 'Past';
 }
 function isPending(b) {
-  return b.status === 'pending' && countdown(b.booking_date, b.start_time) !== 'Past';
+  return (b.status === 'pending' || b.status === 'proposed') && countdown(b.booking_date, b.start_time) !== 'Past';
 }
 function isPast(b) {
   return ['completed', 'cancelled', 'no_show'].includes(b.status) ||
@@ -83,8 +83,36 @@ export default function MyBookings({ user, onExplore }) {
     }
   }
 
+  async function doConfirmTime(b) {
+    setBusy(b.id);
+    try {
+      await api.confirmBookingTime(b.id);
+      toast.success('Time confirmed — your session is scheduled');
+      setDetail(null);
+      await load();
+    } catch (e) {
+      toast.error(e?.message || 'Could not confirm the time');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const proposed = all.filter((b) => b.status === 'proposed');
+
   return (
     <div className="myb">
+      {proposed.length > 0 && (
+        <div className="myb-banner">
+          <div className="myb-banner-ico"><CalendarClock size={18} /></div>
+          <div className="myb-banner-txt">
+            <strong>{proposed.length === 1 ? 'A new time was proposed' : `${proposed.length} new times were proposed`}</strong>
+            <span>Your practitioner suggested {proposed.length === 1 ? 'a time' : 'times'} for your appointment. Review and confirm below.</span>
+          </div>
+          {tab !== 'pending' && (
+            <button className="myb-banner-btn" onClick={() => setTab('pending')}>Review</button>
+          )}
+        </div>
+      )}
       <div className="myb-tabs">
         {TABS.map((t) => (
           <button key={t.key} className={`myb-tab ${tab === t.key ? 'on' : ''}`} onClick={() => setTab(t.key)}>
@@ -119,6 +147,7 @@ export default function MyBookings({ user, onExplore }) {
               busy={busy}
               onView={setDetail}
               onCancel={doCancel}
+              onConfirmTime={doConfirmTime}
               onReschedule={(bk) => { setDetail(null); setReschedule(bk); }}
             />
           ))}
@@ -270,6 +299,15 @@ function RescheduleModal({ booking: b, tz, onClose, onDone }) {
 
 const CSS = `
 .luca .myb{max-width:760px}
+.luca .myb-banner{display:flex;align-items:center;gap:12px;background:linear-gradient(90deg,#fdf3dc,#fbf7ec);
+  border:1px solid #ecd9a8;border-radius:14px;padding:13px 15px;margin-bottom:16px}
+.luca .myb-banner-ico{flex:none;width:36px;height:36px;border-radius:10px;background:#f6e4b8;color:#9a6b00;display:grid;place-items:center}
+.luca .myb-banner-txt{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.luca .myb-banner-txt strong{font-size:13.5px;color:#7a5600;font-weight:800}
+.luca .myb-banner-txt span{font-size:12.5px;color:#9a7a3a;line-height:1.4}
+.luca .myb-banner-btn{flex:none;background:var(--gold,#D69B33);color:#fff;border:none;border-radius:10px;
+  padding:8px 15px;font-family:inherit;font-weight:700;font-size:13px;cursor:pointer}
+.luca .myb-banner-btn:hover{filter:brightness(.95)}
 .luca .myb-tabs{display:flex;gap:6px;margin-bottom:18px;border-bottom:1px solid var(--line)}
 .luca .myb-tab{display:flex;align-items:center;gap:7px;background:none;border:none;padding:10px 14px;font-family:inherit;
   font-weight:700;font-size:14px;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}

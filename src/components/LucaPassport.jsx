@@ -21,6 +21,7 @@ import {
   Briefcase, FileCheck, BarChart3, CalendarCheck, Sprout,
   BookOpen, Headphones, Play, Pause, Lock, Trash2, Music,
   Repeat, Shuffle, Rewind, FastForward, Upload, ListMusic,
+  CalendarClock, Volume2, VolumeX,
 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { api } from '../lib/api.js';
@@ -152,6 +153,9 @@ const CSS = `
 .pill.teal{background:#E1EFEC;color:#0B4B47;border-color:#CCE4DE}
 .pill.gray{background:#EEF3F1;color:var(--muted);border-color:var(--line)}
 .pill.danger{background:var(--danger-soft);color:var(--danger-ink);border-color:#F0C9BF}
+.pill-cta{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;padding:4px 11px;border-radius:999px;
+  border:1px solid #EBD3A0;background:linear-gradient(90deg,#fdf3dc,#faf1e0);color:var(--gold-ink,#8a6a1e);cursor:pointer;font-family:inherit;white-space:nowrap}
+.pill-cta:hover{filter:brightness(.97)}
 
 .chip{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex:none}
 .chip svg{flex:none}
@@ -302,8 +306,20 @@ textarea.input-line{resize:vertical;min-height:64px}
 .luca .msg-bubble{padding:12px 16px;border-radius:18px;font-size:13.5px;line-height:1.6;white-space:pre-wrap;box-shadow:var(--shadow-sm)}
 .luca .msg-bubble.user{background:linear-gradient(160deg,var(--mint),#0B4E49);color:#EAFBF6;border-bottom-right-radius:5px}
 .luca .msg-bubble.ai{background:var(--surface);border:1px solid var(--line);color:var(--ink);border-bottom-left-radius:5px}
-.luca .msg-time{font-size:10px;color:var(--muted-2);margin-top:4px;text-align:right}
+.luca .msg-time{font-size:10px;color:var(--muted-2);text-align:right}
 .luca .msg-time.ai-time{text-align:left}
+.luca .msg-meta{display:flex;align-items:center;gap:7px;margin-top:4px;justify-content:flex-end}
+.luca .msg-meta.ai-meta{justify-content:flex-start}
+.luca .msg-speak{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:7px;border:1px solid var(--line);
+  background:var(--surface);color:var(--teal-d,#0E5C57);cursor:pointer;padding:0;transition:all .12s;flex:none}
+.luca .msg-speak:hover:not(:disabled){background:var(--mint-soft);border-color:var(--mint-line,#B7E4D8)}
+.luca .msg-speak:disabled{opacity:.5;cursor:default}
+.luca .msg-speak.busy{animation:pulse 1.1s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
+.luca .coach-voice{display:inline-flex;align-items:center;gap:6px;flex:none;border:1px solid var(--line);background:var(--surface);
+  color:var(--muted);border-radius:999px;padding:6px 12px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:all .12s}
+.luca .coach-voice:hover{background:var(--surface-2)}
+.luca .coach-voice.on{background:var(--mint-soft);border-color:var(--mint-line,#B7E4D8);color:var(--teal-d,#0E5C57)}
 .luca .coach-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:32px 18px}
 .luca .coach-suggestions{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;max-width:400px;margin-top:6px}
 .luca .suggest-chip{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:12.5px;color:var(--muted);cursor:pointer;text-align:left;transition:all .15s;font-family:inherit;width:100%}
@@ -875,6 +891,8 @@ function DashboardPage({ user, go }) {
   const [checkinOpen, setCheckinOpen] = useState(false);
   const [consentReqs, setConsentReqs] = useState([]);
   const [consentBusy, setConsentBusy] = useState('');
+  const [completeness, setCompleteness] = useState(null);
+  const [myBookings, setMyBookings] = useState([]);
 
   const loadConsents = async () => {
     try {
@@ -945,6 +963,19 @@ function DashboardPage({ user, go }) {
     return () => { alive = false; };
   }, []);
 
+  useEffect(() => {
+    let alive = true;
+    Promise.all([
+      api.getPassportCompleteness().catch(() => null),
+      api.getMyBookings().catch(() => ({ bookings: [] })),
+    ]).then(([comp, bk]) => {
+      if (!alive) return;
+      setCompleteness(comp || null);
+      setMyBookings(bk?.bookings || []);
+    });
+    return () => { alive = false; };
+  }, []);
+
   if (loading) {
     return <div className="lay-dash"><div className="col gap-4"><CardSkeleton rows={4} /><div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}><CardSkeleton /><CardSkeleton /></div></div><div className="col gap-4"><CardSkeleton rows={5} /></div></div>;
   }
@@ -975,6 +1006,14 @@ function DashboardPage({ user, go }) {
               <div className="row wrap" style={{ gap: 6, marginTop: 10 }}>
                 <Pill tone="gold" icon={Gift}>{rewards.total} LOVE points</Pill>
                 {user.currentPhase && <Pill tone="teal">{user.currentPhase}</Pill>}
+                {completeness && completeness.score >= 80 && (
+                  <Pill tone="gold" icon={Sparkles}>Sovereign Member ✦</Pill>
+                )}
+                {completeness && completeness.score < 50 && (
+                  <button className="pill-cta" onClick={() => go('health')}>
+                    <Sparkles size={13} strokeWidth={2.2} /> Complete your Passport
+                  </button>
+                )}
               </div>
             </div>
             <div style={{ position: 'relative', width: 132, height: 132, flex: 'none' }}>
@@ -1012,6 +1051,38 @@ function DashboardPage({ user, go }) {
             </div>
           </Card>
         ))}
+
+        {/* Booking status — proposed times & upcoming sessions */}
+        {(() => {
+          const proposedBk = myBookings.filter((b) => b.status === 'proposed');
+          const upcomingBk = myBookings.filter((b) => b.status === 'confirmed' || b.status === 'scheduled');
+          if (!proposedBk.length && !upcomingBk.length) return null;
+          return (
+            <Card className="tint" style={{ borderColor: proposedBk.length ? 'var(--gold-line, #ecd9a8)' : 'var(--mint-line, var(--line))' }}>
+              <div className="between" style={{ gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                <div>
+                  <div className="eyebrow">Your appointments</div>
+                  <div className="card-title" style={{ marginTop: 3 }}>
+                    {proposedBk.length ? 'A new time is waiting for you' : 'Upcoming sessions'}
+                  </div>
+                </div>
+                <Pill tone={proposedBk.length ? 'gold' : 'mint'} icon={CalendarClock}>
+                  {proposedBk.length ? `${proposedBk.length} to confirm` : `${upcomingBk.length} scheduled`}
+                </Pill>
+              </div>
+              {proposedBk.length > 0 && (
+                <div className="small muted" style={{ marginTop: 12, lineHeight: 1.55 }}>
+                  Your practitioner proposed a time for your session. Review and confirm to lock it in.
+                </div>
+              )}
+              <div className="row" style={{ marginTop: 14 }}>
+                <Btn variant="primary" icon={ChevronRight} onClick={() => go('my-bookings')}>
+                  {proposedBk.length ? 'Review & confirm' : 'View appointments'}
+                </Btn>
+              </div>
+            </Card>
+          );
+        })()}
 
         {/* LUCA Recommends */}
         <LucaRecommends recs={recs} loading={recsLoading} go={go} user={user} vitality={vitality} focus={focus} />
@@ -1274,7 +1345,7 @@ const roleLabel = (r) => ({ patient: 'Member', practitioner: 'Practitioner', adm
 const SYS_SHORT = { bioelectrical: 'Bio', hydration: 'Hydr', circadian: 'Circ', microbiome: 'Micro', respiratory: 'Resp', neurological: 'Neuro', cardiovascular: 'Cardio', nutritional: 'Nutri' };
 const ASPECT_ICONS = { physical: Activity, mental: Brain, emotional: Heart, spiritual: Sparkles };
 
-function HealthPage() {
+function HealthPage({ go }) {
   const { user } = useApp();
   const [data, setData] = useState(null);
   const [docs, setDocs] = useState([]);
@@ -1284,6 +1355,15 @@ function HealthPage() {
   const [exporting, setExporting] = useState(false);
   const [exportMsg, setExportMsg] = useState('');
   const [checkinOpen, setCheckinOpen] = useState(false);
+  const [completeness, setCompleteness] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    api.getPassportCompleteness()
+      .then((c) => { if (alive) setCompleteness(c || null); })
+      .catch(() => { if (alive) setCompleteness(null); });
+    return () => { alive = false; };
+  }, []);
 
   const reloadCheckins = async () => {
     const ci = await api.getCheckins().catch(() => ({ checkins: [] }));
@@ -1331,6 +1411,45 @@ function HealthPage() {
 
   return (
     <div className="col gap-4">
+      {completeness && (
+        <Card className="tint" style={{ background: 'linear-gradient(180deg,#FBFEFC,#F5FAF4)' }}>
+          <div className="row" style={{ gap: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+            <div style={{ position: 'relative', width: 132, height: 132, flex: 'none' }}>
+              <Ring value={completeness.score} max={100} size={132} />
+              <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', textAlign: 'center' }}>
+                <div>
+                  <div className="dp f7" style={{ fontSize: 30 }}>{completeness.score}</div>
+                  <div className="tiny muted2">Passport / 100</div>
+                </div>
+              </div>
+            </div>
+            <div style={{ flex: 1, minWidth: 220 }}>
+              <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
+                <div className="card-title">Your Sovereign Passport</div>
+                {completeness.tier === 'sovereign' && <Pill tone="gold" icon={Sparkles}>Sovereign Member ✦</Pill>}
+                {completeness.tier === 'growing' && <Pill tone="mint" icon={TrendingUp}>Growing</Pill>}
+                {completeness.tier === 'starting' && <Pill tone="teal" icon={Sprout}>Just beginning</Pill>}
+              </div>
+              {completeness.nextStep ? (
+                <>
+                  <div className="small muted" style={{ marginTop: 8, lineHeight: 1.55 }}>
+                    <span className="f6" style={{ color: 'var(--ink)' }}>Next:</span> {completeness.nextStep.hint}
+                  </div>
+                  <div className="row" style={{ marginTop: 14 }}>
+                    <Btn variant="primary" icon={ChevronRight} onClick={() => go && go(completeness.nextStep.tab)}>
+                      {completeness.nextStep.label}
+                    </Btn>
+                  </div>
+                </>
+              ) : (
+                <div className="small muted" style={{ marginTop: 8, lineHeight: 1.55 }}>
+                  Every part of your Passport is complete — beautifully done. You're a Sovereign Member. ✦
+                </div>
+              )}
+            </div>
+          </div>
+        </Card>
+      )}
       <Card className="between" style={{ background: 'linear-gradient(180deg,#FBFEFC,#F4FAF7)' }}>
         <div className="row gap-3">
           <Chip icon={ShieldCheck} tone="gold" />
@@ -1504,8 +1623,55 @@ function CoachPage({ user, go }) {
   const [sending, setSending] = useState(false);
   const [degraded, setDegraded] = useState(false);
   const [latest, setLatest] = useState(null);
+  const [voiceOn, setVoiceOn] = useState(() => {
+    try { return localStorage.getItem('luca_voice_enabled') === 'true'; } catch { return false; }
+  });
+  const [ttsBusy, setTtsBusy] = useState(null);   // index currently being fetched/played
+  const [ttsFailed, setTtsFailed] = useState(() => new Set()); // indices where TTS is unavailable — hide button
   const endRef = useRef(null);
+  const audioRef = useRef(null);
+  const autoPlayedRef = useRef(-1);
   const loading = !lucaLoaded;
+
+  const stopAudio = useCallback(() => {
+    if (audioRef.current) {
+      try { audioRef.current.pause(); } catch { /* noop */ }
+      audioRef.current = null;
+    }
+  }, []);
+
+  const playTts = useCallback(async (idx, text) => {
+    if (!text) return;
+    stopAudio();
+    setTtsBusy(idx);
+    try {
+      const blob = await api.ttsSpeak(text);
+      if (!blob) {
+        // Graceful fallback — voice unavailable in this environment. Hide silently.
+        setTtsFailed((s) => new Set(s).add(idx));
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => { URL.revokeObjectURL(url); if (audioRef.current === audio) audioRef.current = null; };
+      audio.onerror = () => { URL.revokeObjectURL(url); };
+      await audio.play().catch(() => { /* autoplay policy — ignore */ });
+    } catch {
+      setTtsFailed((s) => new Set(s).add(idx));
+    } finally {
+      setTtsBusy((b) => (b === idx ? null : b));
+    }
+  }, [stopAudio]);
+
+  const toggleVoice = useCallback(() => {
+    setVoiceOn((v) => {
+      const next = !v;
+      try { localStorage.setItem('luca_voice_enabled', String(next)); } catch { /* noop */ }
+      if (!next) stopAudio();
+      return next;
+    });
+  }, [stopAudio]);
 
   useEffect(() => {
     let alive = true;
@@ -1514,9 +1680,21 @@ function CoachPage({ user, go }) {
       const l = await api.getLatestAssessment().catch(() => null);
       if (alive) setLatest(l);
     })();
-    return () => { alive = false; };
-  }, [loadLucaHistory]);
+    return () => { alive = false; stopAudio(); };
+  }, [loadLucaHistory, stopAudio]);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, sending]);
+
+  // Auto-play the newest assistant message when voice is enabled.
+  useEffect(() => {
+    if (!voiceOn || sending || !messages.length) return;
+    const idx = messages.length - 1;
+    const last = messages[idx];
+    if (last?.role !== 'assistant') return;
+    if (autoPlayedRef.current === idx) return;
+    if (ttsFailed.has(idx)) return;
+    autoPlayedRef.current = idx;
+    playTts(idx, last.content);
+  }, [messages, voiceOn, sending, playTts, ttsFailed]);
 
   const send = async (text) => {
     const content = (text ?? input).trim();
@@ -1552,6 +1730,15 @@ function CoachPage({ user, go }) {
             </div>
             <div className="tiny muted" style={{ marginTop: 1 }}>Heart-Centered Intelligence</div>
           </div>
+          <button
+            className={`coach-voice ${voiceOn ? 'on' : ''}`}
+            onClick={toggleVoice}
+            title={voiceOn ? 'Voice on — LUCA speaks replies' : 'Voice off — tap to let LUCA speak'}
+            aria-pressed={voiceOn}
+          >
+            {voiceOn ? <Volume2 size={16} strokeWidth={2.2} /> : <VolumeX size={16} strokeWidth={2.2} />}
+            <span>{voiceOn ? 'Voice on' : 'Voice off'}</span>
+          </button>
         </div>
 
         <div className="coach-body">
@@ -1577,7 +1764,20 @@ function CoachPage({ user, go }) {
                   : <LucaAvatar size="sm" />}
                 <div style={{ minWidth: 0, maxWidth: '82%' }}>
                   <div className={`msg-bubble ${isUser ? 'user' : 'ai'}`}>{m.content}</div>
-                  {m.created_at && <div className={`msg-time ${isUser ? '' : 'ai-time'}`}>{msgTime(m.created_at)}</div>}
+                  <div className={`msg-meta ${isUser ? '' : 'ai-meta'}`}>
+                    {m.created_at && <span className={`msg-time ${isUser ? '' : 'ai-time'}`}>{msgTime(m.created_at)}</span>}
+                    {!isUser && m.content && !ttsFailed.has(i) && (
+                      <button
+                        className={`msg-speak ${ttsBusy === i ? 'busy' : ''}`}
+                        onClick={() => playTts(i, m.content)}
+                        disabled={ttsBusy === i}
+                        title="Hear this with LUCA's voice"
+                        aria-label="Play message audio"
+                      >
+                        <Volume2 size={13} strokeWidth={2.2} />
+                      </button>
+                    )}
+                  </div>
                   {!isUser && i === messages.length - 1 && !sending && (
                     <LucaChips suggestions={m.suggestions} onAction={(s) => executeChipAction(s, { go, setInput, send, playAudio: playFromLibrary })} disabled={sending} />
                   )}
@@ -3357,7 +3557,7 @@ function HealthPassportPage({ user, go }) {
           );
         })}
       </div>
-      {hpTab === 'overview' && <ErrorBoundary><HealthPage /></ErrorBoundary>}
+      {hpTab === 'overview' && <ErrorBoundary><HealthPage go={go} /></ErrorBoundary>}
       {hpTab === 'timeline' && <ErrorBoundary><TimelinePage user={user} /></ErrorBoundary>}
       {hpTab === 'appointments' && <ErrorBoundary><AppointmentsPage /></ErrorBoundary>}
       {hpTab === 'bookings' && <ErrorBoundary><MyBookings user={user} onExplore={() => go('explore')} /></ErrorBoundary>}
