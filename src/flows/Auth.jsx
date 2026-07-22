@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 import { useApp } from '../state/AppContext.jsx';
 import { SolarisMark, Wordmark, Button } from '../components/ui.jsx';
-import { ArrowRight, User, Stethoscope, ArrowLeft, KeyRound } from 'lucide-react';
+import { ArrowRight, ArrowLeft, KeyRound } from 'lucide-react';
 
 export default function Auth() {
   const { login, register, setAuthView } = useApp();
   const [mode, setMode] = useState('signin'); // signin | signup
-  const [role, setRole] = useState('patient'); // patient | practitioner
   const [form, setForm] = useState({ email: '', password: '', firstName: '', lastName: '', country: '' });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -18,20 +17,16 @@ export default function Auth() {
     setError(''); setBusy(true);
     try {
       if (mode === 'signin') await login(form.email, form.password);
-      else await register({ ...form, role });
+      // Every new account begins as a member. Role is never chosen at signup.
+      else await register({ ...form, role: 'patient' });
     } catch (err) {
       setError(err.message || 'Something went wrong');
     } finally { setBusy(false); }
   };
 
-  const fillDemo = (kind) => {
-    const creds = {
-      patient: { email: 'sarah@solaris.health', password: 'demo123' },
-      practitioner: { email: 'elena@solaris.health', password: 'demo123' },
-      admin: { email: 'admin@solaris.health', password: 'admin123' },
-    }[kind];
+  const enterAsSarah = () => {
     setMode('signin');
-    setForm({ ...form, ...creds });
+    setForm({ ...form, email: 'sarah@solaris.health', password: 'demo123' });
   };
 
   return (
@@ -49,7 +44,7 @@ export default function Auth() {
             <p style={{ color: 'rgba(47,190,159,0.8)', fontSize: '0.72rem', letterSpacing: '.2em', textTransform: 'uppercase', marginTop: 2 }}>Holistic Health</p>
           </div>
           <p className="muted" style={{ fontSize: '0.9rem', marginTop: 4 }}>
-            {mode === 'signin' ? 'Welcome back to your sanctuary' : 'Create your sovereign health passport'}
+            {mode === 'signin' ? 'Welcome back to your sanctuary' : 'Begin your sovereign health journey'}
           </p>
         </div>
 
@@ -60,14 +55,6 @@ export default function Auth() {
         </button>
 
         <div className="auth-or fade-up delay-1"><span>or continue with email</span></div>
-
-        {/* Role toggle (signup) */}
-        {mode === 'signup' && (
-          <div className="row gap-2 fade-up" style={{ marginBottom: 18 }}>
-            <RoleCard active={role === 'patient'} onClick={() => setRole('patient')} icon={User} title="I'm seeking care" sub="Patient / Member" />
-            <RoleCard active={role === 'practitioner'} onClick={() => setRole('practitioner')} icon={Stethoscope} title="I'm a practitioner" sub="Provider / Clinic" />
-          </div>
-        )}
 
         <form onSubmit={submit} className="card fade-up delay-1" style={{ padding: '1.4rem' }}>
           {mode === 'signup' && (
@@ -98,7 +85,7 @@ export default function Auth() {
           )}
           {error && <p style={{ color: 'var(--error)', fontSize: '0.85rem', marginBottom: 12 }}>{error}</p>}
           <Button type="submit" className="btn-block" disabled={busy}>
-            {busy ? 'One moment…' : mode === 'signin' ? 'Enter Solaris' : 'Begin My Journey'} <ArrowRight size={17} />
+            {busy ? 'One moment…' : mode === 'signin' ? 'Enter Solaris' : 'Claim My Passport'} <ArrowRight size={17} />
           </Button>
         </form>
 
@@ -110,15 +97,11 @@ export default function Auth() {
           </button>
         </p>
 
-        {/* Demo creds */}
+        {/* Demo access */}
         <div className="card-low fade-up delay-3" style={{ marginTop: 22, padding: '1rem', borderRadius: 'var(--radius-md)' }}>
           <p className="eyebrow text-center" style={{ marginBottom: 10 }}>Explore the demo</p>
-          <div className="row gap-2">
-            <button className="chip" style={{ flex: 1 }} onClick={() => fillDemo('patient')}>Patient</button>
-            <button className="chip" style={{ flex: 1 }} onClick={() => fillDemo('practitioner')}>Practitioner</button>
-            <button className="chip" style={{ flex: 1 }} onClick={() => fillDemo('admin')}>Admin</button>
-          </div>
-          <p className="muted text-center" style={{ fontSize: '0.72rem', marginTop: 10 }}>Tap a role to autofill, then Enter Solaris</p>
+          <button className="chip" style={{ width: '100%' }} onClick={enterAsSarah}>Enter as Sarah</button>
+          <p className="muted text-center" style={{ fontSize: '0.72rem', marginTop: 10 }}>Autofills a demo member, then tap Enter Solaris</p>
         </div>
       </div>
 
@@ -137,15 +120,3 @@ export default function Auth() {
   );
 }
 
-function RoleCard({ active, onClick, icon: Icon, title, sub }) {
-  return (
-    <button onClick={onClick} type="button"
-      className={active ? 'card-high' : 'card-low'}
-      style={{ flex: 1, padding: '1rem', borderRadius: 'var(--radius-md)', cursor: 'pointer', textAlign: 'left',
-        border: active ? '1px solid var(--primary)' : '1px solid transparent', transition: 'all 0.4s var(--ease)' }}>
-      <Icon size={20} color={active ? 'var(--primary)' : 'var(--on-surface-variant)'} />
-      <div style={{ fontSize: '0.88rem', fontWeight: 600, marginTop: 8, fontFamily: 'var(--font-sans)' }}>{title}</div>
-      <div className="muted" style={{ fontSize: '0.72rem' }}>{sub}</div>
-    </button>
-  );
-}

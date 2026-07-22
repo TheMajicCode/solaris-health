@@ -77,6 +77,12 @@ export default function Assessment() {
 
   if (phase === 'loading') return <FrameWrap><Spinner label="Preparing your assessment…" /></FrameWrap>;
 
+  // Legacy practitioner accounts (demo/seed) don't take the member Solaris Method intake.
+  // Members (role 'patient') get the full assessment below.
+  if (user?.role === 'practitioner') {
+    return <FrameWrap><PractitionerPlaceholder onSkip={skipOnboarding} /></FrameWrap>;
+  }
+
   return (
     <FrameWrap>
       {phase === 'intro' && <Intro name={user?.firstName} onStart={() => setPhase('goals')} onSkip={skipOnboarding} />}
@@ -138,6 +144,30 @@ function Intro({ name, onStart, onSkip }) {
       >
         {skipping ? 'One moment…' : <>Do this later <ArrowRight size={15} /></>}
       </button>
+    </div>
+  );
+}
+
+function PractitionerPlaceholder({ onSkip }) {
+  const [skipping, setSkipping] = useState(false);
+  const handleSkip = async () => {
+    if (skipping) return;
+    setSkipping(true);
+    try { await onSkip?.(); } finally { setSkipping(false); }
+  };
+  return (
+    <div className="page center col text-center" style={{ minHeight: '100vh', gap: 22 }}>
+      <div className="floaty"><SolarisMark size={76} /></div>
+      <p className="eyebrow gold">Practitioner Passport</p>
+      <h1 className="display" style={{ fontSize: '2rem', maxWidth: 360 }}>
+        Welcome to your Practitioner Passport
+      </h1>
+      <p className="muted" style={{ maxWidth: 340, lineHeight: 1.65 }}>
+        Your practitioner journey begins with your own Sovereign Passport. Full practitioner onboarding is coming soon.
+      </p>
+      <Button onClick={handleSkip} disabled={skipping}>
+        {skipping ? 'One moment…' : <>Skip to dashboard for now <ArrowRight size={18} /></>}
+      </Button>
     </div>
   );
 }

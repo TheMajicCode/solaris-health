@@ -45,8 +45,13 @@ function shapeUser(u) {
 // Register (patient or practitioner)
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, firstName, lastName, role = 'patient', country, language, referralCode } = req.body;
+    const { email, password, firstName, lastName, country, language, referralCode } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+
+    // Decision D-B: every public signup begins as a member. Role is never chosen at
+    // signup; `role` from the request body is intentionally ignored. Practitioner is an
+    // upgrade after onboarding. (Seed/demo accounts are created directly, not via this path.)
+    const role = 'patient';
 
     const existing = await db.query('SELECT id FROM users WHERE email = $1', [email]);
     if (existing.rows.length > 0) return res.status(400).json({ error: 'Email already registered' });

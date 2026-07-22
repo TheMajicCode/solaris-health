@@ -2828,7 +2828,7 @@ export default function LucaPassport() {
 
         {/* ---------------- SIDEBAR ---------------- */}
         <aside className={`sidebar ${drawer ? 'open' : ''}`}>
-          <div className="brand" style={{ justifyContent: 'space-between' }}>
+          <div className="brand">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <img src="/solaris-logo.png" alt="Solaris" style={{ width: 42, height: 42, objectFit: 'contain', filter: 'drop-shadow(0 0 8px rgba(47,190,159,0.5))' }} />
               <div>
@@ -2836,7 +2836,6 @@ export default function LucaPassport() {
                 <div className="brand-sub">Sovereign Passport</div>
               </div>
             </div>
-            <button title="Log out" onClick={logout} style={{ background: 'transparent', border: 'none', color: 'rgba(217,238,232,.6)', cursor: 'pointer', display: 'flex', padding: 4 }}><LogOut size={16} /></button>
           </div>
 
           <nav className="col" style={{ gap: 1 }}>
@@ -2871,6 +2870,20 @@ export default function LucaPassport() {
               </button>
             )
           )}
+
+          {/* Account footer — avatar, name/email, and sign out at the very bottom */}
+          <div style={{ marginTop: user?.isProvider ? 'auto' : 0, borderTop: '1px solid rgba(255,255,255,.1)', padding: '14px 16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <Avatar name={displayName} size={32} />
+              <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#D9EEE8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</div>
+                <div style={{ fontSize: 11, color: 'rgba(159,231,214,.65)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.email}</div>
+              </div>
+            </div>
+            <button onClick={logout} style={{ width: '100%', textAlign: 'left', padding: '8px 12px', borderRadius: 10, cursor: 'pointer', background: 'rgba(255,255,255,.07)', border: '1px solid rgba(255,255,255,.1)', color: '#D9EEE8', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <LogOut size={15} /> Sign out
+            </button>
+          </div>
 
         </aside>
 
