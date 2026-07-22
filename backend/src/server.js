@@ -38,6 +38,7 @@ const contributionEventsRoutes = require('./routes/contribution-events');
 const appointmentsRoutes = require('./routes/appointments');
 const journalRoutes = require('./routes/journal');
 const audioRoutes = require('./routes/audio');
+const healthDocumentsRoutes = require('./routes/health-documents');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -136,6 +137,7 @@ app.use('/api/contribution-events', contributionEventsRoutes);
 app.use('/api/appointments', appointmentsRoutes);
 app.use('/api/journal', journalRoutes);
 app.use('/api/audio', audioRoutes);
+app.use('/api/health-documents', healthDocumentsRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {

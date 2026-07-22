@@ -12,6 +12,8 @@ export function AppProvider({ children }) {
   const [authView, setAuthView] = useState('intro'); // intro | auth
   const [demoRole, setDemoRole] = useState(null); // null = use real user.role; else overrides for demo
   const [nostrBanner, setNostrBanner] = useState({ show: false, npub: '' });
+  const [retaking, setRetaking] = useState(false); // re-launch Solaris Method intake (local state only)
+  const [exploreFilter, setExploreFilter] = useState(null); // pre-select a listing type in Explore (e.g. 'diagnostic')
 
   // ── Shared LUCA conversation (CoachPage + floating LucaWidget are two views of it) ──
   const [lucaMessages, setLucaMessages] = useState(() => {
@@ -79,12 +81,17 @@ export function AppProvider({ children }) {
     setUser(user); setProfile(profile);
   };
 
+  const startRetake = () => setRetaking(true);
+  const stopRetake = () => setRetaking(false);
+
   return (
     <AppContext.Provider value={{
       user, profile, loading, tab, setTab, authView, setAuthView,
       login, register, logout, refreshUser, setUser, setProfile,
       demoRole, setDemoRole, nostrBanner, setNostrBanner,
       lucaMessages, setLucaMessages, lucaLoaded, loadLucaHistory,
+      retaking, startRetake, stopRetake,
+      exploreFilter, setExploreFilter,
     }}>
       {children}
     </AppContext.Provider>

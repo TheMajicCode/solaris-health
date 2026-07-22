@@ -8,8 +8,9 @@
  *   onBecomeProvider  ()=>void  — optional CTA to open provider onboarding
  */
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Search, MapPin, Map as MapIcon, List as ListIcon, Loader2, Store, Plus, X, Sprout } from 'lucide-react';
+import { Search, MapPin, Map as MapIcon, List as ListIcon, Loader2, Store, Plus, X, Sprout, Sparkles, RefreshCw, ArrowRight } from 'lucide-react';
 import { api } from '../../lib/api.js';
+import { useApp } from '../../state/AppContext.jsx';
 import MapView from './MapView.jsx';
 import SearchFilters from './SearchFilters.jsx';
 import ProviderListingCard from './ProviderListingCard.jsx';
@@ -20,7 +21,34 @@ const DEFAULT_FILTERS = {
 };
 
 export default function ExploreMarketplace({ user, onBecomeProvider }) {
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const { exploreFilter, setExploreFilter } = useApp() || {};
+  const [filters, setFilters] = useState(() => (
+    exploreFilter ? { ...DEFAULT_FILTERS, types: [exploreFilter] } : DEFAULT_FILTERS
+  ));
+
+  // Consume a pending exploreFilter coming from another page (e.g. "Book more tests").
+  useEffect(() => {
+    if (!exploreFilter) return;
+    setFilters((f) => (f.types.includes(exploreFilter) ? f : { ...f, types: [...f.types, exploreFilter] }));
+    setExploreFilter?.(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [exploreFilter]);
+
+  // ── LUCA "Curate for me" recommendations rail ──
+  const [curated, setCurated] = useState(null);   // { nextStep, curatedJourney }
+  const [curating, setCurating] = useState(false);
+  const [curateOpen, setCurateOpen] = useState(false);
+
+  const curateForMe = useCallback(async (refresh = false) => {
+    setCurating(true); setCurateOpen(true);
+    try {
+      const r = await api.getLucaRecommendations({ refresh });
+      setCurated(r || null);
+    } catch {
+      setCurated(null);
+    } finally { setCurating(false); }
+  }, []);
+
   const [query, setQuery] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
   const [providers, setProviders] = useState([]);
@@ -115,6 +143,10 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
         <button className="exm-filterbtn" onClick={() => setShowFilters((s) => !s)}>
           Filters{activeFilterCount > 0 && <span className="exm-fcount">{activeFilterCount}</span>}
         </button>
+        <button className="exm-curate" onClick={() => curateForMe(false)} disabled={curating}>
+          {curating ? <Loader2 size={15} className="exm-spin" /> : <Sparkles size={15} />}
+          Curate for me
+        </button>
         {treasury != null && treasury > 0 && (
           <div className="exm-treasury" title="Every booking seeds our regenerative Community Treasury">
             <Sprout size={15} /> <strong>${treasury.toFixed(2)}</strong>
@@ -127,6 +159,60 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
           </button>
         )}
       </div>
+
+      {/* LUCA "Curate for me" rail */}
+      {curateOpen && (
+        <div className="exm-curated">
+          <div className="exm-curated-head">
+            <span className="exm-curated-title"><Sparkles size={16} /> Curated for you</span>
+            <div className="exm-curated-actions">
+              <button className="exm-curated-refresh" onClick={() => curateForMe(true)} disabled={curating}>
+                <RefreshCw size={13} className={curating ? 'exm-spin' : ''} /> Refresh
+              </button>
+              <button className="exm-curated-close" onClick={() => setCurateOpen(false)} aria-label="Close"><X size={15} /></button>
+            </div>
+          </div>
+          {curating && !curated ? (
+            <div className="exm-curated-loading"><Loader2 size={20} className="exm-spin" /> LUCA is curating your next steps…</div>
+          ) : (
+            <div className="exm-curated-cards">
+              {curated?.nextStep && (
+                <div className="exm-cc">
+                  <span className="exm-cc-tag next">Your next step</span>
+                  <h5>{curated.nextStep.title}</h5>
+                  <p>{curated.nextStep.description}</p>
+                  {curated.nextStep.action && <div className="exm-cc-why">{curated.nextStep.action}</div>}
+                </div>
+              )}
+              {curated?.curatedJourney && (
+                <div className="exm-cc journey">
+                  <span className="exm-cc-tag journey">Curated journey</span>
+                  <h5>{curated.curatedJourney.title}</h5>
+                  <p>
+                    {[curated.curatedJourney.specialty, curated.curatedJourney.city].filter(Boolean).join(' · ')}
+                  </p>
+                  {curated.curatedJourney.reason && <div className="exm-cc-why">{curated.curatedJourney.reason}</div>}
+                  <button
+                    className="exm-cc-btn"
+                    onClick={() => {
+                      // Surface related providers for this journey (the journey itself lives in
+                      // the listings catalogue; we search the marketplace for a matching provider).
+                      const q = curated.curatedJourney.specialty || curated.curatedJourney.title || '';
+                      setQuery(q);
+                      setCurateOpen(false);
+                    }}
+                  >
+                    {curated.curatedJourney.listingType === 'diagnostic' ? 'Find & book' : 'Explore related'} <ArrowRight size={14} />
+                  </button>
+                </div>
+              )}
+              {!curated?.nextStep && !curated?.curatedJourney && (
+                <div className="exm-curated-loading">LUCA couldn't curate right now. Try refreshing.</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="exm-body">
         {/* Filter rail */}
@@ -233,6 +319,45 @@ const CSS = `
 .luca .exm-resetbtn{background:var(--teal-d);color:#fff;border:none;border-radius:10px;padding:9px 18px;font-weight:700;cursor:pointer;font-family:inherit}
 .luca .exm-spin{animation:exmspin 1s linear infinite}
 @keyframes exmspin{to{transform:rotate(360deg)}}
+.luca .exm-curate{display:inline-flex;align-items:center;gap:7px;background:linear-gradient(135deg,#b88a2e,#d9ab4a);
+  color:#fff;border:none;border-radius:13px;padding:11px 18px;font-weight:700;font-size:14px;cursor:pointer;
+  font-family:inherit;transition:filter .15s;box-shadow:0 2px 8px rgba(184,138,46,.28)}
+.luca .exm-curate:hover{filter:brightness(1.06)}
+.luca .exm-curate:disabled{opacity:.6;cursor:default}
+.luca .exm-curated{background:var(--surface);border:1px solid var(--line);border-radius:16px;
+  padding:16px 18px;margin-bottom:14px;box-shadow:var(--shadow-sm)}
+.luca .exm-curated-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.luca .exm-curated-title{display:inline-flex;align-items:center;gap:8px;font-family:'Space Grotesk',sans-serif;
+  font-weight:700;font-size:16px;color:var(--ink)}
+.luca .exm-curated-title svg{color:#c79a3a}
+.luca .exm-curated-actions{display:flex;align-items:center;gap:8px}
+.luca .exm-curated-refresh{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);
+  background:var(--surface);color:var(--muted);border-radius:10px;padding:7px 12px;font-size:13px;font-weight:600;
+  cursor:pointer;font-family:inherit}
+.luca .exm-curated-refresh:hover{color:var(--ink);border-color:var(--teal-d)}
+.luca .exm-curated-refresh:disabled{opacity:.6;cursor:default}
+.luca .exm-curated-close{border:none;background:none;cursor:pointer;color:var(--muted);display:grid;place-items:center;
+  width:30px;height:30px;border-radius:8px}
+.luca .exm-curated-close:hover{background:var(--mint-soft);color:var(--ink)}
+.luca .exm-curated-loading{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px;padding:8px 2px}
+.luca .exm-curated-cards{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:760px){.luca .exm-curated-cards{grid-template-columns:1fr}}
+.luca .exm-cc{border:1px solid var(--line);border-radius:14px;padding:15px 16px;background:var(--bg);display:flex;
+  flex-direction:column;gap:7px}
+.luca .exm-cc.journey{background:var(--mint-soft);border-color:var(--mint-line)}
+.luca .exm-cc-tag{align-self:flex-start;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+  border-radius:999px;padding:3px 10px}
+.luca .exm-cc-tag.next{background:var(--teal-d);color:#fff}
+.luca .exm-cc-tag.journey{background:#c79a3a;color:#fff}
+.luca .exm-cc h5{font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;color:var(--ink);margin:2px 0 0}
+.luca .exm-cc p{font-size:13px;color:var(--muted);margin:0;line-height:1.5}
+.luca .exm-cc-why{font-size:12.5px;color:var(--mint-ink);background:var(--mint-soft);border-left:3px solid var(--teal-d);
+  border-radius:0 8px 8px 0;padding:8px 11px;line-height:1.5}
+.luca .exm-cc.journey .exm-cc-why{background:rgba(255,255,255,.6)}
+.luca .exm-cc-btn{align-self:flex-start;margin-top:4px;display:inline-flex;align-items:center;gap:7px;background:var(--teal-d);
+  color:#fff;border:none;border-radius:10px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer;
+  font-family:inherit;transition:background .15s}
+.luca .exm-cc-btn:hover{background:var(--teal-d2)}
 .luca .exm-mtoggle{display:none}
 @media(max-width:1080px){
   .luca .exm-body{grid-template-columns:240px 1fr}

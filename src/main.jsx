@@ -48,7 +48,7 @@ class RootErrorBoundary extends React.Component {
 }
 
 function Root() {
-  const { user, loading, authView } = useApp();
+  const { user, loading, authView, retaking } = useApp();
 
   if (loading) {
     return (
@@ -70,6 +70,11 @@ function Root() {
   // Any new user must complete (or skip) the Solaris Method assessment first
   if (user.onboardingStatus !== 'complete') {
     return <Assessment />;
+  }
+
+  // Member chose to update their Solaris intake from the Passport (local state only)
+  if (retaking) {
+    return <Assessment retaking />;
   }
 
   // Unified sovereign hub — one central dashboard for every role

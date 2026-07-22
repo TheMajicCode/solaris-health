@@ -13,8 +13,8 @@ const GOALS = [
 ];
 const SYS_SHORT = { bioelectrical: 'Bio', hydration: 'Hydr', circadian: 'Circ', microbiome: 'Micro', respiratory: 'Resp', neurological: 'Neuro', cardiovascular: 'Cardio', nutritional: 'Nutri' };
 
-export default function Assessment() {
-  const { user, refreshUser, setTab } = useApp();
+export default function Assessment({ retaking = false }) {
+  const { user, refreshUser, setTab, stopRetake } = useApp();
   const [phase, setPhase] = useState('loading'); // loading | intro | goals | aspects | systems | intake | submitting | reveal
   const [questions, setQuestions] = useState([]);
   const [goals, setGoals] = useState([]);
@@ -64,6 +64,12 @@ export default function Assessment() {
   };
 
   const skipOnboarding = async () => {
+    // When updating an existing intake, "Do this later" simply cancels the retake —
+    // the member's previous results stay intact and nothing is skipped in the DB.
+    if (retaking) {
+      stopRetake?.();
+      return;
+    }
     try {
       await api.skipOnboarding();
     } catch (e) {
@@ -75,23 +81,29 @@ export default function Assessment() {
     } catch { /* noop */ }
   };
 
+  const enterHub = async () => {
+    if (retaking) stopRetake?.();
+    setTab('home');
+    await refreshUser();
+  };
+
   if (phase === 'loading') return <FrameWrap><Spinner label="Preparing your assessment…" /></FrameWrap>;
 
   // Legacy practitioner accounts (demo/seed) don't take the member Solaris Method intake.
   // Members (role 'patient') get the full assessment below.
-  if (user?.role === 'practitioner') {
+  if (user?.role === 'practitioner' && !retaking) {
     return <FrameWrap><PractitionerPlaceholder onSkip={skipOnboarding} /></FrameWrap>;
   }
 
   return (
     <FrameWrap>
-      {phase === 'intro' && <Intro name={user?.firstName} onStart={() => setPhase('goals')} onSkip={skipOnboarding} />}
+      {phase === 'intro' && <Intro name={user?.firstName} retaking={retaking} onStart={() => setPhase('goals')} onSkip={skipOnboarding} />}
       {phase === 'goals' && <GoalsStep goals={goals} setGoals={setGoals} onNext={() => setPhase('aspects')} onBack={() => setPhase('intro')} />}
       {phase === 'aspects' && <AspectsStep aspectQs={aspectQs} aspects={aspects} setAspects={setAspects} onNext={() => setPhase('systems')} onBack={() => setPhase('goals')} />}
       {phase === 'systems' && <SystemsStep systemQs={systemQs} systems={systems} setSystems={setSystems} onNext={() => setPhase('intake')} onBack={() => setPhase('aspects')} />}
       {phase === 'intake' && <IntakeStep docs={docs} setDocs={setDocs} onNext={submit} onBack={() => setPhase('systems')} />}
       {phase === 'submitting' && <Submitting />}
-      {phase === 'reveal' && <Reveal result={result} systems={systems} aspects={aspects} onEnter={async () => { setTab('home'); await refreshUser(); }} />}
+      {phase === 'reveal' && <Reveal result={result} systems={systems} aspects={aspects} onEnter={enterHub} />}
     </FrameWrap>
   );
 }
@@ -118,7 +130,7 @@ function StepHeader({ title, step, total, onBack }) {
   );
 }
 
-function Intro({ name, onStart, onSkip }) {
+function Intro({ name, retaking = false, onStart, onSkip }) {
   const [skipping, setSkipping] = useState(false);
   const handleSkip = async () => {
     if (skipping) return;
@@ -128,14 +140,21 @@ function Intro({ name, onStart, onSkip }) {
   return (
     <div className="page center col text-center" style={{ minHeight: '100vh', gap: 22 }}>
       <div className="floaty"><SolarisMark size={76} /></div>
-      <p className="eyebrow gold">The Solaris Method</p>
+      <p className="eyebrow gold">{retaking ? 'Update your Solaris intake' : 'The Solaris Method'}</p>
       <h1 className="display" style={{ fontSize: '2.1rem', maxWidth: 340 }}>
         {name ? `${name}, let's` : "Let's"} look at the harmony of your inner landscape
       </h1>
       <p className="muted" style={{ maxWidth: 320, lineHeight: 1.65 }}>
         This isn't a test — it's a reflection of where you are today. We'll explore your 4 Aspects of Being and 8 Body Systems.
       </p>
-      <Button onClick={onStart}>Begin Assessment <ArrowRight size={18} /></Button>
+      {retaking && (
+        <div className="card-low" style={{ maxWidth: 340, padding: '0.85rem 1.1rem', background: 'rgba(78,222,163,0.06)', border: '1px solid rgba(78,222,163,0.15)', borderRadius: 'var(--radius-md)' }}>
+          <p className="mint" style={{ fontSize: '0.85rem', lineHeight: 1.55, margin: 0 }}>
+            You're updating your Solaris intake. Your previous results are saved — LUCA will notice what changed.
+          </p>
+        </div>
+      )}
+      <Button onClick={onStart}>{retaking ? 'Begin update' : 'Begin Assessment'} <ArrowRight size={18} /></Button>
       <button
         onClick={handleSkip}
         disabled={skipping}

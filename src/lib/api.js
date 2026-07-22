@@ -45,6 +45,11 @@ class ApiClient {
   acceptAudioFromListing(listingId) { return this.request(`/audio/accept/${listingId}`, { method: 'POST', body: JSON.stringify({}) }); }
   unlockAudio(audioId) { return this.request(`/audio/unlock/${audioId}`, { method: 'POST', body: JSON.stringify({}) }); }
 
+  // ---- Health documents (Sovereign Passport) ----
+  getHealthDocuments() { return this.request('/health-documents'); }
+  createHealthDocument(data) { return this.request('/health-documents', { method: 'POST', body: JSON.stringify(data) }); }
+  deleteHealthDocument(id) { return this.request(`/health-documents/${id}`, { method: 'DELETE' }); }
+
   // ---- Users / profile ----
   getMe() { return this.request('/users/me'); }
   updateMe(updates) { return this.request('/users/me', { method: 'PATCH', body: JSON.stringify(updates) }); }
@@ -316,7 +321,7 @@ class ApiClient {
   getMyPayments() { return this.request('/payments/mine'); }
 
   // ---- Solaris: LUCA context ----
-  getLucaRecommendations() { return this.request('/luca/recommendations'); }
+  getLucaRecommendations(opts = {}) { return this.request(`/luca/recommendations${opts.refresh ? '?refresh=true' : ''}`); }
   getLucaContext(userId) {
     const qs = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
     return this.request(`/luca/context${qs}`);

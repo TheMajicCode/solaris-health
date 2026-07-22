@@ -2504,6 +2504,156 @@ class ErrorBoundary extends React.Component {
 }
 
 /* ============================== HEALTH PASSPORT (with internal sections) ============================== */
+
+/* Reads an optional file as metadata only (we never process contents here). */
+function fileMeta(file) {
+  return { filename: file?.name || null, fileSize: file?.size || null, mimeType: file?.type || null };
+}
+
+/* "Share something with LUCA" — description + optional file → LUCA educational summary. */
+function HealthDataUpload({ onSaved }) {
+  const [description, setDescription] = useState('');
+  const [file, setFile] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+
+  const submit = async () => {
+    const text = description.trim();
+    if (!text || saving) return;
+    setSaving(true); setError(''); setResult(null);
+    try {
+      const meta = file ? fileMeta(file) : {};
+      const { document } = await api.createHealthDocument({ description: text, docType: file ? 'upload' : 'note', ...meta });
+      setResult(document);
+      setDescription(''); setFile(null);
+      onSaved?.(document);
+    } catch (e) {
+      setError(e?.message || 'Could not save. Please try again.');
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="col gap-3">
+      <div>
+        <div className="f6" style={{ color: 'var(--ink)' }}>Share something with LUCA</div>
+        <div className="small muted" style={{ marginTop: 2 }}>
+          Describe what you're sharing — lab results, a symptom, test results, anything relevant. LUCA will add a warm,
+          educational summary to your Passport. LUCA educates and prepares you — it never diagnoses.
+        </div>
+      </div>
+      <textarea
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder="e.g. My recent blood test showed low vitamin D and slightly high cholesterol…"
+        rows={4}
+        style={{
+          width: '100%', resize: 'vertical', borderRadius: 12, border: '1px solid var(--line,#e3ece8)',
+          padding: '11px 13px', fontFamily: 'inherit', fontSize: 13.5, color: 'var(--ink)', background: 'var(--surface,#fff)',
+        }}
+      />
+      <div className="row gap-3" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
+        <label className="btn" style={{ cursor: 'pointer' }}>
+          <FileText size={15} strokeWidth={2.2} />{file ? 'Change file' : 'Attach file (optional)'}
+          <input type="file" accept=".pdf,.png,.jpg,.jpeg,.txt,image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} style={{ display: 'none' }} />
+        </label>
+        {file && <span className="tiny muted">{file.name} · {(file.size / 1024).toFixed(0)} KB</span>}
+        <Btn variant="primary" icon={Sparkles} onClick={submit} disabled={saving || !description.trim()} style={{ marginLeft: 'auto' }}>
+          {saving ? 'LUCA is reading…' : 'Share with LUCA'}
+        </Btn>
+      </div>
+      {error && <div className="tiny" style={{ color: '#B4483D' }}>{error}</div>}
+      {result && (
+        <div className="card-low" style={{ background: 'rgba(78,222,163,0.06)', border: '1px solid rgba(78,222,163,0.18)', borderRadius: 12, padding: '12px 14px' }}>
+          <div className="row gap-2" style={{ marginBottom: 6 }}><Sparkles size={14} className="t-teal" /><span className="label t-mint">Health data added — LUCA's summary</span></div>
+          <div className="small" style={{ color: 'var(--ink)', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{result.luca_summary}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* "Actions" card + shared health data form + document list, always at the top of the Passport. */
+function PassportActions({ go }) {
+  const { startRetake, setExploreFilter } = useApp();
+  const [showAdd, setShowAdd] = useState(false);
+  const [docs, setDocs] = useState([]);
+  const [loadingDocs, setLoadingDocs] = useState(true);
+
+  const loadDocs = useCallback(async () => {
+    setLoadingDocs(true);
+    try { const d = await api.getHealthDocuments(); setDocs(d?.documents || []); }
+    catch { setDocs([]); }
+    finally { setLoadingDocs(false); }
+  }, []);
+  useEffect(() => { loadDocs(); }, [loadDocs]);
+
+  const bookMoreTests = () => { setExploreFilter?.('diagnostic'); go?.('explore'); };
+
+  const removeDoc = async (id) => {
+    try { await api.deleteHealthDocument(id); setDocs((d) => d.filter((x) => x.id !== id)); } catch { /* noop */ }
+  };
+
+  return (
+    <div className="col gap-4">
+      <Card>
+        <SectionHead eyebrow="Your Sovereign Passport" title="Actions" />
+        <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: 12 }}>
+          <div className="card-low" style={{ padding: '14px', borderRadius: 14 }}>
+            <div className="row gap-2" style={{ marginBottom: 8 }}><Chip icon={Activity} tone="teal" sm /><span className="small f6">Update your intake</span></div>
+            <p className="tiny muted" style={{ marginBottom: 12, lineHeight: 1.5 }}>Your previous scores are saved. LUCA will notice what changed.</p>
+            <Btn variant="primary" icon={RefreshCw} onClick={() => startRetake?.()}>Update my Solaris intake</Btn>
+          </div>
+          <div className="card-low" style={{ padding: '14px', borderRadius: 14 }}>
+            <div className="row gap-2" style={{ marginBottom: 8 }}><Chip icon={FileText} tone="gold" sm /><span className="small f6">Add health data</span></div>
+            <p className="tiny muted" style={{ marginBottom: 12, lineHeight: 1.5 }}>Share labs, symptoms or results — LUCA adds an educational summary.</p>
+            <Btn variant={showAdd ? '' : 'primary'} icon={showAdd ? X : Plus} onClick={() => setShowAdd((s) => !s)}>{showAdd ? 'Close' : 'Add health data'}</Btn>
+          </div>
+          <div className="card-low" style={{ padding: '14px', borderRadius: 14 }}>
+            <div className="row gap-2" style={{ marginBottom: 8 }}><Chip icon={Stethoscope} tone="mint" sm /><span className="small f6">Book more tests</span></div>
+            <p className="tiny muted" style={{ marginBottom: 12, lineHeight: 1.5 }}>Explore lab panels and diagnostic screens matched to your journey.</p>
+            <Btn icon={Compass} onClick={bookMoreTests}>Book more tests</Btn>
+          </div>
+        </div>
+
+        {showAdd && (
+          <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--line,#e3ece8)' }}>
+            <HealthDataUpload onSaved={loadDocs} />
+          </div>
+        )}
+      </Card>
+
+      <Card>
+        <SectionHead eyebrow="Shared with LUCA" title="My health documents" action={<Pill tone="gray">{docs.length}</Pill>} />
+        {loadingDocs ? (
+          <CardSkeleton rows={2} />
+        ) : docs.length === 0 ? (
+          <Empty icon={FileText} title="Nothing shared yet" sub="Use “Add health data” above to share labs, symptoms or results. LUCA keeps a warm, educational summary here." />
+        ) : (
+          <div className="col gap-3">
+            {docs.map((d) => (
+              <div key={d.id} className="card-low" style={{ padding: '13px 15px', borderRadius: 12 }}>
+                <div className="between" style={{ alignItems: 'flex-start', gap: 10 }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div className="row gap-2" style={{ marginBottom: 4 }}>
+                      <FileText size={14} className="t-teal" />
+                      <span className="small f6" style={{ color: 'var(--ink)' }}>{d.filename || (d.doc_type === 'note' ? 'Shared note' : 'Health data')}</span>
+                      <span className="tiny muted2">· {fmtShort(d.created_at)}</span>
+                    </div>
+                    {d.description && <div className="tiny muted" style={{ marginBottom: 6 }}>{d.description}</div>}
+                    {d.luca_summary && <div className="small" style={{ color: 'var(--ink)', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{d.luca_summary}</div>}
+                  </div>
+                  <button onClick={() => removeDoc(d.id)} aria-label="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted,#6b807a)', flex: 'none' }}><Trash2 size={15} /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 const HP_TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'timeline', label: 'Timeline' },
@@ -2514,6 +2664,7 @@ function HealthPassportPage({ user, go }) {
   const [hpTab, setHpTab] = useState('overview');
   return (
     <div className="col gap-4">
+      <ErrorBoundary><PassportActions go={go} /></ErrorBoundary>
       <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--line,#e3ece8)', marginBottom: 6, flexWrap: 'wrap' }}>
         {HP_TABS.map((t) => {
           const active = hpTab === t.id;

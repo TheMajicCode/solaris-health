@@ -234,9 +234,24 @@ async function persist(userId, nextStep, journey) {
 
 router.get('/recommendations', authMiddleware, async (req, res) => {
   const userId = req.user.userId;
+  const forceRefresh = req.query.refresh === 'true' || req.query.refresh === '1';
   try {
-    // 1. Serve a fresh cached recommendation set if < CACHE_HOURS old
-    const cached = await db
+    // 0. On forced refresh, clear the recent AI cache rows so a fresh set is generated.
+    if (forceRefresh) {
+      await db
+        .query(
+          `DELETE FROM recommendations
+           WHERE user_id=$1 AND source_type='luca-ai'
+             AND created_at > NOW() - INTERVAL '${CACHE_HOURS} hours'`,
+          [userId]
+        )
+        .catch((e) => console.error('recommendations cache clear failed (non-fatal):', e.message));
+    }
+
+    // 1. Serve a fresh cached recommendation set if < CACHE_HOURS old (skipped on forced refresh)
+    const cached = forceRefresh
+      ? { rows: [] }
+      : await db
       .query(
         `SELECT recommendation_type, title, description, linked_listing_id, created_at
          FROM recommendations
