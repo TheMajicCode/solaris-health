@@ -5,7 +5,7 @@ services:
     image: postgres:15-alpine
     environment:
       POSTGRES_USER: luca_user
-      POSTGRES_PASSWORD: luca_dev_2026
+      POSTGRES_PASSWORD: 76366c9da29dd1dcdc1e91b0c03464ee82751f0c1cd9d944
       POSTGRES_DB: luca_passport
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -30,8 +30,8 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DATABASE_URL: postgresql://luca_user:${DB_PASSWORD:-luca_prod_2026}@postgres:5432/luca_passport
-      JWT_SECRET: ${JWT_SECRET:-luca_prod_secret_2026_change_in_production}
+      DATABASE_URL: postgresql://luca_user:${DB_PASSWORD:-76366c9da29dd1dcdc1e91b0c03464ee82751f0c1cd9d944}@postgres:5432/luca_passport
+      JWT_SECRET: ${JWT_SECRET:-2f4e1b87f1cc5bf971470dd66e42b6a6356828491a3336fe3d7ef1422088cc9a76329516f40e44c60a9869b94e9cd4ff65cc96975fcaa1a654cd5427003778ab}
       PORT: 5000
       NODE_ENV: production
     ports:
@@ -59,7 +59,7 @@ services:
       context: .
       dockerfile: Dockerfile.backend
     environment:
-      DATABASE_URL: postgresql://luca_user:${DB_PASSWORD:-luca_prod_2026}@postgres:5432/luca_passport
+      DATABASE_URL: postgresql://luca_user:${DB_PASSWORD:-76366c9da29dd1dcdc1e91b0c03464ee82751f0c1cd9d944}@postgres:5432/luca_passport
     command: node seed_solaris.js
     depends_on:
       postgres:

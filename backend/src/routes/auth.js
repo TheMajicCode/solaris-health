@@ -49,6 +49,13 @@ router.post('/register', async (req, res) => {
     const { email, password, firstName, lastName, country, language, referralCode } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
+    // Password strength: min 8 chars, at least one letter and one number.
+    if (password.length < 8 || !/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
+      return res.status(400).json({
+        error: 'Password must be at least 8 characters and include a letter and a number.',
+      });
+    }
+
     // Decision D-B: every public signup begins as a member. Role is never chosen at
     // signup; `role` from the request body is intentionally ignored. Practitioner is an
     // upgrade after onboarding. (Seed/demo accounts are created directly, not via this path.)
@@ -117,11 +124,12 @@ router.post('/login', async (req, res) => {
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 
     const result = await db.query('SELECT * FROM users WHERE email = $1 AND deleted_at IS NULL', [email]);
-    if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
+    // Generic message — never reveal whether the email exists.
+    if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid email or password.' });
 
     const user = result.rows[0];
     const match = await bcrypt.compare(password, user.password_hash);
-    if (!match) return res.status(401).json({ error: 'Invalid credentials' });
+    if (!match) return res.status(401).json({ error: 'Invalid email or password.' });
 
     const token = generateToken(user.id, user.email, user.role);
     res.json({ user: shapeUser(user), token });

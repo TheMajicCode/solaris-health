@@ -32,3 +32,11 @@ docs/*.pdf
 docs/*.docx
 .env
 backend/.env
+
+# Secrets — never commit real env files (Tier 1 hardening)
+.env
+.env.*
+backend/.env
+backend/.env.*
+!.env.example
+!backend/.env.example

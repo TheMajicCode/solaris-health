@@ -1,9 +1,14 @@
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-key';
+// Fail fast: refuse to run without a real signing secret (no insecure fallback).
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET environment variable is not set. Refusing to start.');
+  process.exit(1);
+}
 
 function generateToken(userId, email, role) {
-  return jwt.sign({ userId, email, role }, JWT_SECRET, { expiresIn: '30d' });
+  return jwt.sign({ userId, email, role }, JWT_SECRET, { expiresIn: '7d' });
 }
 
 function verifyToken(token) {

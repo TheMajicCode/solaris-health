@@ -22,6 +22,28 @@ const web3 = require('../lib/web3');
 
 const router = express.Router();
 
+/**
+ * SIWE nonce store — replay protection.
+ * Nonces are single-use and expire after NONCE_TTL_MS. Keyed by
+ * `${userId}:${address}` so a nonce issued to one member/address cannot be
+ * replayed by another. In-memory is fine for a single instance; swap in a
+ * Redis adapter behind this same interface when horizontally scaling.
+ */
+const nonceStore = new Map();
+const NONCE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+function nonceKey(userId, address) {
+  return `${userId}:${String(address).toLowerCase()}`;
+}
+
+// Opportunistically evict expired nonces so the map can't grow unbounded.
+function sweepNonces() {
+  const now = Date.now();
+  for (const [k, v] of nonceStore) {
+    if (now > v.expiresAt) nonceStore.delete(k);
+  }
+}
+
 function requirePatient(req, res, next) {
   if (req.user.role !== 'patient' && req.user.role !== 'admin')
     return res.status(403).json({ error: 'Only patients can connect wallets' });
@@ -150,9 +172,12 @@ router.put('/primary', authMiddleware, requirePatient, async (req, res) => {
 /* ----------------------------- SIWE nonce ----------------------------- */
 router.get('/nonce', authMiddleware, requirePatient, async (req, res) => {
   try {
-    const { address } = req.query;
+    const address = req.query.address ? String(req.query.address).toLowerCase() : null;
+    if (!address) return res.status(400).json({ error: 'address is required' });
+    sweepNonces();
     const nonce = crypto.randomBytes(16).toString('hex');
-    const message = address ? web3.buildSiweMessage({ address, nonce }) : null;
+    nonceStore.set(nonceKey(req.user.userId, address), { nonce, expiresAt: Date.now() + NONCE_TTL_MS });
+    const message = web3.buildSiweMessage({ address, nonce });
     res.json({ nonce, message });
   } catch (err) { console.error('wallet/nonce', err); res.status(500).json({ error: 'Server error' }); }
 });
@@ -166,6 +191,20 @@ router.post('/verify-signature', authMiddleware, requirePatient, async (req, res
 
     const c = web3.getChain(chain);
     if (c.kind !== 'evm') return res.status(400).json({ error: 'Signature verification is supported for EVM chains only' });
+
+    // Replay protection: the nonce must be one we issued to this user+address,
+    // still valid, present in the signed message, and consumed exactly once.
+    const key = nonceKey(req.user.userId, address);
+    const stored = nonceStore.get(key);
+    if (!stored || Date.now() > stored.expiresAt) {
+      nonceStore.delete(key);
+      return res.status(401).json({ verified: false, error: 'Nonce expired or not found. Request a new one.' });
+    }
+    if (!String(message).includes(stored.nonce)) {
+      return res.status(401).json({ verified: false, error: 'Invalid nonce in signed message.' });
+    }
+    // Consume the nonce (single use) regardless of signature outcome below.
+    nonceStore.delete(key);
 
     const ok = web3.verifyEvmSignature(message, signature, address);
     if (!ok) {
