@@ -1,8 +1,46 @@
 const express = require('express');
 const db = require('../db');
 const { authMiddleware } = require('../middleware/auth');
+const notificationProvider = require('../lib/notification-provider');
 
 const router = express.Router();
+
+// POST practitioner interest — any authenticated member can register interest.
+// Notifies admins (in-app + email log) and logs the interest against the member.
+router.post('/interest', authMiddleware, async (req, res) => {
+  try {
+    const { message } = req.body || {};
+    const userId = req.user.userId;
+    const u = await db.query('SELECT email, full_name FROM users WHERE id=$1', [userId]);
+    const user = u.rows[0] || {};
+    const who = user.full_name || user.email || 'A member';
+
+    // Log the interest against the member themselves.
+    await notificationProvider.send('practitioner_interest', userId, {
+      title: 'Practitioner interest registered',
+      message: `${who} expressed interest in becoming a practitioner.${message ? ' Note: ' + message : ''}`,
+      emailSubject: 'Practitioner interest registered',
+      emailBody: `${who} expressed interest in becoming a practitioner.${message ? ' Note: ' + message : ''}`,
+    });
+
+    // Notify every admin.
+    const admins = await db.query("SELECT id FROM users WHERE role='admin'");
+    for (const admin of admins.rows) {
+      await notificationProvider.send('practitioner_interest', admin.id, {
+        title: `Practitioner interest: ${who}`,
+        message: message || 'No additional note.',
+        data: { fromUserId: userId, email: user.email },
+        emailSubject: `Practitioner interest: ${who}`,
+        emailBody: message || 'No additional note.',
+      });
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('practitioner interest error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 function requirePractitioner(req, res, next) {
   if (req.user.role !== 'practitioner' && req.user.role !== 'admin')

@@ -24,6 +24,11 @@ export function AppProvider({ children }) {
   });
   const [lucaLoaded, setLucaLoaded] = useState(false);
 
+  // ── Shared audio player state (MediaPage full player + persistent MiniPlayer) ──
+  const [currentTrack, setCurrentTrack] = useState(null); // { id, title, audio_url, duration_seconds, ... }
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [audioQueue, setAudioQueue] = useState([]);        // ordered list of playable tracks
+
   // Persist the conversation across navigation within a session
   useEffect(() => {
     try { sessionStorage.setItem('luca_messages', JSON.stringify(lucaMessages)); } catch {}
@@ -73,6 +78,7 @@ export function AppProvider({ children }) {
     setUser(null); setProfile(null); setTab('home'); setAuthView('intro'); setDemoRole(null);
     setNostrBanner({ show: false, npub: '' });
     setLucaMessages([]); setLucaLoaded(false);
+    setCurrentTrack(null); setIsPlaying(false); setAudioQueue([]);
     try { sessionStorage.removeItem('luca_messages'); } catch {}
   };
 
@@ -90,6 +96,7 @@ export function AppProvider({ children }) {
       login, register, logout, refreshUser, setUser, setProfile,
       demoRole, setDemoRole, nostrBanner, setNostrBanner,
       lucaMessages, setLucaMessages, lucaLoaded, loadLucaHistory,
+      currentTrack, setCurrentTrack, isPlaying, setIsPlaying, audioQueue, setAudioQueue,
       retaking, startRetake, stopRetake,
       exploreFilter, setExploreFilter,
     }}>

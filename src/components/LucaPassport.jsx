@@ -6,7 +6,7 @@
    Scoped under `.luca` so it is fully isolated from the
    global dark theme used by the auth / onboarding flows.
    ============================================================ */
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react';
 import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, Cell,
   RadarChart as ReRadar, PolarGrid, PolarAngleAxis, Radar, CartesianGrid,
@@ -20,6 +20,7 @@ import {
   BadgeCheck, Zap, MapPin, RefreshCw, MessageSquare, Globe, Compass, Store,
   Briefcase, FileCheck, BarChart3, CalendarCheck, Sprout,
   BookOpen, Headphones, Play, Pause, Lock, Trash2, Music,
+  Repeat, Shuffle, Rewind, FastForward, Upload, ListMusic,
 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { api } from '../lib/api.js';
@@ -320,8 +321,34 @@ textarea.input-line{resize:vertical;min-height:64px}
 .luca .luca-chip:hover{filter:brightness(.97)}
 .luca .luca-chip:active{transform:translateY(1px)}
 .luca .luca-chip:disabled{opacity:.55;cursor:default}
-/* Media library sticky player */
-.luca .media-player{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:60;display:flex;align-items:center;gap:12px;background:var(--surface,#fff);border:1px solid var(--line,#E6EDEA);box-shadow:0 12px 40px rgba(10,40,40,.16);border-radius:16px;padding:10px 14px;width:min(680px,calc(100% - 48px))}
+/* Persistent mini-player bar */
+.luca .mini-player{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:9990;display:flex;align-items:center;justify-content:space-between;gap:14px;background:var(--surface,#fff);border:1px solid var(--line,#E6EDEA);box-shadow:0 12px 40px rgba(10,40,40,.18);border-radius:16px;padding:10px 14px;width:min(680px,calc(100% - 48px))}
+.luca .mini-progress{position:absolute;top:0;left:0;right:0;height:3px;border-radius:16px 16px 0 0;background:var(--line,#E6EDEA);overflow:hidden}
+.luca .mini-progress-fill{height:100%;background:linear-gradient(90deg,#1A8C7D,#2FBE9F);transition:width .25s linear}
+.luca .mp-ctrl{width:34px;height:34px;border-radius:10px;border:1px solid var(--line,#E6EDEA);background:var(--surface-2,#F7FAF9);color:var(--ink,#123);display:grid;place-items:center;cursor:pointer;flex:none;transition:background .15s}
+.luca .mp-ctrl:hover{background:#EBF3F0}
+.luca .mp-ctrl.primary{background:linear-gradient(150deg,#0E5C57,#0A413D);color:#E7F8F3;border-color:transparent}
+/* Full player card (Media tab) */
+.luca .full-player{background:linear-gradient(170deg,#0E5C57,#0A413D);border:none;color:#F2FBF8;display:flex;flex-direction:column;gap:14px}
+.luca .fp-seek{display:flex;align-items:center;gap:10px}
+.luca .fp-range{flex:1;-webkit-appearance:none;appearance:none;height:5px;border-radius:999px;background:rgba(255,255,255,.24);outline:none;cursor:pointer}
+.luca .fp-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:15px;height:15px;border-radius:50%;background:#DAF3EC;box-shadow:0 2px 6px rgba(0,0,0,.3);cursor:pointer}
+.luca .fp-range::-moz-range-thumb{width:15px;height:15px;border:none;border-radius:50%;background:#DAF3EC;cursor:pointer}
+.luca .fp-controls{display:flex;align-items:center;justify-content:center;gap:8px}
+.luca .fp-btn{width:42px;height:42px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:#E7F8F3;display:grid;place-items:center;cursor:pointer;transition:background .15s}
+.luca .fp-btn:hover{background:rgba(255,255,255,.18)}
+.luca .fp-btn.on{background:rgba(218,243,236,.9);color:#0A413D;border-color:transparent}
+.luca .fp-btn.play{width:54px;height:54px;border-radius:50%;background:#DAF3EC;color:#0A413D;border:none}
+.luca .fp-btn.play:hover{background:#fff}
+.luca .fp-speed{background:rgba(255,255,255,.12);color:#E7F8F3;border:1px solid rgba(255,255,255,.2);border-radius:9px;padding:4px 8px;font-family:inherit;font-size:12px;cursor:pointer}
+.luca .fp-speed option{color:#123}
+/* Queue rows */
+.luca .queue-row{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:9px 10px;border-radius:10px;border:none;background:transparent;color:var(--ink,#123);cursor:pointer;transition:background .15s}
+.luca .queue-row:hover{background:var(--surface-2,#F7FAF9)}
+.luca .queue-row.on{background:#EBF3F0}
+.luca .queue-ico{width:26px;height:26px;border-radius:8px;background:linear-gradient(150deg,#0E5C57,#0A413D);color:#E7F8F3;display:grid;place-items:center;flex:none}
+.luca .queue-title{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+@media(max-width:520px){.luca .mini-player{left:12px;right:12px;transform:none;width:auto}}
 /* Floating LUCA widget */
 .luca .luca-fab{position:fixed;right:22px;bottom:22px;z-index:9998;display:inline-flex;align-items:center;gap:9px;background:linear-gradient(150deg,#0E5C57,#0A413D);color:#E7F8F3;border:none;border-radius:999px;padding:8px 16px 8px 8px;cursor:pointer;box-shadow:0 10px 30px rgba(10,60,55,.35);font-family:inherit;transition:transform .15s,box-shadow .15s}
 .luca .luca-fab:hover{transform:translateY(-2px);box-shadow:0 14px 38px rgba(10,60,55,.42)}
@@ -1335,7 +1362,7 @@ function LucaChips({ suggestions, onAction, disabled }) {
 }
 
 /* Map a typed LUCA suggestion to an in-app effect. */
-function executeChipAction(suggestion, { go, setInput, send }) {
+function executeChipAction(suggestion, { go, setInput, send, playAudio }) {
   const s = typeof suggestion === 'string' ? { label: suggestion, action: 'prefill_chat', target: null } : (suggestion || {});
   const { action, target, label } = s;
   switch (action) {
@@ -1343,7 +1370,7 @@ function executeChipAction(suggestion, { go, setInput, send }) {
     case 'start_checkin': go('health'); break;
     case 'start_assessment': go('health'); break;
     case 'open_listing': go('explore'); break;
-    case 'play_audio': go('media'); break;
+    case 'play_audio': playAudio ? playAudio(go) : go('media'); break;
     case 'curate': go('explore'); break;
     case 'prefill_chat': setInput(label || ''); break;
     default: send(label || ''); break;
@@ -1359,6 +1386,7 @@ const LucaAvatar = ({ size = 'md' }) => (
 
 function CoachPage({ user, go }) {
   const { lucaMessages: messages, setLucaMessages: setMessages, lucaLoaded, loadLucaHistory } = useApp();
+  const { playFromLibrary } = useAudio();
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [degraded, setDegraded] = useState(false);
@@ -1438,7 +1466,7 @@ function CoachPage({ user, go }) {
                   <div className={`msg-bubble ${isUser ? 'user' : 'ai'}`}>{m.content}</div>
                   {m.created_at && <div className={`msg-time ${isUser ? '' : 'ai-time'}`}>{msgTime(m.created_at)}</div>}
                   {!isUser && i === messages.length - 1 && !sending && (
-                    <LucaChips suggestions={m.suggestions} onAction={(s) => executeChipAction(s, { go, setInput, send })} disabled={sending} />
+                    <LucaChips suggestions={m.suggestions} onAction={(s) => executeChipAction(s, { go, setInput, send, playAudio: playFromLibrary })} disabled={sending} />
                   )}
                 </div>
               </div>
@@ -1666,13 +1694,226 @@ const fmtDuration = (s) => {
   return `${m}:${String(sec).padStart(2, '0')}`;
 };
 
+/* ============================== SHARED AUDIO ENGINE ==============================
+   A single <audio> element lives in the shell (AudioProvider). Both the full
+   MediaPage player and the persistent MiniPlayer drive it through this context,
+   so playback continues seamlessly as the member moves between tabs. */
+const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 2];
+const AudioCtx = createContext(null);
+const useAudio = () => useContext(AudioCtx) || {};
+
+function AudioProvider({ children }) {
+  const {
+    currentTrack, setCurrentTrack, isPlaying, setIsPlaying, audioQueue, setAudioQueue,
+  } = useApp();
+  const audioRef = useRef(null);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [rate, setRate] = useState(1);
+  const [repeat, setRepeat] = useState(false);
+  const [shuffle, setShuffle] = useState(false);
+
+  // Load a new track's source and (if playing) start it.
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a || !currentTrack) return;
+    if (a.getAttribute('data-src') !== currentTrack.audio_url) {
+      a.src = currentTrack.audio_url;
+      a.setAttribute('data-src', currentTrack.audio_url);
+      a.load();
+      setCurrentTime(0);
+      setDuration(currentTrack.duration_seconds || 0);
+    }
+    if (isPlaying) a.play().catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTrack]);
+
+  // Reflect play/pause intent onto the element.
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a || !currentTrack) return;
+    if (isPlaying) a.play().catch(() => {}); else a.pause();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying, currentTrack]);
+
+  // Apply playback speed.
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.playbackRate = rate;
+  }, [rate, currentTrack]);
+
+  const play = useCallback((track, queue) => {
+    if (Array.isArray(queue)) setAudioQueue(queue);
+    setCurrentTrack(track);
+    setIsPlaying(true);
+  }, [setAudioQueue, setCurrentTrack, setIsPlaying]);
+
+  const toggle = useCallback(() => {
+    if (!currentTrack) return;
+    setIsPlaying((p) => !p);
+  }, [currentTrack, setIsPlaying]);
+
+  const seek = useCallback((t) => {
+    const a = audioRef.current;
+    const clamped = Math.max(0, Math.min(duration || 0, t));
+    if (a) a.currentTime = clamped;
+    setCurrentTime(clamped);
+  }, [duration]);
+
+  const skip = useCallback((delta) => {
+    const a = audioRef.current;
+    if (!a) return;
+    seek((a.currentTime || 0) + delta);
+  }, [seek]);
+
+  const goTo = useCallback((dir) => {
+    const q = audioQueue;
+    if (!q.length || !currentTrack) return;
+    const idx = q.findIndex((t) => t.id === currentTrack.id);
+    let nextIdx;
+    if (shuffle && q.length > 1) {
+      do { nextIdx = Math.floor(Math.random() * q.length); } while (nextIdx === idx);
+    } else {
+      nextIdx = (idx + dir + q.length) % q.length;
+    }
+    play(q[nextIdx]);
+  }, [audioQueue, currentTrack, shuffle, play]);
+
+  const onEnded = useCallback(() => {
+    const a = audioRef.current;
+    if (repeat && a) { a.currentTime = 0; a.play().catch(() => {}); return; }
+    if (audioQueue.length > 1) { goTo(1); return; }
+    setIsPlaying(false);
+  }, [repeat, audioQueue, goTo, setIsPlaying]);
+
+  const close = useCallback(() => {
+    const a = audioRef.current;
+    if (a) a.pause();
+    setIsPlaying(false);
+    setCurrentTrack(null);
+  }, [setIsPlaying, setCurrentTrack]);
+
+  // Play the first track from the member's unlocked library (used by LUCA's play_audio chip).
+  const playFromLibrary = useCallback(async (go) => {
+    try {
+      const r = await api.getMyAudio();
+      const tracks = r?.tracks || [];
+      if (tracks.length) { play(tracks[0], tracks); return true; }
+    } catch { /* fall through */ }
+    if (go) go('media');
+    return false;
+  }, [play]);
+
+  const value = {
+    audioRef, currentTime, duration, rate, setRate, repeat, setRepeat, shuffle, setShuffle,
+    play, toggle, seek, skip, next: () => goTo(1), prev: () => goTo(-1), close, playFromLibrary,
+  };
+
+  return (
+    <AudioCtx.Provider value={value}>
+      {children}
+      <audio
+        ref={audioRef}
+        onTimeUpdate={(e) => setCurrentTime(e.target.currentTime || 0)}
+        onLoadedMetadata={(e) => setDuration(e.target.duration || 0)}
+        onEnded={onEnded}
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        style={{ display: 'none' }}
+      />
+    </AudioCtx.Provider>
+  );
+}
+
+/* Persistent mini-player bar — shown on every tab except Media once a track is loaded. */
+function MiniPlayer({ hidden }) {
+  const { currentTrack, isPlaying } = useApp();
+  const { currentTime, duration, toggle, skip, close } = useAudio();
+  if (hidden || !currentTrack) return null;
+  const pct = duration ? Math.min(100, (currentTime / duration) * 100) : 0;
+  return (
+    <div className="mini-player" role="region" aria-label="Now playing">
+      <div className="mini-progress"><div className="mini-progress-fill" style={{ width: `${pct}%` }} /></div>
+      <div className="row gap-2" style={{ alignItems: 'center' }}>
+        <div style={{ width: 34, height: 34, borderRadius: 8, overflow: 'hidden', flex: 'none', background: '#EBF3F0' }}>
+          {currentTrack.cover_image_url
+            ? <img src={currentTrack.cover_image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : <div style={{ display: 'grid', placeItems: 'center', height: '100%', color: '#5C8A80' }}><Music size={15} /></div>}
+        </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div className="small f6" style={{ color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{currentTrack.title}</div>
+          <div className="tiny muted">{fmtDuration(currentTime)} / {fmtDuration(duration || currentTrack.duration_seconds)}</div>
+        </div>
+      </div>
+      <div className="row gap-1" style={{ alignItems: 'center', flex: 'none' }}>
+        <button className="mp-ctrl" onClick={() => skip(-15)} title="Back 15s"><Rewind size={16} /></button>
+        <button className="mp-ctrl primary" onClick={toggle} title={isPlaying ? 'Pause' : 'Play'}>{isPlaying ? <Pause size={17} /> : <Play size={17} />}</button>
+        <button className="mp-ctrl" onClick={() => skip(15)} title="Forward 15s"><FastForward size={16} /></button>
+        <button className="mp-ctrl" onClick={close} title="Close player"><X size={16} /></button>
+      </div>
+    </div>
+  );
+}
+
+/* Full-featured player card shown at the top of the Media tab. */
+function FullPlayer() {
+  const { currentTrack, isPlaying } = useApp();
+  const { currentTime, duration, rate, setRate, repeat, setRepeat, shuffle, setShuffle, toggle, skip, seek, next, prev } = useAudio();
+  if (!currentTrack) return null;
+  const dur = duration || currentTrack.duration_seconds || 0;
+  return (
+    <Card className="lg full-player">
+      <div className="row gap-3" style={{ alignItems: 'center' }}>
+        <div style={{ width: 60, height: 60, borderRadius: 14, overflow: 'hidden', flex: 'none', background: 'rgba(255,255,255,.12)' }}>
+          {currentTrack.cover_image_url
+            ? <img src={currentTrack.cover_image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : <div style={{ display: 'grid', placeItems: 'center', height: '100%', color: '#DAF3EC' }}><Music size={24} /></div>}
+        </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div className="tiny" style={{ color: 'rgba(231,248,243,.7)', textTransform: 'uppercase', letterSpacing: '.5px' }}>Now playing</div>
+          <div className="dp f7" style={{ fontSize: 17, color: '#F2FBF8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{currentTrack.title}</div>
+          {currentTrack.is_local && <span className="pill mint" style={{ fontSize: 11, marginTop: 4 }}>Local file</span>}
+        </div>
+      </div>
+
+      {/* Seek bar */}
+      <div className="fp-seek">
+        <span className="tiny" style={{ color: 'rgba(231,248,243,.85)', minWidth: 38 }}>{fmtDuration(currentTime)}</span>
+        <input type="range" min={0} max={dur || 0} step="0.5" value={Math.min(currentTime, dur || 0)}
+          onChange={(e) => seek(Number(e.target.value))} className="fp-range" aria-label="Seek" />
+        <span className="tiny" style={{ color: 'rgba(231,248,243,.85)', minWidth: 38, textAlign: 'right' }}>{fmtDuration(dur)}</span>
+      </div>
+
+      {/* Transport controls */}
+      <div className="fp-controls">
+        <button className={`fp-btn ${shuffle ? 'on' : ''}`} onClick={() => setShuffle((s) => !s)} title="Shuffle"><Shuffle size={17} /></button>
+        <button className="fp-btn" onClick={prev} title="Previous"><ChevronRight size={20} style={{ transform: 'rotate(180deg)' }} /></button>
+        <button className="fp-btn" onClick={() => skip(-15)} title="Back 15s"><Rewind size={19} /></button>
+        <button className="fp-btn play" onClick={toggle} title={isPlaying ? 'Pause' : 'Play'}>{isPlaying ? <Pause size={24} /> : <Play size={24} />}</button>
+        <button className="fp-btn" onClick={() => skip(15)} title="Forward 15s"><FastForward size={19} /></button>
+        <button className="fp-btn" onClick={next} title="Next"><ChevronRight size={20} /></button>
+        <button className={`fp-btn ${repeat ? 'on' : ''}`} onClick={() => setRepeat((r) => !r)} title="Repeat"><Repeat size={17} /></button>
+      </div>
+
+      {/* Speed */}
+      <div className="row" style={{ justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 4 }}>
+        <span className="tiny" style={{ color: 'rgba(231,248,243,.7)' }}>Speed</span>
+        <select className="fp-speed" value={rate} onChange={(e) => setRate(Number(e.target.value))} aria-label="Playback speed">
+          {PLAYBACK_RATES.map((r) => <option key={r} value={r}>{r}x</option>)}
+        </select>
+      </div>
+    </Card>
+  );
+}
+
 function MediaPage({ user, go }) {
+  const { currentTrack, audioQueue, setAudioQueue } = useApp();
+  const { play } = useAudio();
   const [tracks, setTracks] = useState([]);
+  const [localTracks, setLocalTracks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [current, setCurrent] = useState(null);
   const [accepting, setAccepting] = useState(false);
   const [busyId, setBusyId] = useState(null);
-  const audioRef = useRef(null);
+  const fileRef = useRef(null);
 
   const load = useCallback(async () => {
     const r = await api.getAudioLibrary().catch(() => ({ tracks: [] }));
@@ -1685,10 +1926,37 @@ function MediaPage({ user, go }) {
     return () => { alive = false; };
   }, [load]);
 
-  const play = (t) => {
-    if (!t.unlocked) return;
-    setCurrent(t);
-    setTimeout(() => { audioRef.current?.play?.().catch(() => {}); }, 60);
+  const unlocked = tracks.filter((t) => t.unlocked);
+  const locked = tracks.filter((t) => !t.unlocked);
+  const practitioner = tracks.find((t) => t.practitioner_name);
+  const freeLocked = locked.filter((t) => t.is_free).length;
+
+  // The play queue = unlocked Solaris tracks + any imported local files.
+  const playable = [...unlocked, ...localTracks];
+
+  // Keep the shared queue in sync with what's playable (without disrupting playback).
+  useEffect(() => {
+    setAudioQueue(playable);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tracks, localTracks]);
+
+  const playTrack = (t) => play(t, playable);
+
+  const importFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    const track = {
+      id: 'local-' + Date.now(),
+      title: file.name.replace(/\.[^.]+$/, ''),
+      audio_url: url,
+      duration_seconds: 0,
+      is_local: true,
+      unlocked: true,
+    };
+    setLocalTracks((prev) => [...prev, track]);
+    toast.success('Added to your queue');
+    if (e.target) e.target.value = '';
   };
 
   const unlockOne = async (t) => {
@@ -1715,13 +1983,38 @@ function MediaPage({ user, go }) {
     } finally { setAccepting(false); }
   };
 
-  const unlocked = tracks.filter((t) => t.unlocked);
-  const locked = tracks.filter((t) => !t.unlocked);
-  const practitioner = tracks.find((t) => t.practitioner_name);
-  const freeLocked = locked.filter((t) => t.is_free).length;
-
   return (
-    <div className="col gap-4" style={{ paddingBottom: current ? 96 : 0 }}>
+    <div className="col gap-4" style={{ paddingBottom: 8 }}>
+      {/* Full player (shared audio engine) */}
+      <FullPlayer />
+
+      {/* Play queue */}
+      {audioQueue.length > 0 && (
+        <div>
+          <SectionHead eyebrow="Up next" title={`Queue (${audioQueue.length})`} />
+          <Card className="col" style={{ gap: 2, padding: 6 }}>
+            {audioQueue.map((t) => (
+              <button key={t.id} className={`queue-row ${currentTrack?.id === t.id ? 'on' : ''}`} onClick={() => playTrack(t)}>
+                <span className="queue-ico">{currentTrack?.id === t.id ? <Pause size={14} /> : <Play size={14} />}</span>
+                <span className="queue-title">{t.title}</span>
+                {t.is_local && <span className="pill mint" style={{ fontSize: 10 }}>Local</span>}
+                <span className="tiny muted" style={{ marginLeft: 'auto' }}>{fmtDuration(t.duration_seconds)}</span>
+              </button>
+            ))}
+          </Card>
+        </div>
+      )}
+
+      {/* Local file import */}
+      <Card className="between" style={{ alignItems: 'center' }}>
+        <div style={{ minWidth: 0 }}>
+          <div className="small f6" style={{ color: 'var(--ink)' }}>Add your own audio</div>
+          <div className="tiny muted" style={{ marginTop: 2 }}>Your local files play in this browser session. No data is uploaded.</div>
+        </div>
+        <input ref={fileRef} type="file" accept="audio/*" onChange={importFile} style={{ display: 'none' }} />
+        <Btn icon={Upload} onClick={() => fileRef.current?.click()}>Add file</Btn>
+      </Card>
+
       {/* Practitioner intro */}
       {practitioner && (
         <Card className="lg" style={{ background: 'linear-gradient(170deg,#0E5C57,#0A413D)', color: '#E7F8F3', border: 'none' }}>
@@ -1760,7 +2053,7 @@ function MediaPage({ user, go }) {
             ) : (
               <div className="col gap-3">
                 {unlocked.map((t) => (
-                  <TrackRow key={t.id} t={t} playing={current?.id === t.id} onPlay={() => play(t)} />
+                  <TrackRow key={t.id} t={t} playing={currentTrack?.id === t.id} onPlay={() => playTrack(t)} />
                 ))}
               </div>
             )}
@@ -1789,26 +2082,6 @@ function MediaPage({ user, go }) {
             <Btn icon={Compass} onClick={() => go && go('explore')}>Explore</Btn>
           </Card>
         </>
-      )}
-
-      {/* Sticky player */}
-      {current && (
-        <div className="media-player">
-          <div className="row gap-3" style={{ alignItems: 'center', flex: 1, minWidth: 0 }}>
-            <div style={{ width: 42, height: 42, borderRadius: 10, overflow: 'hidden', flex: 'none', background: '#EBF3F0' }}>
-              {current.cover_image_url && <img src={current.cover_image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div className="small f6" style={{ color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{current.title}</div>
-              <div className="tiny muted">{current.practitioner_name || 'Solaris'}</div>
-            </div>
-          </div>
-          <audio ref={audioRef} src={current.audio_url} controls style={{ height: 38, maxWidth: '55%' }} />
-          <button className="icon-btn" onClick={() => setCurrent(null)} title="Close player"
-            style={{ border: 'none', background: 'transparent', color: 'var(--muted,#8AA09C)', cursor: 'pointer', padding: 6 }}>
-            <X size={18} />
-          </button>
-        </div>
       )}
     </div>
   );
@@ -2992,10 +3265,76 @@ function EconomicPassportPage({ user }) {
   );
 }
 
+/* ============================== BECOME A PRACTITIONER ============================== */
+function BecomeAPractitionerModal({ user, onClose }) {
+  const [message, setMessage] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const submit = async () => {
+    setSubmitting(true);
+    try {
+      await api.practitionerInterest({ message: message.trim() || null });
+      setDone(true);
+    } catch (e) {
+      toast.error(e.message || 'Could not register your interest. Please try again.');
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="ci-overlay" onClick={(e) => { if (e.target === e.currentTarget && !submitting) onClose(); }}>
+      <div className="ci-modal" role="dialog" aria-modal="true" aria-label="Become a Practitioner" style={{ maxWidth: 520 }}>
+        <div className="ci-head">
+          <div className="luca-avatar sm" style={{ background: 'linear-gradient(170deg,#0E5C57,#0A413D)' }}>
+            <Briefcase size={16} color="#DAF3EC" strokeWidth={2.2} />
+          </div>
+          <h3>Join the Solaris Practitioner Network</h3>
+          <button className="ci-x" onClick={onClose} aria-label="Close"><X size={17} /></button>
+        </div>
+        <div className="ci-body">
+          {done ? (
+            <div className="col gap-2" style={{ alignItems: 'center', textAlign: 'center', padding: '18px 6px' }}>
+              <div style={{ fontSize: 34 }}>🌿</div>
+              <div className="dp f7" style={{ fontSize: 17, color: 'var(--ink)' }}>We'll be in touch soon.</div>
+              <div className="small muted" style={{ maxWidth: 380 }}>
+                In the meantime, keep building your Sovereign Passport.
+              </div>
+              <Btn variant="primary" onClick={onClose} style={{ marginTop: 8 }}>Done</Btn>
+            </div>
+          ) : (
+            <>
+              <p className="small" style={{ color: 'var(--ink)', lineHeight: 1.55, margin: 0 }}>
+                Practitioners on Solaris own their tools, their data, and their client relationships.
+                Your full onboarding journey is being crafted — register your interest and we'll reach out personally.
+              </p>
+              <div style={{ marginTop: 14 }}>
+                <div className="ci-eyebrow">Anything you'd like us to know? (optional)</div>
+                <textarea
+                  maxLength={600} value={message} onChange={(e) => setMessage(e.target.value)}
+                  placeholder="Your practice, your modality, what you're hoping to build…"
+                  style={{ marginTop: 8, minHeight: 96 }}
+                />
+              </div>
+              <div className="row gap-2" style={{ justifyContent: 'flex-end', marginTop: 16 }}>
+                <Btn onClick={onClose} disabled={submitting}>Not now</Btn>
+                <Btn variant="primary" onClick={submit} disabled={submitting}>
+                  {submitting ? 'Sending…' : 'Register my interest'}
+                </Btn>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ============================== PAGE ROUTER ============================== */
 /* ============================== LUCA FLOATING WIDGET ============================== */
 function LucaWidget({ user, hidden, go }) {
   const { lucaMessages: messages, setLucaMessages: setMessages, lucaLoaded, loadLucaHistory } = useApp();
+  const { playFromLibrary } = useAudio();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -3072,7 +3411,7 @@ function LucaWidget({ user, hidden, go }) {
                   <div style={{ minWidth: 0, maxWidth: '84%' }}>
                     <div className={`msg-bubble ${isUser ? 'user' : 'ai'}`} style={{ fontSize: 13 }}>{m.content}</div>
                     {!isUser && i === messages.length - 1 && !sending && (
-                      <LucaChips suggestions={m.suggestions} onAction={(s) => executeChipAction(s, { go, setInput, send })} disabled={sending} />
+                      <LucaChips suggestions={m.suggestions} onAction={(s) => executeChipAction(s, { go, setInput, send, playAudio: playFromLibrary })} disabled={sending} />
                     )}
                   </div>
                 </div>
@@ -3150,6 +3489,7 @@ export default function LucaPassport() {
   const [drawer, setDrawer] = useState(false);
   const [badges, setBadges] = useState({});
   const [showApplication, setShowApplication] = useState(false);
+  const [showPractitioner, setShowPractitioner] = useState(false);
   const [appStatus, setAppStatus] = useState(null); // current user's latest application
 
   // close drawer on tab change
@@ -3257,12 +3597,14 @@ export default function LucaPassport() {
     else if (n.type === 'application_rejected') setShowApplication(true);
     else if (n.type === 'message') go('messages');
     else if (n.type === 'booking') go(isProvider ? 'my-practice' : 'my-bookings');
+    else if (n.data?.tab) go(n.data.tab);
   }, [go, isProvider]);
 
   const meta = TAB_META[tab] || { title: 'LUCA Passport', sub: '' };
   const displayName = user?.fullName || [user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.email || 'Member';
 
   return (
+    <AudioProvider>
     <div className="luca">
       <style>{CSS}</style>
       <div className="luca-app">
@@ -3306,9 +3648,9 @@ export default function LucaPassport() {
                 <span>Application under review</span>
               </div>
             ) : (
-              <button className="become-provider" onClick={() => { setShowApplication(true); setDrawer(false); }}>
+              <button className="become-provider" onClick={() => { setShowPractitioner(true); setDrawer(false); }}>
                 <Briefcase size={16} strokeWidth={2} />
-                <span>{appStatus?.status === 'rejected' ? 'Reapply as Provider' : 'Become a Provider'}</span>
+                <span>{appStatus?.status === 'rejected' ? 'Reapply as Practitioner →' : 'Become a Practitioner →'}</span>
               </button>
             )
           )}
@@ -3353,6 +3695,9 @@ export default function LucaPassport() {
         </div>
       </div>
 
+      {/* Persistent mini-player — every tab except Media (full player handles it there) */}
+      <MiniPlayer hidden={tab === 'media'} />
+
       {/* Floating LUCA assistant — available everywhere except the full Coach page */}
       <LucaWidget user={user} hidden={tab === 'coach'} go={go} />
 
@@ -3363,6 +3708,11 @@ export default function LucaPassport() {
           onSubmitted={() => { setShowApplication(false); refreshUser?.(); }}
         />
       )}
+
+      {showPractitioner && (
+        <BecomeAPractitionerModal user={user} onClose={() => setShowPractitioner(false)} />
+      )}
     </div>
+    </AudioProvider>
   );
 }

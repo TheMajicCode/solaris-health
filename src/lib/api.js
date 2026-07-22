@@ -161,6 +161,7 @@ class ApiClient {
   getPractitionerProfile() { return this.request('/practitioner/profile'); }
   savePractitionerProfile(data) { return this.request('/practitioner/profile', { method: 'PUT', body: JSON.stringify(data) }); }
   getPractitionerBookings() { return this.request('/practitioner/bookings'); }
+  practitionerInterest(body) { return this.request('/practitioner/interest', { method: 'POST', body: JSON.stringify(body || {}) }); }
 
   // ---- Admin ----
   getAdminOverview() { return this.request('/admin/overview'); }

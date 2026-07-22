@@ -6,6 +6,7 @@
     "start": "node src/server.js",
     "seed": "node src/db/seed-demo-data.js",
     "seed:reset": "node src/db/seed-demo-data.js --reset",
+    "smoke-test": "node scripts/smoke-test.js",
     "test": "jest --runInBand --forceExit",
     "test:coverage": "jest --runInBand --forceExit --coverage",
     "test:watch": "jest --watch",

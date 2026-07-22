@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { generateToken, authMiddleware } = require('../middleware/auth');
 const { ensureReferralCode } = require('../lib/gps-engine');
+const notificationProvider = require('../lib/notification-provider');
 
 const router = express.Router();
 
@@ -89,6 +90,17 @@ router.post('/register', async (req, res) => {
         }
       } catch (e) { console.warn('[gps] apply referral on signup failed:', e.message); }
     }
+
+    // Welcome notification (best-effort, non-blocking — never fail the signup)
+    try {
+      await notificationProvider.send('welcome', user.id, {
+        title: 'Welcome to Solaris!',
+        message: 'Your Sovereign Passport is ready.',
+        data: { tab: 'dashboard' },
+        emailSubject: 'Welcome to Solaris',
+        emailBody: 'Your passport has been created.',
+      });
+    } catch (e) { console.warn('[notifications] welcome failed:', e.message); }
 
     const token = generateToken(user.id, user.email, user.role);
     res.status(201).json({ user: shapeUser({ ...user, love_points: 10 }), token });
