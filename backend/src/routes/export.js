@@ -108,4 +108,31 @@ router.get('/me', authMiddleware, async (req, res) => {
   }
 });
 
+/**
+ * GET /api/export/me.zip -> download the full sovereign vault as a .zip
+ * Dedicated ZIP endpoint (same payload as /me?format=zip) for a clean download URL.
+ */
+router.get('/me.zip', authMiddleware, async (req, res) => {
+  try {
+    let archiver;
+    try { archiver = require('archiver'); }
+    catch { return res.status(501).json({ error: 'zip export needs `npm i archiver`' }); }
+
+    const record = await gatherRecord(req.user.userId);
+    const files = buildVaultExport(record);
+
+    const ts = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="solaris-vault-${ts}.zip"`);
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    archive.on('error', (e) => res.status(500).end(String(e)));
+    archive.pipe(res);
+    for (const f of files) archive.append(f.contents, { name: `solaris-vault/${f.path}` });
+    return archive.finalize();
+  } catch (err) {
+    console.error('Export zip error:', err);
+    res.status(500).json({ error: 'Export failed' });
+  }
+});
+
 module.exports = router;

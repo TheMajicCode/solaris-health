@@ -103,6 +103,16 @@ export default function Auth() {
           <button className="chip" style={{ width: '100%' }} onClick={enterAsSarah}>Enter as Sarah</button>
           <p className="muted text-center" style={{ fontSize: '0.72rem', marginTop: 10 }}>Autofills a demo member, then tap Enter Solaris</p>
         </div>
+
+        {/* Public directory — no account required */}
+        <p className="text-center fade-up delay-3" style={{ marginTop: 16, fontSize: '0.88rem' }}>
+          <button
+            onClick={() => { window.location.href = '/find'; }}
+            style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}
+          >
+            Browse practitioners <ArrowRight size={15} />
+          </button>
+        </p>
       </div>
 
       <style>{`

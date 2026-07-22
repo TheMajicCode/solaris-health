@@ -49,6 +49,7 @@ const healthDocumentsRoutes = require('./routes/health-documents');
 const lucaPractitionerRoutes = require('./routes/luca-practitioner');
 const consentRoutes = require('./routes/consent');
 const providerPatientsRoutes = require('./routes/provider/patients');
+const publicRoutes = require('./routes/public');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -198,6 +199,7 @@ app.use('/api/appointments', appointmentsRoutes);
 app.use('/api/journal', journalRoutes);
 app.use('/api/audio', audioRoutes);
 app.use('/api/health-documents', healthDocumentsRoutes);
+app.use('/api/public', publicRoutes); // public practitioner directory (no auth)
 
 // Error handler
 app.use((err, req, res, next) => {

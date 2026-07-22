@@ -1459,7 +1459,7 @@ function HealthPage({ go }) {
             {exportMsg && <div className="tiny t-mint" style={{ marginTop: 4 }}>{exportMsg}</div>}
           </div>
         </div>
-        <Btn variant="primary" icon={Download} onClick={exportVault} disabled={exporting}>{exporting ? 'Preparing…' : 'Export my vault'}</Btn>
+        <Btn variant="primary" icon={Download} onClick={exportVault} disabled={exporting}>{exporting ? 'Preparing…' : 'Export My Vault'}</Btn>
       </Card>
 
       {!resp ? (

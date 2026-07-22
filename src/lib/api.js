@@ -139,6 +139,13 @@ class ApiClient {
   getCredentials() { return this.request('/credentials'); }
   getAgents() { return this.request('/agents'); }
 
+  // ---- Public practitioner directory (no auth) ----
+  getPublicPractitioners(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.request(`/public/practitioners${qs ? '?' + qs : ''}`);
+  }
+  getPublicPractitionerTypes() { return this.request('/public/practitioner-types'); }
+
   // ---- Vault export (sovereign data) ----
   // JSON manifest + files
   getVaultExport() { return this.request('/export/me'); }
@@ -146,7 +153,7 @@ class ApiClient {
   async downloadVault() {
     const headers = {};
     if (this.token) headers.Authorization = `Bearer ${this.token}`;
-    const res = await fetch(`${API_URL}/export/me?format=zip`, { headers });
+    const res = await fetch(`${API_URL}/export/me.zip`, { headers });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Export failed' }));
       throw new Error(err.error || 'Export failed');

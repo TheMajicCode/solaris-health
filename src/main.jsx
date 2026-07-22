@@ -6,6 +6,7 @@ import Onboarding from './flows/Onboarding.jsx'
 import Auth from './flows/Auth.jsx'
 import Assessment from './flows/Assessment.jsx'
 import LucaPassport from './components/LucaPassport.jsx'
+import FindPractitioner from './pages/FindPractitioner.jsx'
 import { Toaster } from 'react-hot-toast'
 import './index.css'
 
@@ -49,6 +50,11 @@ class RootErrorBoundary extends React.Component {
 
 function Root() {
   const { user, loading, authView, retaking } = useApp();
+
+  // Public practitioner directory — fully public, no login required
+  if (typeof window !== 'undefined' && window.location.pathname === '/find') {
+    return <FindPractitioner />;
+  }
 
   if (loading) {
     return (
@@ -110,3 +116,12 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     </RootErrorBoundary>
   </React.StrictMode>,
 )
+
+// Register service worker for PWA / offline shell
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/sw.js')
+      .catch((err) => console.warn('SW registration failed:', err));
+  });
+}
