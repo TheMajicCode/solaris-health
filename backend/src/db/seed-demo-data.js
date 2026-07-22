@@ -25,6 +25,8 @@
  */
 const db = require('../db');
 const bcrypt = require('bcryptjs');
+const { seedIntakeTemplates } = require('./intake-templates');
+const { insertMessage } = require('../lib/intake-messages');
 
 const SARAH_EMAIL = 'sarah@solaris.health';
 const CARO_EMAIL = 'caroumanzorsv@gmail.com';
@@ -494,9 +496,80 @@ async function seedPaymentSplits(alejandro, sofia) {
   }
 }
 
+// Seed a coherent intake picture for the Sofia → Alejandro pair:
+//   - Alejandro has intake-on-first-booking enabled (general template preferred).
+//   - Sofia has a pending intake submission + a booking-confirmation and an
+//     intake-request message waiting in her inbox.
+// Idempotent: clears this pair's prior intake rows first. Requires the intake
+// templates to already be seeded (call seedIntakeTemplates first).
+async function seedIntakeDemo(sofia, alejandro) {
+  if (!sofia || !alejandro) return;
+  try {
+    // Idempotent cleanup for this pair.
+    await db.query('DELETE FROM patient_messages WHERE recipient_id=$1 AND message_type IN ($2,$3)',
+      [sofia.id, 'booking_confirmation', 'intake_request']);
+    await db.query('DELETE FROM patient_intake_submissions WHERE patient_id=$1 AND provider_id=$2',
+      [sofia.id, alejandro.id]);
+    await db.query('DELETE FROM provider_intake_settings WHERE provider_id=$1', [alejandro.id]);
+
+    // Pick the general system template.
+    const tpl = await db.query(
+      `SELECT id FROM intake_form_templates WHERE is_active=TRUE
+         ORDER BY (clinic_type='general') DESC, is_system DESC, id ASC LIMIT 1`
+    );
+    const templateId = tpl.rows[0] && tpl.rows[0].id;
+    if (!templateId) { console.warn('  ! intake demo skipped: no templates seeded'); return; }
+
+    // Alejandro's intake settings.
+    await db.query(
+      `INSERT INTO provider_intake_settings
+         (provider_id, send_intake_on_first_booking, preferred_template_id, custom_message, updated_at)
+       VALUES ($1, TRUE, $2, NULL, NOW())
+       ON CONFLICT (provider_id) DO UPDATE
+         SET send_intake_on_first_booking=EXCLUDED.send_intake_on_first_booking,
+             preferred_template_id=EXCLUDED.preferred_template_id, updated_at=NOW()`,
+      [alejandro.id, templateId]
+    );
+
+    // Pending intake submission Sofia → Alejandro.
+    const sub = await db.query(
+      `INSERT INTO patient_intake_submissions (patient_id, provider_id, template_id, status)
+       VALUES ($1,$2,$3,'pending') RETURNING id`,
+      [sofia.id, alejandro.id, templateId]
+    );
+    const submissionId = sub.rows[0].id;
+
+    // Two inbox messages for Sofia.
+    await insertMessage({
+      recipientId: sofia.id,
+      senderId: alejandro.id,
+      senderName: 'Dr. Alejandro Reyes',
+      subject: 'Your session has been confirmed ✓',
+      body: 'Great news — Dr. Alejandro Reyes has confirmed your booking request. We look forward to supporting your wellness journey. You\'ll receive further details shortly.',
+      messageType: 'booking_confirmation',
+    });
+    await insertMessage({
+      recipientId: sofia.id,
+      senderId: alejandro.id,
+      senderName: 'Dr. Alejandro Reyes',
+      subject: 'Please complete your new patient intake form',
+      body: 'To help us prepare for your first session, please take a few minutes to complete your new patient intake form. This information will help us understand your health background and ensure we make the most of your time together.',
+      messageType: 'intake_request',
+      relatedIntakeId: submissionId,
+      actionUrl: `/intake?id=${submissionId}`,
+      actionLabel: 'Complete Intake Form',
+    });
+
+    console.log(`  ↳ seeded intake demo: Alejandro settings + Sofia pending submission (#${submissionId}) + 2 inbox messages`);
+  } catch (e) {
+    console.warn(`  ! intake demo seed skipped: ${e.message}`);
+  }
+}
+
 async function seedDemoPair() {
   const sofia = await seedSofia();
-  await seedAlejandro(sofia);
+  const alejandro = await seedAlejandro(sofia);
+  await seedIntakeDemo(sofia, alejandro);
 }
 
 const SEEDERS = { [SARAH_EMAIL]: seedSarah, [CARO_EMAIL]: seedCaro };
@@ -510,6 +583,13 @@ async function seedOne(email) {
 }
 
 async function main() {
+  // Ensure the system intake templates exist before seeding any intake demo data.
+  try {
+    await seedIntakeTemplates(db);
+    console.log('✓ intake form templates seeded');
+  } catch (e) {
+    console.warn(`! intake templates seed skipped: ${e.message}`);
+  }
   if (EMAIL_ARG) {
     console.log(`${RESET ? 'Resetting + reseeding' : 'Seeding'} ${EMAIL_ARG}…`);
     if (PAIR_EMAILS.has(EMAIL_ARG)) {

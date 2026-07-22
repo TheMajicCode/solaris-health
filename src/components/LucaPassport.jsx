@@ -21,7 +21,7 @@ import {
   Briefcase, FileCheck, BarChart3, CalendarCheck, Sprout,
   BookOpen, Headphones, Play, Pause, Lock, Trash2, Music,
   Repeat, Shuffle, Rewind, FastForward, Upload, ListMusic,
-  CalendarClock, Volume2, VolumeX,
+  CalendarClock, Volume2, VolumeX, Inbox, Mail,
 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { api } from '../lib/api.js';
@@ -101,6 +101,8 @@ const CSS = `
   border-radius:3px;background:var(--mint)}
 .nav-item .badge{margin-left:auto;background:var(--gold);color:#3C2807;font-size:10.5px;font-weight:700;
   border-radius:999px;min-width:18px;height:18px;display:flex;align-items:center;justify-content:center;padding:0 5px}
+.nav-item .soon-badge{margin-left:auto;background:rgba(255,159,10,.18);color:#FFB454;border:1px solid rgba(255,159,10,.42);
+  font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;border-radius:999px;padding:2px 7px;line-height:1.4}
 .become-provider{margin-top:auto;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:8px;
   width:100%;padding:11px 14px;border-radius:12px;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;
   color:#0A2B29;background:linear-gradient(135deg,#E3AC46,#D69B33);border:1px solid rgba(255,255,255,.18);
@@ -134,6 +136,14 @@ const CSS = `
 .card.lg{padding:22px;border-radius:var(--r-lg)}
 .card.flat{box-shadow:none}
 .card.tint{background:linear-gradient(180deg,#FBFEFC,#F4FAF7)}
+/* card-low is defined dark in the global (index.css) theme used by Auth/Assessment.
+   Inside the light Passport (.luca) scope it must be a light surface, otherwise the
+   dark ink titles/body inside these cards render invisibly on a dark background. */
+.luca .card-low{background:var(--surface-2);border:1px solid var(--line);color:var(--ink)}
+.luca .card-low .small,.luca .card-low .f6,.luca .card-low .card-title{color:var(--ink)}
+.luca .card-low .tiny,.luca .card-low .muted{color:var(--muted)}
+.luca .inbox-msg.unread{border-color:var(--mint);box-shadow:0 0 0 1px var(--mint) inset}
+.luca .inbox-dot{flex:none;width:9px;height:9px;border-radius:999px;background:var(--gold)}
 .eyebrow{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-2);font-weight:600}
 .card-title{font-size:15px;font-weight:600;color:var(--ink)}
 .stat{font-family:'Space Grotesk';font-weight:600;font-size:27px;letter-spacing:-.02em;color:var(--ink);line-height:1}
@@ -541,12 +551,13 @@ function navForRole(role, isProvider) {
         { id: 'coach', label: 'LUCA Coach', icon: Bot },
         { id: 'journal', label: 'Journal', icon: BookOpen },
         { id: 'media', label: 'Media', icon: Headphones },
+        { id: 'inbox', label: 'Inbox', icon: Inbox, badgeKey: 'inbox' },
         { id: 'messages', label: 'Messages', icon: MessageSquare, badgeKey: 'messages' },
       ],
     },
     {
       group: 'Tierra', color: '#C58A53', items: [
-        { id: 'wallet', label: 'Economic Passport', icon: EconomicPassportIcon },
+        { id: 'wallet', label: 'Economic Passport', icon: EconomicPassportIcon, comingSoon: true },
       ],
     },
   ];
@@ -650,6 +661,7 @@ const TAB_META = {
   dashboard: { title: 'Dashboard', sub: 'Your steering wheel for health, value, and care — one sovereign view.' },
   explore: { title: 'Explore', sub: 'Discover trusted health & wellness providers near you — clinics, farms, healers, and more.' },
   health: { title: 'Health Passport', sub: 'Your 360° vitality, owned by you and exportable anytime.' },
+  inbox: { title: 'Inbox', sub: 'Booking confirmations, intake requests, and messages from your practitioners.' },
   timeline: { title: 'Health Timeline', sub: 'Your complete health journey and trends — chronological and exportable.' },
   systimeline: { title: 'System Timeline', sub: 'Platform-wide activity, sign-ups, and usage patterns over time.' },
   coach: { title: 'LUCA Coach', sub: 'Heart-Centered Intelligence — a guide, never a diagnosis.' },
@@ -1346,7 +1358,7 @@ const SYS_SHORT = { bioelectrical: 'Bio', hydration: 'Hydr', circadian: 'Circ', 
 const ASPECT_ICONS = { physical: Activity, mental: Brain, emotional: Heart, spiritual: Sparkles };
 
 function HealthPage({ go }) {
-  const { user } = useApp();
+  const { user, startRetake } = useApp();
   const [data, setData] = useState(null);
   const [docs, setDocs] = useState([]);
   const [checkins, setCheckins] = useState([]);
@@ -1436,7 +1448,16 @@ function HealthPage({ go }) {
                     <span className="f6" style={{ color: 'var(--ink)' }}>Next:</span> {completeness.nextStep.hint}
                   </div>
                   <div className="row" style={{ marginTop: 14 }}>
-                    <Btn variant="primary" icon={ChevronRight} onClick={() => go && go(completeness.nextStep.tab)}>
+                    <Btn
+                      variant="primary"
+                      icon={completeness.nextStep.key === 'intake' ? Activity : ChevronRight}
+                      onClick={() => {
+                        // The intake step must launch the Solaris Method assessment directly —
+                        // navigating to the 'health' tab alone does nothing (we're already here).
+                        if (completeness.nextStep.key === 'intake') startRetake?.();
+                        else go && go(completeness.nextStep.tab);
+                      }}
+                    >
                       {completeness.nextStep.label}
                     </Btn>
                   </div>
@@ -3453,6 +3474,57 @@ function HealthDataUpload({ onSaved }) {
 }
 
 /* "Actions" card + shared health data form + document list, always at the top of the Passport. */
+// Clinic intake forms shared through the Passport (only shown when ≥1 exists).
+function IntakeFormsSection() {
+  const [subs, setSubs] = useState(null);
+  useEffect(() => {
+    let on = true;
+    api.getMyIntakeSubmissions()
+      .then((r) => { if (on) setSubs(r.submissions || []); })
+      .catch(() => { if (on) setSubs([]); });
+    return () => { on = false; };
+  }, []);
+
+  if (!subs || subs.length === 0) return null;
+
+  const statusPill = (s) => {
+    if (s === 'reviewed') return <Pill tone="teal" icon={CheckCircle2}>Reviewed</Pill>;
+    if (s === 'submitted') return <Pill tone="mint" icon={Check}>Submitted</Pill>;
+    return <Pill tone="gold" icon={Clock}>Awaiting you</Pill>;
+  };
+
+  return (
+    <Card>
+      <SectionHead eyebrow="From your practitioners" title="Clinic intake forms" action={<Pill tone="gray">{subs.length}</Pill>} />
+      <div className="col gap-3">
+        {subs.map((s) => (
+          <div key={s.id} className="card-low" style={{ padding: '13px 15px', borderRadius: 12 }}>
+            <div className="between" style={{ alignItems: 'flex-start', gap: 10 }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div className="row gap-2" style={{ marginBottom: 4 }}>
+                  <ClipboardList size={14} className="t-teal" />
+                  <span className="small f6" style={{ color: 'var(--ink)' }}>{s.template_name || 'Intake form'}</span>
+                </div>
+                <div className="tiny muted">
+                  {s.provider_name ? `${s.provider_name} · ` : ''}{fmtShort(s.submitted_at || s.created_at)}
+                </div>
+              </div>
+              <div className="row gap-2" style={{ flex: 'none', alignItems: 'center' }}>
+                {statusPill(s.status)}
+                {s.status === 'pending' ? (
+                  <Btn variant="primary" icon={ClipboardList} onClick={() => { window.location.href = `/intake?id=${s.id}`; }}>Complete</Btn>
+                ) : (
+                  <Btn icon={Eye} onClick={() => { window.location.href = `/intake?id=${s.id}`; }}>View</Btn>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 function PassportActions({ go }) {
   const { startRetake, setExploreFilter } = useApp();
   const [showAdd, setShowAdd] = useState(false);
@@ -3501,6 +3573,8 @@ function PassportActions({ go }) {
           </div>
         )}
       </Card>
+
+      <IntakeFormsSection />
 
       <Card>
         <SectionHead eyebrow="Shared with LUCA" title="My health documents" action={<Pill tone="gray">{docs.length}</Pill>} />
@@ -3708,7 +3782,85 @@ function LucaWidget({ user, hidden, go }) {
   );
 }
 
-function TabPage({ tab, user, go, effectiveRole, onUnread, onBecomeProvider, onApprovalStats, onBookings }) {
+/* =============================== INBOX =============================== */
+function InboxPage({ user, go, onUnread }) {
+  const [loading, setLoading] = useState(true);
+  const [messages, setMessages] = useState([]);
+
+  const load = useCallback(async () => {
+    try {
+      const r = await api.getInbox();
+      setMessages(r.messages || []);
+      const unread = (r.messages || []).filter((m) => !m.is_read).length;
+      onUnread?.(unread);
+    } catch { setMessages([]); }
+    finally { setLoading(false); }
+  }, [onUnread]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const markRead = async (m) => {
+    if (m.is_read) return;
+    try { await api.markInboxRead(m.id); } catch { /* ignore */ }
+    setMessages((prev) => {
+      const next = prev.map((x) => (x.id === m.id ? { ...x, is_read: true } : x));
+      onUnread?.(next.filter((x) => !x.is_read).length);
+      return next;
+    });
+  };
+
+  const openAction = (m) => {
+    markRead(m);
+    if (m.action_url) window.location.href = m.action_url;
+  };
+
+  const iconFor = (t) => (t === 'intake_request' ? ClipboardList : t === 'booking_confirmation' ? CalendarCheck : Mail);
+
+  if (loading) return <div className="grid" style={{ gap: 14 }}><CardSkeleton rows={2} /><CardSkeleton rows={2} /></div>;
+
+  if (!messages.length) {
+    return (
+      <Card>
+        <Empty icon={Inbox} title="Your inbox is quiet for now"
+          sub="Booking confirmations and intake requests from your practitioners will appear here." />
+      </Card>
+    );
+  }
+
+  return (
+    <div className="col" style={{ gap: 12 }}>
+      {messages.map((m) => {
+        const Icon = iconFor(m.message_type);
+        return (
+          <Card key={m.id} className={`inbox-msg ${m.is_read ? '' : 'unread'}`} style={{ cursor: m.action_url ? 'default' : 'pointer' }}>
+            <div className="row gap-3" style={{ alignItems: 'flex-start' }} onClick={() => markRead(m)}>
+              <div className={`chip ${m.message_type === 'intake_request' ? 'gold' : 'mint'}`} style={{ width: 40, height: 40, flex: 'none' }}>
+                <Icon size={19} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="between" style={{ gap: 10 }}>
+                  <div className="f6" style={{ color: 'var(--ink)' }}>{m.subject}</div>
+                  {!m.is_read && <span className="inbox-dot" title="Unread" />}
+                </div>
+                <div className="tiny muted" style={{ marginTop: 2 }}>
+                  {m.sender_name} · {new Date(m.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                </div>
+                <div className="small" style={{ color: 'var(--muted)', marginTop: 7, lineHeight: 1.5 }}>{m.body}</div>
+                {m.action_url && (
+                  <div style={{ marginTop: 12 }}>
+                    <Btn variant="primary" icon={ClipboardList} onClick={() => openAction(m)}>{m.action_label || 'Open'}</Btn>
+                  </div>
+                )}
+              </div>
+            </div>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+function TabPage({ tab, user, go, effectiveRole, onUnread, onInboxUnread, onBecomeProvider, onApprovalStats, onBookings }) {
   switch (tab) {
     case 'gps-map': return <ErrorBoundary><GPSMapView /></ErrorBoundary>;
     case 'contributions': return <ErrorBoundary><ContributionLedger user={user} /></ErrorBoundary>;
@@ -3725,6 +3877,7 @@ function TabPage({ tab, user, go, effectiveRole, onUnread, onBecomeProvider, onA
     case 'my-bookings': return <MyBookings user={user} onExplore={() => go('explore')} />;
     case 'booking-oversight': return <BookingManagement />;
     case 'messages': return <SecureChat user={user} onUnread={onUnread} />;
+    case 'inbox': return <ErrorBoundary><InboxPage user={user} go={go} onUnread={onInboxUnread} /></ErrorBoundary>;
     case 'wallet': return <EconomicPassportPage user={user} />;
     case 'treasury': return <RegenerativeTreasury user={user} />;
     case 'gps-economy': return <GPSStats />;
@@ -3831,6 +3984,17 @@ export default function LucaPassport() {
     return () => { on = false; clearInterval(t); };
   }, []);
 
+  // live badge: unread inbox messages (booking confirmations, intake requests)
+  useEffect(() => {
+    let on = true;
+    const pull = () => api.getInboxUnreadCount()
+      .then((r) => { if (on) setBadges((b) => ({ ...b, inbox: r.count || 0 })); })
+      .catch(() => {});
+    pull();
+    const t = setInterval(pull, 60000);
+    return () => { on = false; clearInterval(t); };
+  }, []);
+
   // live badge: pending bookings for approved providers
   useEffect(() => {
     let on = true;
@@ -3893,11 +4057,15 @@ export default function LucaPassport() {
                 {grp.items.map((it) => {
                   const Icon = it.icon;
                   const count = it.badgeKey ? badges[it.badgeKey] : 0;
+                  const onClick = it.comingSoon
+                    ? () => { toast(`${it.label} is coming soon — we're building it with care. 🌱`, { icon: '✨' }); setDrawer(false); }
+                    : () => go(it.id);
                   return (
-                    <button key={it.id} className={`nav-item ${tab === it.id ? 'active' : ''}`} onClick={() => go(it.id)}>
+                    <button key={it.id} className={`nav-item ${tab === it.id ? 'active' : ''}`} onClick={onClick}>
                       <Icon size={17} strokeWidth={2} />
                       <span>{it.label}</span>
-                      {count > 0 && <span className="badge">{count}</span>}
+                      {it.comingSoon && <span className="soon-badge">Soon</span>}
+                      {!it.comingSoon && count > 0 && <span className="badge">{count}</span>}
                     </button>
                   );
                 })}
@@ -3954,7 +4122,7 @@ export default function LucaPassport() {
                   <Pill tone="mint" icon={ShieldCheck}>{SOLARIS_ROLE_LABEL[effectiveRole] || roleLabel(role)}</Pill>
                 </div>
               } />
-            <TabPage tab={tab} user={user} go={go} effectiveRole={effectiveRole} onUnread={(n) => setBadges((b) => ({ ...b, messages: n }))} onBecomeProvider={() => setShowApplication(true)} onApprovalStats={(s) => setBadges((b) => ({ ...b, approvals: s.pending || 0 }))} onBookings={(n) => setBadges((b) => ({ ...b, bookings: n }))} />
+            <TabPage tab={tab} user={user} go={go} effectiveRole={effectiveRole} onUnread={(n) => setBadges((b) => ({ ...b, messages: n }))} onInboxUnread={(n) => setBadges((b) => ({ ...b, inbox: n }))} onBecomeProvider={() => setShowApplication(true)} onApprovalStats={(s) => setBadges((b) => ({ ...b, approvals: s.pending || 0 }))} onBookings={(n) => setBadges((b) => ({ ...b, bookings: n }))} />
           </main>
         </div>
       </div>

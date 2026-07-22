@@ -50,6 +50,7 @@ const lucaPractitionerRoutes = require('./routes/luca-practitioner');
 const consentRoutes = require('./routes/consent');
 const providerPatientsRoutes = require('./routes/provider/patients');
 const publicRoutes = require('./routes/public');
+const intakeRoutes = require('./routes/intake');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -200,6 +201,7 @@ app.use('/api/journal', journalRoutes);
 app.use('/api/audio', audioRoutes);
 app.use('/api/health-documents', healthDocumentsRoutes);
 app.use('/api/public', publicRoutes); // public practitioner directory (no auth)
+app.use('/api/intake', intakeRoutes); // new-patient intake forms + patient inbox
 
 // Error handler
 app.use((err, req, res, next) => {

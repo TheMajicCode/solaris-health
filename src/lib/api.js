@@ -411,6 +411,22 @@ class ApiClient {
   followUpDraft(id) { return this.followUp(id, 'draft'); }
   followUpApprove(id, draft) { return this.followUp(id, 'approve', draft); }
   followUpSend(id) { return this.followUp(id, 'send'); }
+
+  // ---- Solaris: new-patient intake forms ----
+  getIntakeTemplates() { return this.request('/intake/templates'); }
+  getIntakeTemplate(id) { return this.request(`/intake/templates/${id}`); }
+  getMyIntakeSubmissions() { return this.request('/intake/my-submissions'); }
+  getIntakeSubmission(id) { return this.request(`/intake/submissions/${id}`); }
+  submitIntake(payload) { return this.request('/intake/submit', { method: 'POST', body: JSON.stringify(payload) }); }
+  reviewIntake(id, notes) { return this.request(`/intake/submissions/${id}/review`, { method: 'PUT', body: JSON.stringify({ notes }) }); }
+  getProviderPatientIntake(patientId) { return this.request(`/intake/provider/${patientId}`); }
+  getIntakeSettings() { return this.request('/intake/settings'); }
+  saveIntakeSettings(payload) { return this.request('/intake/settings', { method: 'PUT', body: JSON.stringify(payload) }); }
+
+  // ---- Solaris: patient inbox ----
+  getInbox() { return this.request('/intake/inbox'); }
+  getInboxUnreadCount() { return this.request('/intake/inbox/unread-count'); }
+  markInboxRead(id) { return this.request(`/intake/inbox/${id}/read`, { method: 'PUT', body: JSON.stringify({}) }); }
 }
 
 export const api = new ApiClient();

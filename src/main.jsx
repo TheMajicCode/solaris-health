@@ -7,6 +7,7 @@ import Auth from './flows/Auth.jsx'
 import Assessment from './flows/Assessment.jsx'
 import LucaPassport from './components/LucaPassport.jsx'
 import FindPractitioner from './pages/FindPractitioner.jsx'
+import IntakeForm from './components/IntakeForm.jsx'
 import { Toaster } from 'react-hot-toast'
 import './index.css'
 
@@ -56,6 +57,8 @@ function Root() {
     return <FindPractitioner />;
   }
 
+  const onIntake = typeof window !== 'undefined' && window.location.pathname === '/intake';
+
   if (loading) {
     return (
       <div className="sol-bg" style={{ minHeight: '100vh' }}>
@@ -71,6 +74,11 @@ function Root() {
   // Not authenticated → cinematic onboarding then auth
   if (!user) {
     return authView === 'auth' ? <Auth /> : <Onboarding />;
+  }
+
+  // New-patient intake form (deep link from the inbox CTA)
+  if (onIntake) {
+    return <IntakeForm />;
   }
 
   // Any new user must complete (or skip) the Solaris Method assessment first

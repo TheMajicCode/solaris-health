@@ -9,6 +9,7 @@ const { authMiddleware } = require('../../middleware/auth');
 const { createNotification } = require('../../lib/notifications');
 const { sendBookingEmail } = require('../../lib/booking-emails');
 const { processGPSSplit } = require('../../lib/gps-engine');
+const { onBookingConfirmed } = require('../../lib/intake-messages');
 
 const router = express.Router();
 
@@ -141,6 +142,8 @@ router.put('/:id/confirm', authMiddleware, (req, res) => transition(req, res, {
       { bookingId: b.id, role: 'patient' });
     await sendBookingEmail({ userId: b.patient_id, toEmail: b.patient_email, template: 'booking_confirmed',
       vars: { businessName: b.business_name, serviceName: b.service_name, date: b.booking_date, startTime: b.start_time, endTime: b.end_time, address: b.address } });
+    // Solaris inbox: confirmation message + first-booking intake request.
+    await onBookingConfirmed(b);
   },
 }));
 

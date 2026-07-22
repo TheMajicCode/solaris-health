@@ -13,6 +13,7 @@ import {
   Loader2, Store, Star, Calendar, BarChart3, Eye, EyeOff, MapPin, Settings as SettingsIcon,
   CheckCircle2, Clock, TrendingUp, MessageSquare, CalendarClock, Coins,
   Bot, Users, Music, Upload, Send, ShieldCheck, ArrowLeft, X, User as UserIcon,
+  ClipboardList, FileText,
 } from 'lucide-react';
 import { api } from '../../lib/api.js';
 import ProviderBookings from './ProviderBookings.jsx';
@@ -210,7 +211,89 @@ function SettingsView({ user }) {
         <div className="mp-set-row"><span>Approved on</span><b>{user?.providerApprovedAt ? new Date(user.providerApprovedAt).toLocaleDateString() : '—'}</b></div>
         <div className="mp-set-row"><span>Commission</span><b>10% per booking</b></div>
       </div>
+      <IntakeSettings />
       <div className="mp-note"><Clock size={15} /> To edit listing details, open a listing from <b>Listings</b>. Need to add another practice? Apply again from “Become a Provider”.</div>
+    </div>
+  );
+}
+
+/* ---------------------- New-patient intake settings --------------------- */
+function IntakeSettings() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [templates, setTemplates] = useState([]);
+  const [enabled, setEnabled] = useState(true);
+  const [templateId, setTemplateId] = useState('');
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const [t, s] = await Promise.all([
+          api.getIntakeTemplates().catch(() => ({ templates: [] })),
+          api.getIntakeSettings().catch(() => ({ settings: {} })),
+        ]);
+        if (!alive) return;
+        setTemplates(t.templates || []);
+        const st = s.settings || {};
+        setEnabled(st.send_intake_on_first_booking !== false);
+        setTemplateId(st.preferred_template_id ? String(st.preferred_template_id) : '');
+        setMessage(st.custom_message || '');
+      } finally { if (alive) setLoading(false); }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const save = async () => {
+    setSaving(true); setSaved(false);
+    try {
+      await api.saveIntakeSettings({
+        sendIntakeOnFirstBooking: enabled,
+        preferredTemplateId: templateId ? Number(templateId) : null,
+        customMessage: message.trim() || null,
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="mp-card">
+      <div className="mp-card-h"><ClipboardList size={15} /> New-patient intake</div>
+      {loading ? (
+        <div className="mp-loading"><Loader2 className="mp-spin" size={18} /> Loading…</div>
+      ) : (
+        <>
+          <label className="mp-toggle-row">
+            <span>
+              <b>Send an intake form on a patient's first booking</b>
+              <em>When you confirm a new patient's first session, they'll receive a warm request to complete your intake form.</em>
+            </span>
+            <button type="button" className={`mp-switch ${enabled ? 'on' : ''}`} onClick={() => setEnabled((v) => !v)} aria-pressed={enabled}>
+              <span className="mp-switch-dot" />
+            </button>
+          </label>
+
+          <div className="mp-field">
+            <label><FileText size={13} /> Intake form template</label>
+            <select value={templateId} onChange={(e) => setTemplateId(e.target.value)} disabled={!enabled}>
+              <option value="">General Wellness (default)</option>
+              {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+
+          <div className="mp-field">
+            <label><MessageSquare size={13} /> Personal message (optional)</label>
+            <textarea rows={3} placeholder="Add a warm, personal note to accompany the intake request. Leave blank to use the default Solaris message." value={message} onChange={(e) => setMessage(e.target.value)} disabled={!enabled} />
+          </div>
+
+          <button className="mp-save-btn" onClick={save} disabled={saving}>
+            {saving ? <><Loader2 className="mp-spin" size={15} /> Saving…</> : saved ? <><CheckCircle2 size={15} /> Saved</> : 'Save intake settings'}
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -643,6 +726,22 @@ const CSS = `
 .luca .mp-set-row:last-child{border-bottom:none}
 .luca .mp-set-row span{color:var(--muted)}.luca .mp-set-row b{color:var(--ink);display:flex;align-items:center;gap:5px}
 .luca .mp-ok{color:var(--teal-d) !important}
+
+/* ---- Intake settings ---- */
+.luca .mp-toggle-row{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:4px 0 14px;border-bottom:1px dashed var(--line);margin-bottom:14px}
+.luca .mp-toggle-row span{display:flex;flex-direction:column;gap:3px}
+.luca .mp-toggle-row b{font-size:13.5px;color:var(--ink)}
+.luca .mp-toggle-row em{font-size:12px;color:var(--muted);font-style:normal;line-height:1.45}
+.luca .mp-switch{flex:0 0 auto;width:44px;height:26px;border-radius:999px;border:1px solid var(--line);background:var(--surface-2);position:relative;cursor:pointer;transition:all .16s;margin-top:2px}
+.luca .mp-switch.on{background:var(--teal-d);border-color:var(--teal-d)}
+.luca .mp-switch-dot{position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:999px;background:#fff;transition:all .16s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.luca .mp-switch.on .mp-switch-dot{left:20px}
+.luca .mp-field{margin-bottom:14px}
+.luca .mp-field label{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--ink);margin-bottom:6px}
+.luca .mp-field select,.luca .mp-field textarea{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:var(--r-sm);padding:10px 12px;font-size:13.5px;font-family:inherit;color:var(--ink);background:var(--surface)}
+.luca .mp-field select:disabled,.luca .mp-field textarea:disabled{opacity:.55}
+.luca .mp-save-btn{display:inline-flex;align-items:center;gap:7px;background:var(--teal-d);color:#fff;border:0;border-radius:var(--r-sm);padding:10px 18px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit}
+.luca .mp-save-btn:disabled{opacity:.65;cursor:default}
 
 /* ---- LUCA Copilot ---- */
 .luca .mp-copilot{display:flex;flex-direction:column;height:min(620px,70vh);border:1px solid var(--line);border-radius:var(--r);background:var(--surface);overflow:hidden}
