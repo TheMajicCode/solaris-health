@@ -220,11 +220,30 @@ Full instructions: **[docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md)**.
 
 | Role | Email | Password | Experience |
 |------|-------|----------|------------|
-| **Patient** | `sarah@solaris.health` | `demo123` | Onboarding → Solaris Method → Passport, Timeline, Trends, Wallet |
+| **Member (Patient)** | `sarah@solaris.health` | `demo123` | Onboarding → Solaris Method → Passport, Timeline, Trends, Journal, Media, LUCA coach |
 | **Practitioner** | `elena@solaris.health` | `demo123` | Practitioner portal — profile, listings, bookings |
 | **Admin** | `admin@solaris.health` | `demo123` | Admin console — stats, users, listing approvals |
+| **Clinic Admin** | `aura@solaris.health` | `demo123` | Aura node admin — clinic-side flows |
 
 > Passwords are seed defaults — change them before any real deployment.
+
+---
+
+## Seeding & Resetting Demo Data
+
+The showcase members (Sarah, Carolina) are populated with realistic activity — 30 days of
+check-ins, journal reflections, unlocked audio, an assessment — by the idempotent seed script.
+
+```bash
+# from backend/  (or: docker exec luca-passport-backend-1 npm run seed)
+npm run seed                                   # seed both showcase accounts (safe to re-run)
+npm run seed:reset                             # hard-reset + reseed ALL showcase accounts
+npm run seed:reset -- --email=sarah@solaris.health   # hard-reset + reseed one member
+```
+
+`seed:reset` wipes **all of a member's generated data** — check-ins, journal, audio unlocks,
+rewards, LUCA messages, assessment, and bookings — then reseeds a fresh, coherent picture.
+It never touches the `users` row, so the login stays valid.
 
 ---
 

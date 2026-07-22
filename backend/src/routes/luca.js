@@ -17,8 +17,44 @@ const express = require('express');
 const db = require('../db');
 const { authMiddleware } = require('../middleware/auth');
 const { getAIProvider } = require('../lib/ai');
+const { computeTriggers, buildTriggerInstructions } = require('../lib/luca-triggers');
 
 const router = express.Router();
+
+// Grounding knowledge injected before all per-call instructions so LUCA knows
+// what Solaris *is* before reasoning about this member's data.
+const ORIENTATION_PACK = `## SOLARIS ORIENTATION PACK
+### WHO YOU ARE IN THIS CONTEXT
+You are LUCA, the in-app guide for this member's Solaris journey. You have consented access to this member's own Passport data — vitality score, Mind/Body/Heart/Spirit scores, check-ins, journal streaks, bookings, and LOVE points — and you should use it naturally, the way a knowledgeable friend would. You never see other members' data. You never diagnose, prescribe, or clinically interpret results. Anything clinical routes to a licensed practitioner. You are on the member's side, always.
+
+### WHAT SOLARIS IS
+Solaris is a network of independent health and wellbeing practitioners. Two commitments define it: members own their health information, and the value created by care flows back to the people who created it — not to intermediaries. The first active node is Aura Holistic Dental, San Salvador, El Salvador.
+
+### THE DIGITAL SOVEREIGN PASSPORT
+Every account starts as a member. The digital sovereign passport is a portable identity their records, consents, credentials, and journey attach to. It follows them, not their clinic. The member controls access. Export is always available. Deletion means deletion.
+
+### THE JOURNEY MODEL
+Solaris organises around journeys — Heal, Learn, Earn, Contribute — not individual appointments. Four movements, in any order. Clinical sequencing — what treatment in what order — belongs to a licensed practitioner. Never cross that line.
+
+### LOVE POINTS
+Recognition for check-ins, journal entries, learning, referrals, contributions. Encouragement, never pressure. Celebrate streaks warmly.
+
+### THE EIGHT CURATED JOURNEYS
+Match by what the member describes, never by diagnosis:
+1. Smile Journey — dental health, confidence, care coordination
+2. Detox & Heavy Metal Release — supported cellular cleansing
+3. Optimal Health — a baseline reset across Mind, Body, Heart, Spirit
+4. Menopause Journey — hormone transition, symptom navigation
+5. Thyroid Balance — energy, metabolism, thyroid-related wellbeing
+6. Sugar Balance — blood sugar regulation, energy stability
+7. Nurture Mama — prenatal, postnatal, early-motherhood wellbeing
+8. Your Path — for members whose goal doesn't fit a named journey
+
+### ESSENTIAL GLOSSARY
+Sovereign Passport: portable identity holding records, consents, credentials — theirs, not the clinic's.
+LOVE points: recognition for showing up, contributing, progressing.
+Vault/Export: everything, in one file, open formats, on demand.
+`;
 
 // ── Abacus Custom Chatbot (retired from in-app flow; kept for a future public widget) ──
 // deploymentToken and deploymentId are non-secret routing values (safe as constants).
@@ -26,7 +62,7 @@ const router = express.Router();
 // const ABACUS_DEPLOYMENT_ID = '324938b78';
 // const ABACUS_CHAT_URL = 'https://api.abacus.ai/api/v0/getChatResponse';
 
-const SYSTEM_PROMPT = `You are LUCA — the Heart-Centered Intelligence guide for the Solaris Sovereign Health Platform.
+const SYSTEM_PROMPT = ORIENTATION_PACK + '\n\n' + `You are LUCA — the Heart-Centered Intelligence guide for the Solaris Sovereign Health Platform.
 
 WHAT YOU KNOW:
 At the start of every conversation, you receive a [PASSPORT CONTEXT] block containing this user's real health data from their Solaris Passport: their name, vitality score, focus areas, recent daily check-ins (sleep, energy, mood, hydration, movement), LOVE points, and recent activity. USE THIS DATA. It is real. Reference it directly and specifically. Never say you can't see their health data — you have it.
@@ -52,11 +88,24 @@ TONE: warm, sovereign, grounded. Speak like a trusted health advisor who actuall
 
 SAFETY: If someone describes symptoms that need clinical attention, be warm but clear: guide them to a licensed practitioner and offer to help them find one in the Solaris network. Never minimize urgent concerns.
 
-FOLLOW-UP SUGGESTIONS: After your reply, always add 2-3 short follow-up prompts the user might tap next. Write them from the USER's point of view (what they'd ask you), each 2-6 words. Output them at the very end of your message inside a fenced block exactly like this:
-\`\`\`suggestions
-["Log today's check-in", "What should I focus on?", "Find a practitioner"]
-\`\`\`
-The suggestions block must be valid JSON array of strings and must be the last thing in your message.`;
+OUTPUT FORMAT (STRICT): Respond with a SINGLE JSON object and nothing else — no markdown fences, no prose before or after it. The object must have exactly these keys:
+{
+  "reply": "your warm, specific message to the member (the full text they read)",
+  "suggestions": [
+    { "label": "short tappable prompt (2-6 words)", "action": "one of the action enum values", "target": "route/id or null" }
+  ]
+}
+Provide 2-3 suggestions. Each suggestion's "action" MUST be exactly one of:
+  navigate | prefill_chat | start_checkin | start_assessment | open_listing | play_audio | curate
+Meaning of each action:
+  - navigate       → move the member to an app section; set "target" to the section id (e.g. "dashboard","explore","media","journal","health","timeline").
+  - prefill_chat   → put the label text into their chat box so they can ask you next; "target": null.
+  - start_checkin  → open the daily check-in; "target": null.
+  - start_assessment → open the Solaris intake/assessment; "target": null.
+  - open_listing   → open a practitioner/listing in the marketplace; "target": null (or a listing id if known).
+  - play_audio     → open the audio library / a Dr. Maya Solis practice; "target": null.
+  - curate         → open a curated journey in the marketplace; "target": null.
+Write labels from the USER's point of view (what they'd tap). The "reply" value is plain text (no JSON, no fences). Return ONLY the JSON object.`;
 
 async function buildContext(userId) {
   const parts = [];
@@ -149,40 +198,79 @@ router.get('/messages', authMiddleware, async (req, res) => {
   res.json({ messages: r.rows });
 });
 
-// Default follow-up chips shown when the model doesn't return any
-const DEFAULT_SUGGESTIONS = [
-  "How is my vitality trending?",
-  "Log today's check-in",
-  "What should I focus on?",
+// Typed action enum LUCA may emit for a suggestion chip
+const ACTION_ENUM = [
+  'navigate',
+  'prefill_chat',
+  'start_checkin',
+  'start_assessment',
+  'open_listing',
+  'play_audio',
+  'curate',
 ];
 
-// Extract a ```suggestions [...] ``` block from the reply; return cleaned text + array
-function extractSuggestions(text) {
-  if (!text) return { reply: text, suggestions: [] };
-  const re = /```suggestions\s*([\s\S]*?)```/i;
-  const m = text.match(re);
-  let suggestions = [];
-  let reply = text;
-  if (m) {
-    reply = text.replace(re, '').trim();
+// Default typed follow-up chips shown when the model doesn't return usable ones
+const DEFAULT_SUGGESTIONS = [
+  { label: 'How is my vitality trending?', action: 'prefill_chat', target: null },
+  { label: "Log today's check-in", action: 'start_checkin', target: null },
+  { label: 'What should I focus on?', action: 'prefill_chat', target: null },
+];
+
+// Normalize + validate a raw suggestion object into {label, action, target}
+function normalizeSuggestion(s) {
+  if (!s || typeof s !== 'object') return null;
+  const label = typeof s.label === 'string' ? s.label.trim() : '';
+  let action = typeof s.action === 'string' ? s.action.trim() : '';
+  if (!label) return null;
+  if (!ACTION_ENUM.includes(action)) action = 'prefill_chat';
+  let target = s.target;
+  if (target === undefined || target === '' ) target = null;
+  if (target != null && typeof target !== 'string') target = String(target);
+  return { label, action, target };
+}
+
+/**
+ * Parse LUCA's raw model output into { reply, suggestions:[{label,action,target}] }.
+ * 1) Try JSON.parse of the whole trimmed string.
+ * 2) Fall back to extracting the first {...} block.
+ * 3) If no `reply` field, treat the whole text as the reply with empty suggestions.
+ * 4) Validate each suggestion (label:string, action in enum).
+ */
+function parseLucaResponse(text) {
+  const raw = typeof text === 'string' ? text.trim() : '';
+  if (!raw) return { reply: '', suggestions: [] };
+
+  const tryParse = (str) => {
     try {
-      const parsed = JSON.parse(m[1].trim());
-      if (Array.isArray(parsed)) {
-        suggestions = parsed
-          .filter((s) => typeof s === 'string' && s.trim())
-          .map((s) => s.trim())
-          .slice(0, 3);
-      }
-    } catch (_) {
-      // Fallback: line-based parse
-      suggestions = m[1]
-        .split('\n')
-        .map((l) => l.replace(/^[-*\d.\[\]"']+\s*/, '').replace(/["',]+$/, '').trim())
-        .filter(Boolean)
-        .slice(0, 3);
+      const obj = JSON.parse(str);
+      return obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : null;
+    } catch {
+      return null;
+    }
+  };
+
+  // strip an accidental ```json ... ``` fence if present
+  let candidate = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  let obj = tryParse(candidate);
+
+  // fall back to the outermost {...} block
+  if (!obj) {
+    const first = candidate.indexOf('{');
+    const last = candidate.lastIndexOf('}');
+    if (first !== -1 && last !== -1 && last > first) {
+      obj = tryParse(candidate.slice(first, last + 1));
     }
   }
-  return { reply, suggestions };
+
+  if (obj && typeof obj.reply === 'string') {
+    const suggestions = Array.isArray(obj.suggestions)
+      ? obj.suggestions.map(normalizeSuggestion).filter(Boolean).slice(0, 3)
+      : [];
+    return { reply: obj.reply.trim(), suggestions };
+  }
+
+  // No valid JSON envelope — the whole text is the reply.
+  return { reply: raw, suggestions: [] };
 }
 
 router.post('/messages', authMiddleware, async (req, res) => {
@@ -195,8 +283,12 @@ router.post('/messages', authMiddleware, async (req, res) => {
     // 1. Persist user message
     await db.query('INSERT INTO luca_messages (user_id, role, content) VALUES ($1,$2,$3)', [userId, 'user', content]);
 
-    // 2. Build rich health context
-    const context = await buildContext(userId);
+    // 2. Build rich health context + per-call rule-engine triggers
+    const passportContext = await buildContext(userId);
+    const triggers = await computeTriggers(userId, content);
+    console.log('[LUCA triggers]', userId, triggers);
+    const triggerHints = buildTriggerInstructions(triggers);
+    const context = triggerHints ? `${triggerHints}\n\n${passportContext}` : passportContext;
 
     // 3. Use AIProvider (cloud mode = VM LLM, never the Abacus RAG bot)
     const ai = getAIProvider();
@@ -209,8 +301,9 @@ router.post('/messages', authMiddleware, async (req, res) => {
       reply = await fallback.complete({ system: SYSTEM_PROMPT, prompt: content, context });
     }
 
-    // 3b. Parse & strip follow-up suggestions from the raw reply
-    const { reply: cleanReply, suggestions: parsedSuggestions } = extractSuggestions(reply);
+    // 3b. Parse the typed JSON envelope (reply + typed suggestions)
+    const { reply: parsedReply, suggestions: parsedSuggestions } = parseLucaResponse(reply);
+    const cleanReply = parsedReply || 'I had trouble responding just now. Please try again in a moment.';
     const suggestions = parsedSuggestions.length ? parsedSuggestions : DEFAULT_SUGGESTIONS;
 
     // 4. Persist assistant reply (cleaned, with provenance)

@@ -13,6 +13,33 @@ export function AppProvider({ children }) {
   const [demoRole, setDemoRole] = useState(null); // null = use real user.role; else overrides for demo
   const [nostrBanner, setNostrBanner] = useState({ show: false, npub: '' });
 
+  // ── Shared LUCA conversation (CoachPage + floating LucaWidget are two views of it) ──
+  const [lucaMessages, setLucaMessages] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem('luca_messages');
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  });
+  const [lucaLoaded, setLucaLoaded] = useState(false);
+
+  // Persist the conversation across navigation within a session
+  useEffect(() => {
+    try { sessionStorage.setItem('luca_messages', JSON.stringify(lucaMessages)); } catch {}
+  }, [lucaMessages]);
+
+  // Load the authoritative history from the API once per session (first time either view mounts)
+  const loadLucaHistory = useCallback(async () => {
+    if (lucaLoaded || !api.token) return;
+    try {
+      const r = await api.getLucaMessages();
+      const rows = r?.messages || [];
+      // Only replace local state if the API actually has history — otherwise keep any
+      // in-session messages already captured (e.g. from a just-sent turn).
+      setLucaMessages((prev) => (rows.length ? rows : prev));
+    } catch {}
+    finally { setLucaLoaded(true); }
+  }, [lucaLoaded]);
+
   const loadUser = useCallback(async () => {
     if (!api.token) { setLoading(false); return; }
     try {
@@ -39,7 +66,13 @@ export function AppProvider({ children }) {
     setUser(user);
     return user;
   };
-  const logout = () => { api.logout(); setUser(null); setProfile(null); setTab('home'); setAuthView('intro'); setDemoRole(null); setNostrBanner({ show: false, npub: '' }); };
+  const logout = () => {
+    api.logout();
+    setUser(null); setProfile(null); setTab('home'); setAuthView('intro'); setDemoRole(null);
+    setNostrBanner({ show: false, npub: '' });
+    setLucaMessages([]); setLucaLoaded(false);
+    try { sessionStorage.removeItem('luca_messages'); } catch {}
+  };
 
   const refreshUser = async () => {
     const { user, profile } = await api.getMe();
@@ -51,6 +84,7 @@ export function AppProvider({ children }) {
       user, profile, loading, tab, setTab, authView, setAuthView,
       login, register, logout, refreshUser, setUser, setProfile,
       demoRole, setDemoRole, nostrBanner, setNostrBanner,
+      lucaMessages, setLucaMessages, lucaLoaded, loadLucaHistory,
     }}>
       {children}
     </AppContext.Provider>

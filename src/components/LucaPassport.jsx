@@ -1018,24 +1018,45 @@ const CHIP_BG = ['#E7F5F1', '#FBF3DC', '#E7F1F7'];
 const CHIP_TEXT = ['#1B5E52', '#7A5B0B', '#1A4A5E'];
 const CHIP_BORDER = ['#B7E4D8', '#EDD79B', '#B7D7E7'];
 
-/* Colored follow-up chips rendered under an assistant bubble */
-function LucaChips({ suggestions, onPick, disabled }) {
+/* Colored follow-up chips rendered under an assistant bubble.
+   Suggestions are typed objects: { label, action, target }. */
+function LucaChips({ suggestions, onAction, disabled }) {
   if (!suggestions || !suggestions.length) return null;
   return (
     <div className="luca-chips">
-      {suggestions.map((s, i) => (
-        <button
-          key={s + i}
-          className="luca-chip"
-          disabled={disabled}
-          onClick={() => onPick(s)}
-          style={{ background: CHIP_BG[i % 3], color: CHIP_TEXT[i % 3], borderColor: CHIP_BORDER[i % 3] }}
-        >
-          <Sparkles size={12} strokeWidth={2.4} />{s}
-        </button>
-      ))}
+      {suggestions.map((s, i) => {
+        const label = typeof s === 'string' ? s : s?.label;
+        if (!label) return null;
+        return (
+          <button
+            key={label + i}
+            className="luca-chip"
+            disabled={disabled}
+            onClick={() => onAction(typeof s === 'string' ? { label: s, action: 'prefill_chat', target: null } : s)}
+            style={{ background: CHIP_BG[i % 3], color: CHIP_TEXT[i % 3], borderColor: CHIP_BORDER[i % 3] }}
+          >
+            <Sparkles size={12} strokeWidth={2.4} />{label}
+          </button>
+        );
+      })}
     </div>
   );
+}
+
+/* Map a typed LUCA suggestion to an in-app effect. */
+function executeChipAction(suggestion, { go, setInput, send }) {
+  const s = typeof suggestion === 'string' ? { label: suggestion, action: 'prefill_chat', target: null } : (suggestion || {});
+  const { action, target, label } = s;
+  switch (action) {
+    case 'navigate': go(target || 'dashboard'); break;
+    case 'start_checkin': go('health'); break;
+    case 'start_assessment': go('health'); break;
+    case 'open_listing': go('explore'); break;
+    case 'play_audio': go('media'); break;
+    case 'curate': go('explore'); break;
+    case 'prefill_chat': setInput(label || ''); break;
+    default: send(label || ''); break;
+  }
 }
 
 /* LUCA avatar — teal gradient orb with a glowing ring */
@@ -1045,30 +1066,24 @@ const LucaAvatar = ({ size = 'md' }) => (
   </div>
 );
 
-function CoachPage({ user }) {
-  const [messages, setMessages] = useState([]);
+function CoachPage({ user, go }) {
+  const { lucaMessages: messages, setLucaMessages: setMessages, lucaLoaded, loadLucaHistory } = useApp();
   const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [degraded, setDegraded] = useState(false);
   const [latest, setLatest] = useState(null);
   const endRef = useRef(null);
+  const loading = !lucaLoaded;
 
   useEffect(() => {
     let alive = true;
+    loadLucaHistory();
     (async () => {
-      try {
-        const [r, l] = await Promise.all([
-          api.getLucaMessages().catch(() => ({ messages: [] })),
-          api.getLatestAssessment().catch(() => null),
-        ]);
-        if (!alive) return;
-        setMessages(r?.messages || []);
-        setLatest(l);
-      } finally { alive && setLoading(false); }
+      const l = await api.getLatestAssessment().catch(() => null);
+      if (alive) setLatest(l);
     })();
     return () => { alive = false; };
-  }, []);
+  }, [loadLucaHistory]);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, sending]);
 
   const send = async (text) => {
@@ -1132,7 +1147,7 @@ function CoachPage({ user }) {
                   <div className={`msg-bubble ${isUser ? 'user' : 'ai'}`}>{m.content}</div>
                   {m.created_at && <div className={`msg-time ${isUser ? '' : 'ai-time'}`}>{msgTime(m.created_at)}</div>}
                   {!isUser && i === messages.length - 1 && !sending && (
-                    <LucaChips suggestions={m.suggestions} onPick={send} disabled={sending} />
+                    <LucaChips suggestions={m.suggestions} onAction={(s) => executeChipAction(s, { go, setInput, send })} disabled={sending} />
                   )}
                 </div>
               </div>
@@ -2537,26 +2552,18 @@ function EconomicPassportPage({ user }) {
 
 /* ============================== PAGE ROUTER ============================== */
 /* ============================== LUCA FLOATING WIDGET ============================== */
-function LucaWidget({ user, hidden }) {
+function LucaWidget({ user, hidden, go }) {
+  const { lucaMessages: messages, setLucaMessages: setMessages, lucaLoaded, loadLucaHistory } = useApp();
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
-  const [loaded, setLoaded] = useState(false);
   const endRef = useRef(null);
+  const loading = open && !lucaLoaded;
 
-  // Lazy-load history the first time the panel is opened
+  // Lazy-load the shared history the first time the panel is opened
   useEffect(() => {
-    if (!open || loaded) return;
-    setLoading(true);
-    (async () => {
-      try {
-        const r = await api.getLucaMessages().catch(() => ({ messages: [] }));
-        setMessages(r?.messages || []);
-      } finally { setLoaded(true); setLoading(false); }
-    })();
-  }, [open, loaded]);
+    if (open) loadLucaHistory();
+  }, [open, loadLucaHistory]);
 
   useEffect(() => { if (open) endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, sending, open]);
 
@@ -2623,7 +2630,7 @@ function LucaWidget({ user, hidden }) {
                   <div style={{ minWidth: 0, maxWidth: '84%' }}>
                     <div className={`msg-bubble ${isUser ? 'user' : 'ai'}`} style={{ fontSize: 13 }}>{m.content}</div>
                     {!isUser && i === messages.length - 1 && !sending && (
-                      <LucaChips suggestions={m.suggestions} onPick={send} disabled={sending} />
+                      <LucaChips suggestions={m.suggestions} onAction={(s) => executeChipAction(s, { go, setInput, send })} disabled={sending} />
                     )}
                   </div>
                 </div>
@@ -2666,7 +2673,7 @@ function TabPage({ tab, user, go, effectiveRole, onUnread, onBecomeProvider, onA
     case 'explore': return <ErrorBoundary><ExploreMarketplace user={user} onBecomeProvider={onBecomeProvider} /></ErrorBoundary>;
     case 'health': return <HealthPassportPage user={user} go={go} />;
     case 'timeline': return <TimelinePage user={user} />;
-    case 'coach': return <CoachPage user={user} />;
+    case 'coach': return <CoachPage user={user} go={go} />;
     case 'journal': return <ErrorBoundary><JournalPage user={user} /></ErrorBoundary>;
     case 'media': return <ErrorBoundary><MediaPage user={user} go={go} /></ErrorBoundary>;
     case 'appointments': return <AppointmentsPage user={user} />;
@@ -2892,7 +2899,7 @@ export default function LucaPassport() {
       </div>
 
       {/* Floating LUCA assistant — available everywhere except the full Coach page */}
-      <LucaWidget user={user} hidden={tab === 'coach'} />
+      <LucaWidget user={user} hidden={tab === 'coach'} go={go} />
 
       {showApplication && (
         <ProviderApplication

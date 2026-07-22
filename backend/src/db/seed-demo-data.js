@@ -1,16 +1,37 @@
 /*
- * seed-demo-data.js — Populate the two showcase accounts with realistic activity.
+ * seed-demo-data.js — Populate the showcase accounts with realistic activity.
  *
- * Idempotent: safe to run multiple times. For the two showcase accounts it clears
- * their check-ins, journal entries, and audio unlocks, then reseeds a fresh,
- * coherent picture (30 days of check-ins, journal reflections, unlocked audio).
+ * Idempotent: safe to run multiple times. For each showcase account it clears the
+ * member's activity (check-ins, journal, audio unlocks) and reseeds a fresh, coherent
+ * picture (30 days of check-ins, journal reflections, unlocked audio).
  *
- * Run:  docker exec luca-passport-backend-1 node src/db/seed-demo-data.js
+ * USAGE
+ *   Seed both showcase accounts (default, idempotent):
+ *     node src/db/seed-demo-data.js
+ *     npm run seed
+ *
+ *   Hard reset a single member and reseed them (wipes ALL of their generated data —
+ *   check-ins, journal, audio, rewards, LUCA messages, assessment, bookings — but
+ *   never the users row):
+ *     node src/db/seed-demo-data.js --reset --email=sarah@solaris.health
+ *     npm run seed:reset -- --email=sarah@solaris.health
+ *
+ *   Hard reset ALL showcase accounts:
+ *     node src/db/seed-demo-data.js --reset
+ *     npm run seed:reset
+ *
+ * Run inside Docker:
+ *   docker exec luca-passport-backend-1 node src/db/seed-demo-data.js
  */
 const db = require('../db');
 
 const SARAH_EMAIL = 'sarah@solaris.health';
 const CARO_EMAIL = 'caroumanzorsv@gmail.com';
+
+// ---- CLI args ----
+const ARGV = process.argv.slice(2);
+const RESET = ARGV.includes('--reset');
+const EMAIL_ARG = (ARGV.find((a) => a.startsWith('--email=')) || '').split('=')[1] || null;
 
 // ---- helpers ----
 const rand = (min, max) => Math.round(min + Math.random() * (max - min));
@@ -28,10 +49,31 @@ async function getUser(email) {
   return rows[0] || null;
 }
 
+// Light clear used on every seed run so re-seeding produces a fresh, coherent picture
+// (does NOT touch assessment/bookings/rewards/messages that a member may have built up).
 async function clearFor(userId) {
   await db.query('DELETE FROM daily_checkins WHERE user_id=$1', [userId]);
   await db.query('DELETE FROM journal_entries WHERE user_id=$1', [userId]);
   await db.query('DELETE FROM user_audio WHERE user_id=$1', [userId]);
+}
+
+// Hard reset (--reset): wipe ALL of a member's generated data — never the users row.
+async function resetFull(userId) {
+  const tables = [
+    'daily_checkins',
+    'journal_entries',
+    'user_audio',
+    'reward_events',
+    'luca_messages',
+    'recommendations',       // FK → assessment_responses; must be cleared first
+    'assessment_responses',
+    'booking_requests',
+  ];
+  for (const t of tables) {
+    await db.query(`DELETE FROM ${t} WHERE user_id=$1`, [userId]).catch((e) => {
+      console.warn(`  ! could not clear ${t}: ${e.message}`);
+    });
+  }
 }
 
 async function seedCheckins(userId, days) {
@@ -109,37 +151,57 @@ const CARO_JOURNAL = [
   { daysBack: 12, mood: 'great', content: "Felt genuinely rested this morning. The evening audio practice is a keeper. Recommending the free tracks to a few of my own clients." },
 ];
 
+async function seedSarah(user) {
+  await db.query(`UPDATE users SET onboarding_status='complete', updated_at=NOW() WHERE id=$1`, [user.id]);
+  if (RESET) await resetFull(user.id);
+  await clearFor(user.id);
+  await ensureAssessment(user.id, [
+    { name: 'Energy & Vitality' }, { name: 'Sleep' }, { name: 'Stress & Nervous System' },
+  ]);
+  await seedCheckins(user.id, 30);
+  await seedJournal(user.id, SARAH_JOURNAL);
+  const n = await unlockTracks(user.id, 3);
+  console.log(`✓ Sarah: onboarding complete, 30 check-ins, ${SARAH_JOURNAL.length} journal entries, ${n} audio tracks unlocked`);
+}
+
+async function seedCaro(user) {
+  await db.query(`UPDATE users SET onboarding_status='complete', updated_at=NOW() WHERE id=$1`, [user.id]);
+  if (RESET) await resetFull(user.id);
+  await clearFor(user.id);
+  await seedJournal(user.id, CARO_JOURNAL);
+  const n = await unlockTracks(user.id, 2);
+  console.log(`✓ Carolina: onboarding complete, ${CARO_JOURNAL.length} journal entries, ${n} audio tracks unlocked`);
+}
+
+// Fallback for resetting/seeding any other member by email.
+async function seedGenericMember(user, email) {
+  await db.query(`UPDATE users SET onboarding_status='complete', updated_at=NOW() WHERE id=$1`, [user.id]);
+  if (RESET) await resetFull(user.id);
+  await clearFor(user.id);
+  await ensureAssessment(user.id, [{ name: 'Optimal Health' }, { name: 'Energy & Vitality' }]);
+  await seedCheckins(user.id, 14);
+  const n = await unlockTracks(user.id, 2);
+  console.log(`✓ ${email}: onboarding complete, 14 check-ins, ${n} audio tracks unlocked`);
+}
+
+const SEEDERS = { [SARAH_EMAIL]: seedSarah, [CARO_EMAIL]: seedCaro };
+
+async function seedOne(email) {
+  const user = await getUser(email);
+  if (!user) { console.warn(`! ${email} not found — skipping`); return; }
+  const fn = SEEDERS[email] || ((u) => seedGenericMember(u, email));
+  await fn(user);
+}
+
 async function main() {
-  console.log('Seeding showcase data…');
-
-  // ---- Sarah ----
-  const sarah = await getUser(SARAH_EMAIL);
-  if (!sarah) {
-    console.warn(`! ${SARAH_EMAIL} not found — skipping`);
+  if (EMAIL_ARG) {
+    console.log(`${RESET ? 'Resetting + reseeding' : 'Seeding'} ${EMAIL_ARG}…`);
+    await seedOne(EMAIL_ARG);
   } else {
-    await db.query(`UPDATE users SET onboarding_status='complete', updated_at=NOW() WHERE id=$1`, [sarah.id]);
-    await clearFor(sarah.id);
-    await ensureAssessment(sarah.id, [
-      { name: 'Energy & Vitality' }, { name: 'Sleep' }, { name: 'Stress & Nervous System' },
-    ]);
-    await seedCheckins(sarah.id, 30);
-    await seedJournal(sarah.id, SARAH_JOURNAL);
-    const n = await unlockTracks(sarah.id, 3);
-    console.log(`✓ Sarah: onboarding complete, 30 check-ins, ${SARAH_JOURNAL.length} journal entries, ${n} audio tracks unlocked`);
+    console.log(`${RESET ? 'Resetting + reseeding' : 'Seeding'} showcase data…`);
+    await seedOne(SARAH_EMAIL);
+    await seedOne(CARO_EMAIL);
   }
-
-  // ---- Carolina ----
-  const caro = await getUser(CARO_EMAIL);
-  if (!caro) {
-    console.warn(`! ${CARO_EMAIL} not found — skipping`);
-  } else {
-    await db.query(`UPDATE users SET onboarding_status='complete', updated_at=NOW() WHERE id=$1`, [caro.id]);
-    await clearFor(caro.id);
-    await seedJournal(caro.id, CARO_JOURNAL);
-    const n = await unlockTracks(caro.id, 2);
-    console.log(`✓ Carolina: onboarding complete, ${CARO_JOURNAL.length} journal entries, ${n} audio tracks unlocked`);
-  }
-
   console.log('Done.');
 }
 

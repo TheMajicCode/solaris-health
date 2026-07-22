@@ -4,7 +4,8 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "seed": "node seed.js",
+    "seed": "node src/db/seed-demo-data.js",
+    "seed:reset": "node src/db/seed-demo-data.js --reset",
     "test": "jest --runInBand --forceExit",
     "test:coverage": "jest --runInBand --forceExit --coverage",
     "test:watch": "jest --watch",

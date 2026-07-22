@@ -25,6 +25,7 @@ const express = require('express');
 const db = require('../db');
 const { authMiddleware } = require('../middleware/auth');
 const { getAIProvider } = require('../lib/ai');
+const { computeTriggers, buildTriggerInstructions } = require('../lib/luca-triggers');
 
 const router = express.Router();
 
@@ -139,14 +140,38 @@ function buildListingsString(listings) {
     .join('\n');
 }
 
-/** Rules-based fallback used when the AI is unavailable or returns unusable output. */
-function fallbackRecommendation(ctx, listings) {
+/** Rules-based fallback used when the AI is unavailable or returns unusable output.
+ *  Uses the shared trigger engine so the fallback cards follow the same rules the coach does. */
+function fallbackRecommendation(ctx, listings, triggers = {}) {
   const topFocus = ctx.focus[0] || 'rest and recovery';
-  const nextStep = {
-    title: 'A gentle reset today',
-    description: `Take five slow breaths and a short walk to support your ${topFocus.toLowerCase()}. Small, steady steps move vitality the fastest.`,
-    action: 'Try this today: pause for 3 minutes of calm breathing after lunch.',
-  };
+
+  // Trigger-driven next step (same priority order as buildTriggerInstructions)
+  let nextStep;
+  if (triggers.onboardingIncomplete) {
+    nextStep = {
+      title: 'Complete your Solaris intake',
+      description: 'Finish your intake so LUCA can tailor your journey to what matters most to you.',
+      action: 'Complete my Solaris intake',
+    };
+  } else if (triggers.daysSinceCheckin != null && triggers.daysSinceCheckin >= 3) {
+    nextStep = {
+      title: 'Reconnect with a check-in',
+      description: `It's been ${triggers.daysSinceCheckin} days since your last check-in. A quick one helps LUCA see how you're really doing.`,
+      action: 'Log today\'s check-in',
+    };
+  } else if (triggers.streakDays >= 3) {
+    nextStep = {
+      title: `Keep your ${triggers.streakDays}-day streak alive`,
+      description: `You've checked in ${triggers.streakDays} days running — that consistency is exactly what builds vitality. One more today?`,
+      action: 'Log today\'s check-in',
+    };
+  } else {
+    nextStep = {
+      title: 'A gentle reset today',
+      description: `Take five slow breaths and a short walk to support your ${topFocus.toLowerCase()}. Small, steady steps move vitality the fastest.`,
+      action: 'Try this today: pause for 3 minutes of calm breathing after lunch.',
+    };
+  }
 
   // pick the listing whose focus areas overlap the user's focus areas, else the first
   let match = null;
@@ -256,12 +281,17 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
       }
     }
 
-    // 2-3. Load context + candidate listings
-    const [ctx, listings] = await Promise.all([loadContext(userId), loadListings()]);
+    // 2-3. Load context + candidate listings + shared rule-engine triggers
+    const [ctx, listings, triggers] = await Promise.all([
+      loadContext(userId),
+      loadListings(),
+      computeTriggers(userId),
+    ]);
 
     // 4. Ask LUCA
     const ai = getAIProvider();
-    const contextStr = buildContextString(ctx);
+    const triggerHints = buildTriggerInstructions(triggers);
+    const contextStr = triggerHints ? `${triggerHints}\n\n${buildContextString(ctx)}` : buildContextString(ctx);
     const listingsStr = buildListingsString(listings);
     const prompt = `The person's context and the real listings are provided. Return the two recommendations as strict JSON.\n\nLISTINGS (choose curatedJourney.listingId from these exact ids):\n${listingsStr}`;
 
@@ -279,13 +309,13 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
 
     // 5. Fallback if the AI failed or produced unusable output
     if (!nextStep || !nextStep.title) {
-      const fb = fallbackRecommendation(ctx, listings);
+      const fb = fallbackRecommendation(ctx, listings, triggers);
       nextStep = fb.nextStep;
       if (!journey) journey = decorateJourney(fb.curatedJourney, listings);
       modelId = `${ai.id} (fallback)`;
     } else if (!journey) {
       // valid nextStep but bad/hallucinated listing — patch journey from fallback
-      const fb = fallbackRecommendation(ctx, listings);
+      const fb = fallbackRecommendation(ctx, listings, triggers);
       journey = decorateJourney(fb.curatedJourney, listings);
     }
 
