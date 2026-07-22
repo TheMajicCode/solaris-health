@@ -37,6 +37,35 @@ async function gatherRecord(userId) {
     .catch(() => db.query('SELECT role, content, created_at FROM luca_messages WHERE user_id=$1 ORDER BY created_at ASC', [userId]));
   const cr = await db.query('SELECT * FROM credentials WHERE holder_id=$1 AND deleted_at IS NULL', [userId]).catch(() => ({ rows: [] }));
 
+  // Journal entries (schema: mood, content, created_at — no separate entry_date column)
+  const journal = await db.query(
+    'SELECT mood, content, created_at FROM journal_entries WHERE user_id=$1 ORDER BY created_at DESC LIMIT 30',
+    [userId]
+  ).catch(() => ({ rows: [] }));
+
+  // Health documents (LUCA summaries + metadata; never the raw bytes)
+  const healthDocs = await db.query(
+    'SELECT doc_type, filename, description, luca_summary, created_at FROM health_documents WHERE user_id=$1 ORDER BY created_at DESC',
+    [userId]
+  ).catch(() => ({ rows: [] }));
+
+  // Habit ticks (last 30 days)
+  const habitTicks = await db.query(
+    `SELECT mh.name, mh.icon, ht.tick_date
+     FROM habit_ticks ht JOIN member_habits mh ON mh.id = ht.habit_id
+     WHERE ht.user_id=$1 AND ht.tick_date >= NOW() - INTERVAL '30 days'
+     ORDER BY ht.tick_date DESC`,
+    [userId]
+  ).catch(() => ({ rows: [] }));
+
+  // Unlocked audio practices
+  const audioUnlocks = await db.query(
+    `SELECT al.title, al.description, al.tags_json, ua.unlocked_at
+     FROM user_audio ua JOIN audio_library al ON al.id = ua.audio_id
+     WHERE ua.user_id=$1 ORDER BY ua.unlocked_at DESC`,
+    [userId]
+  ).catch(() => ({ rows: [] }));
+
   return {
     user: {
       id: user.id, email: user.email, full_name: user.full_name, role: user.role,
@@ -46,6 +75,10 @@ async function gatherRecord(userId) {
     contributions: c.rows,
     messages: m.rows,
     credentials: cr.rows,
+    journal: journal.rows,
+    healthDocs: healthDocs.rows,
+    habitTicks: habitTicks.rows,
+    audioUnlocks: audioUnlocks.rows,
   };
 }
 

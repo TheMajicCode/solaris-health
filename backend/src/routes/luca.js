@@ -187,6 +187,95 @@ Latest (${new Date(latest.checkin_date).toLocaleDateString('en-US', { weekday: '
     parts.push(`\n[PASSPORT CONTEXT — RECENT REWARDS]\n${rlist}`);
   }
 
+  // Recent journal entries (last 3) — journal_entries has mood, content, created_at
+  const journal = await db
+    .query(
+      `SELECT mood, content, created_at FROM journal_entries
+       WHERE user_id=$1 ORDER BY created_at DESC LIMIT 3`,
+      [userId]
+    )
+    .catch(() => ({ rows: [] }));
+  if (journal.rows.length) {
+    const jlist = journal.rows
+      .map((e) => {
+        const when = e.created_at
+          ? new Date(e.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+          : '—';
+        const snippet = (e.content || '').replace(/\s+/g, ' ').trim().slice(0, 240);
+        return `  • ${when}${e.mood ? ` (feeling ${e.mood})` : ''}: ${snippet}`;
+      })
+      .join('\n');
+    parts.push(
+      `\n[PASSPORT CONTEXT — RECENT JOURNAL ENTRIES]\nUse these gently for emotional attunement; do not quote them back verbatim unless the member raises them.\n${jlist}`
+    );
+  }
+
+  // Check-in streak (consecutive days ending today or yesterday)
+  const streakRows = await db
+    .query(
+      `SELECT DISTINCT checkin_date FROM daily_checkins
+       WHERE user_id=$1 ORDER BY checkin_date DESC LIMIT 60`,
+      [userId]
+    )
+    .catch(() => ({ rows: [] }));
+  let streak = 0;
+  if (streakRows.rows.length) {
+    const dayMs = 24 * 60 * 60 * 1000;
+    const toDay = (d) => {
+      const x = new Date(d);
+      return Date.UTC(x.getUTCFullYear(), x.getUTCMonth(), x.getUTCDate());
+    };
+    const today = new Date();
+    const todayDay = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+    const dates = streakRows.rows.map((r) => toDay(r.checkin_date));
+    // Anchor: streak counts if most recent check-in is today or yesterday
+    let expected = dates[0];
+    if (todayDay - expected <= dayMs) {
+      streak = 1;
+      for (let i = 1; i < dates.length; i++) {
+        if (expected - dates[i] === dayMs) {
+          streak++;
+          expected = dates[i];
+        } else if (dates[i] === expected) {
+          continue;
+        } else {
+          break;
+        }
+      }
+    }
+  }
+
+  // Habit completion rate (active habits, last 7 days)
+  const habits = await db
+    .query(
+      `SELECT mh.name, mh.icon,
+              COUNT(ht.id) FILTER (WHERE ht.tick_date >= CURRENT_DATE - INTERVAL '6 days') AS ticks_7d
+       FROM member_habits mh
+       LEFT JOIN habit_ticks ht ON ht.habit_id = mh.id AND ht.user_id = mh.user_id
+       WHERE mh.user_id=$1 AND mh.active = true
+       GROUP BY mh.id, mh.name, mh.icon
+       ORDER BY mh.created_at ASC`,
+      [userId]
+    )
+    .catch(() => ({ rows: [] }));
+  if (habits.rows.length || streak > 0) {
+    const lines = [];
+    if (streak > 0) {
+      lines.push(`Check-in streak: ${streak} consecutive day${streak === 1 ? '' : 's'} 🔥`);
+    }
+    if (habits.rows.length) {
+      const hlist = habits.rows
+        .map((h) => {
+          const ticks = parseInt(h.ticks_7d, 10) || 0;
+          const rate = Math.round((ticks / 7) * 100);
+          return `  • ${h.icon ? `${h.icon} ` : ''}${h.name}: ${ticks}/7 days (${rate}%)`;
+        })
+        .join('\n');
+      lines.push(`Active habits (last 7 days):\n${hlist}`);
+    }
+    parts.push(`\n[PASSPORT CONTEXT — HABITS & STREAK]\n${lines.join('\n')}`);
+  }
+
   return parts.join('\n');
 }
 
