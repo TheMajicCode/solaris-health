@@ -851,6 +851,26 @@ function DashboardPage({ user, go }) {
   const [recsLoading, setRecsLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [checkinOpen, setCheckinOpen] = useState(false);
+  const [consentReqs, setConsentReqs] = useState([]);
+  const [consentBusy, setConsentBusy] = useState('');
+
+  const loadConsents = async () => {
+    try {
+      const r = await api.getMyConsentRequests();
+      setConsentReqs((r?.requests || []).filter((c) => c.status === 'pending'));
+    } catch { setConsentReqs([]); }
+  };
+
+  const respondConsent = async (id, grant) => {
+    setConsentBusy(id);
+    try {
+      if (grant) { await api.grantConsent(id); toast.success('Passport access granted.'); }
+      else { await api.revokeConsent(id); toast.success('Request declined.'); }
+      setConsentReqs((reqs) => reqs.filter((c) => c.id !== id));
+    } catch (e) {
+      toast.error(e.message || 'Could not update the request.');
+    } finally { setConsentBusy(''); }
+  };
 
   const reloadDaily = async () => {
     const [r, ci] = await Promise.all([
@@ -876,6 +896,7 @@ function DashboardPage({ user, go }) {
         setContribs(Array.isArray(c) ? c : []); setCheckins(ci?.checkins || []);
       } finally { alive && setLoading(false); }
     })();
+    loadConsents();
     return () => { alive = false; };
   }, []);
 
@@ -934,6 +955,33 @@ function DashboardPage({ user, go }) {
             </div>
           </div>
         </Card>
+
+        {/* Consent requests — a practitioner has asked to view parts of your Passport */}
+        {consentReqs.map((c) => (
+          <Card key={c.id} className="tint" style={{ borderColor: 'var(--gold-line, var(--line))' }}>
+            <div className="row top wrap" style={{ gap: 12, alignItems: 'flex-start' }}>
+              <div className="luca-avatar sm" style={{ background: 'linear-gradient(170deg,#0E5C57,#0A413D)', flex: 'none' }}>
+                <ShieldCheck size={16} color="#DAF3EC" strokeWidth={2.2} />
+              </div>
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <div className="dp f7" style={{ fontSize: 15.5, color: 'var(--ink)' }}>
+                  {c.practitioner_name || c.practitioner_first_name || 'A practitioner'} requests Passport access
+                </div>
+                <div className="small muted" style={{ marginTop: 4, lineHeight: 1.5 }}>
+                  {c.practitioner_listing ? `${c.practitioner_listing} · ` : ''}
+                  They'd like to view your {(c.granted_sections || ['assessment', 'checkins']).join(' & ')}.
+                  You decide — and you can revoke anytime.
+                </div>
+                <div className="row gap-2 wrap" style={{ marginTop: 12 }}>
+                  <Btn variant="primary" onClick={() => respondConsent(c.id, true)} disabled={consentBusy === c.id}>
+                    {consentBusy === c.id ? 'Saving…' : 'Grant access'}
+                  </Btn>
+                  <Btn onClick={() => respondConsent(c.id, false)} disabled={consentBusy === c.id}>Decline</Btn>
+                </div>
+              </div>
+            </div>
+          </Card>
+        ))}
 
         {/* LUCA Recommends */}
         <LucaRecommends recs={recs} loading={recsLoading} go={go} user={user} vitality={vitality} focus={focus} />
@@ -3266,67 +3314,16 @@ function EconomicPassportPage({ user }) {
 }
 
 /* ============================== BECOME A PRACTITIONER ============================== */
-function BecomeAPractitionerModal({ user, onClose }) {
-  const [message, setMessage] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [done, setDone] = useState(false);
-
-  const submit = async () => {
-    setSubmitting(true);
-    try {
-      await api.practitionerInterest({ message: message.trim() || null });
-      setDone(true);
-    } catch (e) {
-      toast.error(e.message || 'Could not register your interest. Please try again.');
-      setSubmitting(false);
-    }
-  };
-
+// "Become a Practitioner" now opens the real provider onboarding wizard
+// (ProviderApplication renders its own full-screen overlay). On success we
+// close and refresh the user so their new provider status takes effect.
+function BecomeAPractitionerModal({ user, onClose, onSubmitted }) {
   return (
-    <div className="ci-overlay" onClick={(e) => { if (e.target === e.currentTarget && !submitting) onClose(); }}>
-      <div className="ci-modal" role="dialog" aria-modal="true" aria-label="Become a Practitioner" style={{ maxWidth: 520 }}>
-        <div className="ci-head">
-          <div className="luca-avatar sm" style={{ background: 'linear-gradient(170deg,#0E5C57,#0A413D)' }}>
-            <Briefcase size={16} color="#DAF3EC" strokeWidth={2.2} />
-          </div>
-          <h3>Join the Solaris Practitioner Network</h3>
-          <button className="ci-x" onClick={onClose} aria-label="Close"><X size={17} /></button>
-        </div>
-        <div className="ci-body">
-          {done ? (
-            <div className="col gap-2" style={{ alignItems: 'center', textAlign: 'center', padding: '18px 6px' }}>
-              <div style={{ fontSize: 34 }}>🌿</div>
-              <div className="dp f7" style={{ fontSize: 17, color: 'var(--ink)' }}>We'll be in touch soon.</div>
-              <div className="small muted" style={{ maxWidth: 380 }}>
-                In the meantime, keep building your Sovereign Passport.
-              </div>
-              <Btn variant="primary" onClick={onClose} style={{ marginTop: 8 }}>Done</Btn>
-            </div>
-          ) : (
-            <>
-              <p className="small" style={{ color: 'var(--ink)', lineHeight: 1.55, margin: 0 }}>
-                Practitioners on Solaris own their tools, their data, and their client relationships.
-                Your full onboarding journey is being crafted — register your interest and we'll reach out personally.
-              </p>
-              <div style={{ marginTop: 14 }}>
-                <div className="ci-eyebrow">Anything you'd like us to know? (optional)</div>
-                <textarea
-                  maxLength={600} value={message} onChange={(e) => setMessage(e.target.value)}
-                  placeholder="Your practice, your modality, what you're hoping to build…"
-                  style={{ marginTop: 8, minHeight: 96 }}
-                />
-              </div>
-              <div className="row gap-2" style={{ justifyContent: 'flex-end', marginTop: 16 }}>
-                <Btn onClick={onClose} disabled={submitting}>Not now</Btn>
-                <Btn variant="primary" onClick={submit} disabled={submitting}>
-                  {submitting ? 'Sending…' : 'Register my interest'}
-                </Btn>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+    <ProviderApplication
+      user={user}
+      onClose={onClose}
+      onSubmitted={() => { onClose?.(); onSubmitted?.(); }}
+    />
   );
 }
 
@@ -3710,7 +3707,11 @@ export default function LucaPassport() {
       )}
 
       {showPractitioner && (
-        <BecomeAPractitionerModal user={user} onClose={() => setShowPractitioner(false)} />
+        <BecomeAPractitionerModal
+          user={user}
+          onClose={() => setShowPractitioner(false)}
+          onSubmitted={() => refreshUser?.()}
+        />
       )}
     </div>
     </AudioProvider>

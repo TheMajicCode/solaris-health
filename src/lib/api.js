@@ -44,6 +44,8 @@ class ApiClient {
   getMyAudio() { return this.request('/audio/my'); }
   acceptAudioFromListing(listingId) { return this.request(`/audio/accept/${listingId}`, { method: 'POST', body: JSON.stringify({}) }); }
   unlockAudio(audioId) { return this.request(`/audio/unlock/${audioId}`, { method: 'POST', body: JSON.stringify({}) }); }
+  getPractitionerAudio() { return this.request('/audio/practitioner'); }
+  uploadAudio(body) { return this.request('/audio/upload', { method: 'POST', body: JSON.stringify(body) }); }
 
   // ---- Health documents (Sovereign Passport) ----
   getHealthDocuments() { return this.request('/health-documents'); }
@@ -91,6 +93,21 @@ class ApiClient {
   // ---- LUCA AI ----
   getLucaMessages() { return this.request('/luca/messages'); }
   sendLucaMessage(content) { return this.request('/luca/messages', { method: 'POST', body: JSON.stringify({ content }) }); }
+
+  // ---- LUCA Copilot (practitioner) ----
+  getPractitionerLucaMessages() { return this.request('/luca/practitioner/messages'); }
+  sendPractitionerLucaMessage(content) { return this.request('/luca/practitioner/messages', { method: 'POST', body: JSON.stringify({ content }) }); }
+
+  // ---- Consent-gated Passport sharing ----
+  requestConsent(memberId, sections) { return this.request('/consent/request', { method: 'POST', body: JSON.stringify({ memberId, sections }) }); }
+  getMyConsentRequests() { return this.request('/consent/my-requests'); }
+  grantConsent(id) { return this.request(`/consent/${id}/grant`, { method: 'PUT', body: JSON.stringify({}) }); }
+  revokeConsent(id) { return this.request(`/consent/${id}/revoke`, { method: 'PUT', body: JSON.stringify({}) }); }
+  getGrantedPassport(memberId) { return this.request(`/consent/granted/${memberId}`); }
+
+  // ---- Provider patients ----
+  getProviderPatients() { return this.request('/provider/patients'); }
+  getProviderPatientBookings(patientId) { return this.request(`/provider/patients/${patientId}/bookings`); }
 
   // ---- Contributions / Credentials / Agents ----
   getContributions() { return this.request('/contributions'); }

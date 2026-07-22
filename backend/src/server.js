@@ -40,6 +40,10 @@ const appointmentsRoutes = require('./routes/appointments');
 const journalRoutes = require('./routes/journal');
 const audioRoutes = require('./routes/audio');
 const healthDocumentsRoutes = require('./routes/health-documents');
+// --- Phase 2A: Practitioner journey ---
+const lucaPractitionerRoutes = require('./routes/luca-practitioner');
+const consentRoutes = require('./routes/consent');
+const providerPatientsRoutes = require('./routes/provider/patients');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -112,6 +116,8 @@ app.use('/api/assessment', assessmentRoutes);
 app.use('/api/listings', listingsRoutes);
 app.use('/api/journey', journeyRoutes);
 app.use('/api/luca', lucaRoutes);
+app.use('/api/luca', lucaPractitionerRoutes); // GET/POST /api/luca/practitioner/messages
+app.use('/api/consent', consentRoutes);
 app.use('/api/practitioner', practitionerRoutes);
 app.use('/api/admin/invite', adminInviteRoutes);
 app.use('/api/admin/providers', adminProvidersRoutes);
@@ -126,6 +132,7 @@ app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/bookings', bookingsRoutes);
 app.use('/api/provider/availability', providerAvailabilityRoutes);
 app.use('/api/provider/bookings', providerBookingsRoutes);
+app.use('/api/provider/patients', providerPatientsRoutes);
 app.use('/api/provider', providerApplicationRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/gps', gpsRoutes);
