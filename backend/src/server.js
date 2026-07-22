@@ -203,10 +203,50 @@ app.use((err, req, res, next) => {
 
 // Only start the HTTP listener when run directly (not when imported by tests)
 if (require.main === module) {
-  app.listen(PORT, '0.0.0.0', () => {
+  // ---- Run pending database migrations on startup ----
+  // node-pg-migrate is idempotent: already-applied migrations are skipped via
+  // the pgmigrations bookkeeping table, so this is safe on every boot.
+  // cwd is the backend root (__dirname is backend/src), where `migrations/` lives.
+  const { execSync } = require('child_process');
+  try {
+    execSync('npm run migrate', {
+      cwd: __dirname + '/..',
+      stdio: 'inherit',
+      env: process.env,
+    });
+    console.log('✓ Database migrations applied successfully');
+  } catch (err) {
+    // Do NOT exit — migrations may already be current, or the runner may be
+    // unavailable in a minimal runtime. Log and continue serving.
+    console.warn('Migration runner warning:', err.message);
+  }
+
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`✓ LUCA Passport Backend running on port ${PORT}`);
     console.log(`✓ Environment: ${process.env.NODE_ENV}`);
   });
+
+  // ---- Graceful shutdown (SIGTERM/SIGINT) ----
+  // Stop accepting new connections, drain in-flight requests, close the DB
+  // pool, then exit. Forced exit after 10s if draining stalls.
+  const shutdown = (signal) => {
+    console.log(`Received ${signal}. Shutting down gracefully...`);
+    server.close(async () => {
+      try {
+        await db.pool.end();
+        console.log('Database pool closed. Goodbye.');
+      } catch (err) {
+        console.error('Error closing DB pool:', err.message);
+      }
+      process.exit(0);
+    });
+    setTimeout(() => {
+      console.error('Graceful shutdown timed out. Forcing exit.');
+      process.exit(1);
+    }, 10000).unref();
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 module.exports = app;

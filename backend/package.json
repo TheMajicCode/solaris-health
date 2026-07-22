@@ -4,6 +4,10 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
+    "migrate": "node-pg-migrate up -m migrations",
+    "migrate:down": "node-pg-migrate down -m migrations",
+    "migrate:create": "node-pg-migrate create -m migrations",
+    "migrate:status": "node-pg-migrate up --dry-run -m migrations",
     "seed": "node src/db/seed-demo-data.js",
     "seed:reset": "node src/db/seed-demo-data.js --reset",
     "smoke-test": "node scripts/smoke-test.js",
@@ -28,7 +32,8 @@
     "express-rate-limit": "^8.6.0",
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.2",
-    "pg": "^8.13.1"
+    "node-pg-migrate": "^9.0.0",
+    "pg": "^8.22.0"
   },
   "devDependencies": {
     "eslint": "^8.57.1",
