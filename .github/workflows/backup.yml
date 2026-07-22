@@ -1,0 +1,24 @@
+name: Daily DB Backup
+
+on:
+  schedule:
+    - cron: '0 3 * * *'   # 3 AM UTC every day
+  workflow_dispatch:       # allow manual trigger
+
+jobs:
+  backup:
+    name: Backup production DB
+    runs-on: ubuntu-latest
+    # NOTE: This workflow requires self-hosted runner OR
+    # SSH access to the VM. For now it documents the intent.
+    # Replace with: gh act, self-hosted runner, or a Railway cron job.
+    steps:
+      - name: Document backup requirement
+        run: |
+          echo '=== Solaris DB Backup ==='
+          echo 'This workflow documents the backup requirement.'
+          echo 'To activate: either'
+          echo '  (a) Add a self-hosted runner on the VM (github.com/TheMajicCode/solaris-health/settings/actions/runners)'
+          echo '  (b) Migrate DB to Neon (which has automatic backups)'
+          echo '  (c) Add a cron job on the VM: 0 3 * * * docker exec luca-passport-postgres-1 pg_dump ...'
+          echo 'See NEON_MIGRATION.md for option (b).'

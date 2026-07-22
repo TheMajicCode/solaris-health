@@ -14,6 +14,7 @@
 const express = require('express');
 const db = require('../db');
 const { authMiddleware } = require('../middleware/auth');
+const { providerOnly } = require('../middleware/providerOnly');
 const { getAIProvider } = require('../lib/ai');
 
 const router = express.Router();
@@ -240,7 +241,7 @@ function parseLucaResponse(text) {
 }
 
 // GET /api/luca/practitioner/messages — practitioner Copilot history
-router.get('/practitioner/messages', authMiddleware, async (req, res) => {
+router.get('/practitioner/messages', authMiddleware, providerOnly, async (req, res) => {
   try {
     const r = await db.query(
       `SELECT role, content, created_at FROM luca_messages
@@ -256,7 +257,7 @@ router.get('/practitioner/messages', authMiddleware, async (req, res) => {
 });
 
 // POST /api/luca/practitioner/messages — send a message to the Copilot
-router.post('/practitioner/messages', authMiddleware, async (req, res) => {
+router.post('/practitioner/messages', authMiddleware, providerOnly, async (req, res) => {
   try {
     const { content } = req.body;
     if (!content || !content.trim()) return res.status(400).json({ error: 'Empty message' });

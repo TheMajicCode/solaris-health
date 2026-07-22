@@ -10,11 +10,12 @@
 const express = require('express');
 const db = require('../../db');
 const { authMiddleware } = require('../../middleware/auth');
+const { providerOnly } = require('../../middleware/providerOnly');
 
 const router = express.Router();
 
 // GET /api/provider/patients — grouped patient list for the current practitioner.
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authMiddleware, providerOnly, async (req, res) => {
   try {
     const practitionerId = req.user.userId;
     const { rows } = await db.query(

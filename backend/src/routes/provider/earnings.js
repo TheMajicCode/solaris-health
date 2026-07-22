@@ -10,11 +10,12 @@
 const express = require('express');
 const db = require('../../db');
 const { authMiddleware } = require('../../middleware/auth');
+const { providerOnly } = require('../../middleware/providerOnly');
 
 const router = express.Router();
 
 // GET /api/provider/earnings
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authMiddleware, providerOnly, async (req, res) => {
   try {
     const providerId = req.user.userId;
     const r = await db.query(

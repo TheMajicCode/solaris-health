@@ -6,6 +6,7 @@
 const express = require('express');
 const db = require('../../db');
 const { authMiddleware } = require('../../middleware/auth');
+const { providerOnly } = require('../../middleware/providerOnly');
 const { createNotification } = require('../../lib/notifications');
 const { sendBookingEmail } = require('../../lib/booking-emails');
 const { processGPSSplit } = require('../../lib/gps-engine');
@@ -33,7 +34,7 @@ async function loadOwnedBooking(req, id) {
 
 /* ------------------------------ GET me ------------------------------ */
 // GET /api/provider/bookings/me?view=today|pending|upcoming|past&providerId=
-router.get('/me', authMiddleware, async (req, res) => {
+router.get('/me', authMiddleware, providerOnly, async (req, res) => {
   try {
     const params = [req.user.userId];
     let where = 'p.user_id = $1';
@@ -66,7 +67,7 @@ router.get('/me', authMiddleware, async (req, res) => {
 });
 
 /* ----------------------------- GET stats ---------------------------- */
-router.get('/stats', authMiddleware, async (req, res) => {
+router.get('/stats', authMiddleware, providerOnly, async (req, res) => {
   try {
     const r = await db.query(
       `SELECT
@@ -134,7 +135,7 @@ async function transition(req, res, { id, next, requireFrom, reasonDefault, noti
 }
 
 // PUT confirm
-router.put('/:id/confirm', authMiddleware, (req, res) => transition(req, res, {
+router.put('/:id/confirm', authMiddleware, providerOnly, (req, res) => transition(req, res, {
   id: req.params.id, next: 'confirmed', requireFrom: ['pending'], reasonDefault: 'Confirmed by provider',
   notify: async (b) => {
     await createNotification(b.patient_id, 'booking', '✅ Appointment Confirmed',
@@ -148,7 +149,7 @@ router.put('/:id/confirm', authMiddleware, (req, res) => transition(req, res, {
 }));
 
 // PUT cancel (by provider)
-router.put('/:id/cancel', authMiddleware, (req, res) => transition(req, res, {
+router.put('/:id/cancel', authMiddleware, providerOnly, (req, res) => transition(req, res, {
   id: req.params.id, next: 'cancelled', requireFrom: ['pending', 'confirmed'], reasonDefault: 'Cancelled by provider',
   notify: async (b) => {
     const reason = (req.body && req.body.reason) || 'Cancelled by provider';
@@ -164,7 +165,7 @@ router.put('/:id/cancel', authMiddleware, (req, res) => transition(req, res, {
 }));
 
 // PUT complete
-router.put('/:id/complete', authMiddleware, (req, res) => transition(req, res, {
+router.put('/:id/complete', authMiddleware, providerOnly, (req, res) => transition(req, res, {
   id: req.params.id, next: 'completed', requireFrom: ['confirmed', 'pending'], reasonDefault: 'Marked completed',
   notify: async (b) => {
     await createNotification(b.patient_id, 'booking', '🌿 Appointment Completed',
@@ -176,7 +177,7 @@ router.put('/:id/complete', authMiddleware, (req, res) => transition(req, res, {
 }));
 
 // PUT no-show
-router.put('/:id/no-show', authMiddleware, (req, res) => transition(req, res, {
+router.put('/:id/no-show', authMiddleware, providerOnly, (req, res) => transition(req, res, {
   id: req.params.id, next: 'no_show', requireFrom: ['confirmed', 'pending'], reasonDefault: 'Patient did not show',
 }));
 
@@ -184,7 +185,7 @@ router.put('/:id/no-show', authMiddleware, (req, res) => transition(req, res, {
 // POST /api/provider/bookings/:id/propose-time
 // The practitioner suggests an alternate time for a pending request. The booking
 // moves to 'proposed' and the patient is notified to confirm it.
-router.post('/:id/propose-time', authMiddleware, async (req, res) => {
+router.post('/:id/propose-time', authMiddleware, providerOnly, async (req, res) => {
   try {
     const { booking, error } = await loadOwnedBooking(req, req.params.id);
     if (error) return res.status(error).json({ error: error === 403 ? 'Forbidden' : 'Not found' });
