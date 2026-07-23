@@ -3645,10 +3645,51 @@ function HealthPassportPage({ user, go }) {
 }
 
 /* ============================== ECONOMIC PASSPORT (with Community Treasury) ============================== */
+
+
 function EconomicPassportPage({ user }) {
   return (
     <div className="col gap-4">
+
+      {/* ── Coming Soon Banner ── */}
+      <div style={{
+        borderRadius: 16,
+        background: 'linear-gradient(120deg, #0A2B29 0%, #134d3a 60%, #1a3d5c 100%)',
+        padding: '24px 22px 20px',
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        {/* decorative glow */}
+        <div style={{
+          position: 'absolute', inset: 0, opacity: 0.18,
+          background: 'radial-gradient(circle at 80% 20%, #2DB584 0%, transparent 60%)',
+          pointerEvents: 'none',
+        }} />
+
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <span style={{
+              background: 'rgba(45,181,132,0.22)', color: '#2DB584',
+              fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20,
+              letterSpacing: 1, textTransform: 'uppercase',
+            }}>Coming Soon</span>
+          </div>
+          <h2 style={{ margin: '0 0 6px', fontSize: 22, fontWeight: 800, color: '#fff', lineHeight: 1.2 }}>
+            Economic Passport
+          </h2>
+          <p style={{ margin: 0, fontSize: 13.5, color: 'rgba(255,255,255,0.72)', lineHeight: 1.55, maxWidth: 480 }}>
+            Your sovereign economic identity — earn, split, and regenerate value as you participate in the Solaris ecosystem.
+            Full activation is on the way; here's a glimpse of how GPS works when it goes live.
+          </p>
+        </div>
+      </div>
+
+      {/* ── Divider ── */}
+      <div style={{ height: 1, background: 'var(--line,#e3ece8)', margin: '2px 0' }} />
+
+      {/* ── Existing Wallet + Treasury (live preview) ── */}
       <ErrorBoundary><WalletPage user={user} /></ErrorBoundary>
+
       <div style={{ height: 1, background: 'var(--line,#e3ece8)', margin: '6px 0 2px' }} />
       <div>
         <h3 style={{ margin: '0 0 3px', fontSize: 17, color: '#0A2B29', fontFamily: 'inherit', fontWeight: 700 }}>Community Treasury</h3>
@@ -4068,7 +4109,7 @@ export default function LucaPassport() {
                   const Icon = it.icon;
                   const count = it.badgeKey ? badges[it.badgeKey] : 0;
                   const onClick = it.comingSoon
-                    ? () => { toast(`${it.label} is coming soon — we're building it with care. 🌱`, { icon: '✨' }); setDrawer(false); }
+                    ? () => { go(it.id); setDrawer(false); }
                     : () => go(it.id);
                   return (
                     <button key={it.id} className={`nav-item ${tab === it.id ? 'active' : ''}`} onClick={onClick}>
