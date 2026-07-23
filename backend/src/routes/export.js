@@ -58,6 +58,15 @@ async function gatherRecord(userId) {
     [userId]
   ).catch(() => ({ rows: [] }));
 
+  // AI execution receipts (provenance metadata + hashes only — no raw prompts/PHI by construction)
+  const aiReceipts = await db.query(
+    `SELECT event_type, agent_id, provider, requested_model, actual_model, compute_target,
+            data_class, consent_basis, latency_ms, input_hash, result_hash, degraded,
+            error_class, policy_version, created_at
+     FROM ai_execution_receipts WHERE user_id=$1 ORDER BY created_at ASC`,
+    [userId]
+  ).catch(() => ({ rows: [] }));
+
   // Unlocked audio practices
   const audioUnlocks = await db.query(
     `SELECT al.title, al.description, al.tags_json, ua.unlocked_at
@@ -79,6 +88,7 @@ async function gatherRecord(userId) {
     healthDocs: healthDocs.rows,
     habitTicks: habitTicks.rows,
     audioUnlocks: audioUnlocks.rows,
+    aiReceipts: aiReceipts.rows,
   };
 }
 

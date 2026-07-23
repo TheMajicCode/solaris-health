@@ -40,7 +40,13 @@ Sprint start: 2026-07-23 (UTC)
 - `backend/.env.example`: documents abacus mode, timeout, provider label; pinned-model guidance for health-adjacent flows.
 - `backend/tests/luca.test.js`: +4 provider-factory unit tests (abacus selection, key-missing degradation, local keyless, timeout parsing) — all offline, zero network.
 - Evidence: backend jest 61/61 pass (was 57), lint 0 errors.
-### Slice 2 — AI execution receipts — PENDING
+### Slice 2 — AI execution receipts — DONE
+- Migration `backend/migrations/019_ai_execution_receipts.sql` (additive): `ai_execution_receipts` table — event_type, agent_id (`sol_agent_luca`), provider, requested/actual model, compute_target, data_class, consent_basis, latency_ms, input_hash/result_hash (SHA-256 only), degraded, error_class, policy_version (`v0`), created_at. `user_id UUID` FK → users (repo uses UUID PKs). Applied cleanly.
+- `backend/src/lib/ai/receipts.js`: `recordAIReceipt()` (best-effort — never throws, never breaks the chat path), `sha256`, `describeProvider` (provider id → compute target: managed_cloud/local/in_process). Hashing happens inside the helper, so callers cannot accidentally persist raw text.
+- Instrumented member LUCA (`luca.js` → event `luca.member.chat`, data_class `health_context`, consent `member_self_query`) and practitioner copilot (`luca-practitioner.js` → `luca.practitioner.copilot`, `practice_context`, `practitioner_self_query`), incl. degraded-fallback + error_class (provider_timeout/provider_error) and latency capture.
+- Vault export: `gatherRecord` pulls receipts; `buildVaultExport` emits `ai/execution-receipts.jsonl` + manifest listing + export-event count.
+- `backend/tests/ai-receipts.test.js` (7 tests): one receipt per chat turn, correct hashes/provenance, NO raw prompt/reply/PHI copy-through (canary-string check on serialized row AND on export file), export roundtrip via GET /api/export/me, insert-failure safety.
+- Evidence: backend jest 68/68 pass, lint 0 errors, migration applied ("Migrations complete!").
 ### Slice 3 — PHI boundary truthfulness — PENDING
 ### Slice 4 — Incident response + read-only mode — PENDING
 ### Slice 5 — Migration/rollback hardening — PENDING

@@ -16,6 +16,7 @@ const db = require('../db');
 const { authMiddleware } = require('../middleware/auth');
 const { providerOnly } = require('../middleware/providerOnly');
 const { getAIProvider } = require('../lib/ai');
+const { recordAIReceipt } = require('../lib/ai/receipts');
 
 const router = express.Router();
 
@@ -270,15 +271,20 @@ router.post('/practitioner/messages', authMiddleware, providerOnly, async (req, 
 
     const context = await buildPractitionerContext(userId);
 
-    const ai = getAIProvider();
+    let ai = getAIProvider();
     let reply;
+    let errorClass = null;
+    const startedAt = Date.now();
     try {
       reply = await ai.complete({ system: SYSTEM_PROMPT, prompt: content, context });
     } catch (e) {
       console.error('AI provider error, falling back to mock:', e.message);
+      errorClass = /timed out/i.test(e.message || '') ? 'provider_timeout' : 'provider_error';
       const fallback = getAIProvider({ ...process.env, LUCA_AI_MODE: 'mock' });
       reply = await fallback.complete({ system: SYSTEM_PROMPT, prompt: content, context });
+      ai = { ...fallback, degraded: ai.degraded || errorClass };
     }
+    const latencyMs = Date.now() - startedAt;
 
     const { reply: parsedReply, suggestions: parsedSuggestions } = parseLucaResponse(reply);
     const cleanReply = parsedReply || 'I had trouble responding just now. Please try again in a moment.';
@@ -295,6 +301,21 @@ router.post('/practitioner/messages', authMiddleware, providerOnly, async (req, 
           [userId, 'assistant', cleanReply]
         );
       });
+
+    // AI execution receipt — provenance only, hashes only, never raw text/PHI.
+    await recordAIReceipt({
+      userId,
+      eventType: 'luca.practitioner.copilot',
+      ai,
+      requestedModel: process.env.LUCA_AI_MODEL || null,
+      dataClass: 'practice_context',
+      consentBasis: 'practitioner_self_query',
+      latencyMs,
+      inputText: content,
+      resultText: cleanReply,
+      degraded: Boolean(ai.degraded),
+      errorClass,
+    });
 
     res.json({ reply: cleanReply, suggestions, model: ai.id, degraded: ai.degraded || null });
   } catch (err) {

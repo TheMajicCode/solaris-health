@@ -41,6 +41,7 @@ function buildVaultExport(record) {
   const {
     user, assessment, contributions = [], messages = [], credentials = [],
     journal = [], healthDocs = [], habitTicks = [], audioUnlocks = [],
+    aiReceipts = [],
   } = record;
   const exportedAt = new Date().toISOString();
   const files = [];
@@ -191,6 +192,31 @@ function buildVaultExport(record) {
     });
   }
 
+  // AI — execution receipts (provenance metadata + non-reversible hashes; no raw prompts/PHI)
+  if (aiReceipts && aiReceipts.length) {
+    const lines = aiReceipts.map((r) => JSON.stringify({
+      event_type: r.event_type,
+      agent_id: r.agent_id,
+      provider: r.provider,
+      requested_model: r.requested_model || null,
+      actual_model: r.actual_model || null,
+      compute_target: r.compute_target,
+      data_class: r.data_class,
+      consent_basis: r.consent_basis,
+      latency_ms: r.latency_ms ?? null,
+      input_hash: r.input_hash || null,
+      result_hash: r.result_hash || null,
+      degraded: Boolean(r.degraded),
+      error_class: r.error_class || null,
+      policy_version: r.policy_version,
+      created_at: r.created_at ? new Date(r.created_at).toISOString() : null,
+    }));
+    files.push({
+      path: 'ai/execution-receipts.jsonl',
+      contents: lines.join('\n') + '\n',
+    });
+  }
+
   // EVENTS — append-only audit log. One line per meaningful action, then the export event.
   const actorId = user.did || `solaris:user:${user.id}`;
   const eventLines = [];
@@ -228,6 +254,7 @@ function buildVaultExport(record) {
     counts: {
       contributions: contributions.length, messages: messages.length, credentials: credentials.length,
       journal: journal.length, health_documents: healthDocs.length, audio_unlocks: audioUnlocks.length,
+      ai_execution_receipts: aiReceipts.length,
     },
     human_approval: 'self',
     timestamp: exportedAt,

@@ -19,6 +19,7 @@ const rateLimit = require('express-rate-limit');
 const db = require('../db');
 const { authMiddleware } = require('../middleware/auth');
 const { getAIProvider } = require('../lib/ai');
+const { recordAIReceipt } = require('../lib/ai/receipts');
 const { computeTriggers, buildTriggerInstructions } = require('../lib/luca-triggers');
 const { MILESTONE_DEFS_COUNT } = require('./journeys');
 
@@ -423,15 +424,20 @@ router.post('/messages', authMiddleware, async (req, res) => {
     const context = triggerHints ? `${triggerHints}\n\n${passportContext}` : passportContext;
 
     // 3. Use AIProvider (cloud mode = VM LLM, never the Abacus RAG bot)
-    const ai = getAIProvider();
+    let ai = getAIProvider();
     let reply;
+    let errorClass = null;
+    const startedAt = Date.now();
     try {
       reply = await ai.complete({ system: SYSTEM_PROMPT, prompt: content, context });
     } catch (e) {
       console.error('AI provider error, falling back to mock:', e.message);
+      errorClass = /timed out/i.test(e.message || '') ? 'provider_timeout' : 'provider_error';
       const fallback = getAIProvider({ ...process.env, LUCA_AI_MODE: 'mock' });
       reply = await fallback.complete({ system: SYSTEM_PROMPT, prompt: content, context });
+      ai = { ...fallback, degraded: ai.degraded || errorClass };
     }
+    const latencyMs = Date.now() - startedAt;
 
     // 3b. Parse the typed JSON envelope (reply + typed suggestions)
     const { reply: parsedReply, suggestions: parsedSuggestions } = parseLucaResponse(reply);
@@ -450,6 +456,21 @@ router.post('/messages', authMiddleware, async (req, res) => {
       [userId, 'assistant', cleanReply, ai.id, modelId, inputsHash]
     ).catch(async () => {
       await db.query('INSERT INTO luca_messages (user_id, role, content) VALUES ($1,$2,$3)', [userId, 'assistant', cleanReply]);
+    });
+
+    // 5. AI execution receipt — provenance only, hashes only, never raw text/PHI.
+    await recordAIReceipt({
+      userId,
+      eventType: 'luca.member.chat',
+      ai,
+      requestedModel: process.env.LUCA_AI_MODEL || null,
+      dataClass: 'health_context',
+      consentBasis: 'member_self_query',
+      latencyMs,
+      inputText: content,
+      resultText: cleanReply,
+      degraded: Boolean(ai.degraded),
+      errorClass,
     });
 
     res.json({ reply: cleanReply, suggestions, model: ai.id, degraded: ai.degraded || null });
