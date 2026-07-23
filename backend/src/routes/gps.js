@@ -11,8 +11,34 @@ const db = require('../db');
 const { authMiddleware } = require('../middleware/auth');
 const { adminOnly } = require('../middleware/admin-only');
 const { processGPSSplit, ensureReferralCode, FUND_LABELS, GPS_SPLIT } = require('../lib/gps-engine');
+const {
+  recordAllocationReceipt, verifyReceipt, explainAllocation,
+} = require('../lib/gps-receipts');
 
 const router = express.Router();
+
+/**
+ * Load a gps_transaction and check that the caller participates in it
+ * (patient, contributor, owning provider) or is an admin.
+ * Returns { tx } or { status, error }.
+ */
+async function loadAllocationForCaller(transactionId, user) {
+  const r = await db.query(
+    `SELECT t.*, p.user_id AS provider_user_id
+       FROM gps_transactions t
+       LEFT JOIN provider_profiles p ON p.id = t.provider_id
+      WHERE t.id = $1`,
+    [transactionId]
+  );
+  const tx = r.rows[0];
+  if (!tx) return { status: 404, error: 'Allocation not found' };
+  const isParticipant = [tx.patient_id, tx.contributor_id, tx.provider_user_id]
+    .filter(Boolean).includes(user.userId);
+  if (!isParticipant && user.role !== 'admin') {
+    return { status: 403, error: 'You are not a participant in this allocation.' };
+  }
+  return { tx };
+}
 
 const FUND_META = {
   health:         { label: 'Local Health Fund',          icon: '🏥' },
@@ -263,6 +289,136 @@ router.post('/process/:bookingId', authMiddleware, async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('gps process', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/* ==================== ALLOCATION RECEIPTS (Slice 8) ==================== */
+// GET /api/gps/allocations/:transactionId/explain
+// Explain WHY a (shadow) allocation exists, from its evidence receipt.
+// Lazily creates a receipt for transactions that predate Slice 8.
+router.get('/allocations/:transactionId/explain', authMiddleware, async (req, res) => {
+  try {
+    const check = await loadAllocationForCaller(req.params.transactionId, req.user);
+    if (check.error) return res.status(check.status).json({ error: check.error });
+    const tx = check.tx;
+
+    let rec = (await db.query(
+      'SELECT * FROM gps_allocation_receipts WHERE transaction_id=$1', [tx.id]
+    )).rows[0];
+    if (!rec) rec = await recordAllocationReceipt(tx);
+
+    const disputes = await db.query(
+      `SELECT d.id, d.reason, d.status, d.resolution, d.created_at, d.resolved_at,
+              (d.raised_by = $2) AS raised_by_me
+         FROM gps_allocation_disputes d
+        WHERE d.receipt_id = $1
+        ORDER BY d.created_at DESC`,
+      [rec.id, req.user.userId]
+    );
+
+    res.json({
+      receipt: {
+        id: rec.id,
+        transactionId: tx.id,
+        policyVersion: rec.policy_version,
+        evidenceHash: rec.evidence_hash,
+        evidenceVerified: verifyReceipt(rec),
+        state: rec.allocation_state,
+        shadow: rec.shadow,
+        createdAt: rec.created_at,
+      },
+      explanation: explainAllocation(rec.evidence),
+      plain: 'This is a shadow allocation: a transparent proposal computed from evidence. '
+        + 'No real money has moved. If anything looks wrong, dispute it below and a human will review.',
+      disputes: disputes.rows,
+      canDispute: rec.allocation_state === 'proposed',
+    });
+  } catch (err) {
+    console.error('gps allocation explain', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/gps/allocations/:transactionId/dispute  body: { reason }
+// The human dispute path: any participant can flag an allocation.
+router.post('/allocations/:transactionId/dispute', authMiddleware, async (req, res) => {
+  try {
+    const reason = String(req.body?.reason || '').trim();
+    if (reason.length < 5) {
+      return res.status(400).json({ error: 'Please describe what looks wrong (at least 5 characters).' });
+    }
+    const check = await loadAllocationForCaller(req.params.transactionId, req.user);
+    if (check.error) return res.status(check.status).json({ error: check.error });
+    const tx = check.tx;
+
+    let rec = (await db.query(
+      'SELECT * FROM gps_allocation_receipts WHERE transaction_id=$1', [tx.id]
+    )).rows[0];
+    if (!rec) rec = await recordAllocationReceipt(tx);
+    if (rec.allocation_state === 'corrected') {
+      return res.status(400).json({ error: 'This allocation was already reviewed and corrected.' });
+    }
+
+    const dispute = await db.query(
+      `INSERT INTO gps_allocation_disputes (receipt_id, raised_by, reason)
+       VALUES ($1,$2,$3) RETURNING *`,
+      [rec.id, req.user.userId, reason.slice(0, 2000)]
+    );
+    await db.query(
+      `UPDATE gps_allocation_receipts SET allocation_state='disputed', updated_at=now() WHERE id=$1`,
+      [rec.id]
+    );
+    await db.query(
+      `INSERT INTO audit_logs (actor_id, action, resource_type, resource_id, result, new_values)
+       VALUES ($1,'gps.allocation.disputed','gps_allocation_receipt',$2,'success',$3)`,
+      [req.user.userId, rec.id, JSON.stringify({ transactionId: tx.id, disputeId: dispute.rows[0].id })]
+    );
+    res.status(201).json({
+      ok: true,
+      dispute: dispute.rows[0],
+      state: 'disputed',
+      plain: 'Thank you. A human will review this allocation and respond. Nothing settles while it is disputed.',
+    });
+  } catch (err) {
+    console.error('gps allocation dispute', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/gps/allocations/:transactionId/resolve  body: { disputeId, resolution }
+// Admin-only human resolution: marks the receipt corrected with a note.
+router.post('/allocations/:transactionId/resolve', authMiddleware, adminOnly, async (req, res) => {
+  try {
+    const resolution = String(req.body?.resolution || '').trim();
+    if (!resolution) return res.status(400).json({ error: 'A resolution note is required.' });
+
+    const rec = (await db.query(
+      'SELECT * FROM gps_allocation_receipts WHERE transaction_id=$1', [req.params.transactionId]
+    )).rows[0];
+    if (!rec) return res.status(404).json({ error: 'Allocation receipt not found' });
+    if (rec.allocation_state !== 'disputed') {
+      return res.status(400).json({ error: 'Only disputed allocations can be resolved.' });
+    }
+
+    await db.query(
+      `UPDATE gps_allocation_disputes
+          SET status='resolved', resolution=$1, resolved_by=$2, resolved_at=now()
+        WHERE receipt_id=$3 AND status='open'`,
+      [resolution.slice(0, 2000), req.user.userId, rec.id]
+    );
+    await db.query(
+      `UPDATE gps_allocation_receipts SET allocation_state='corrected', updated_at=now() WHERE id=$1`,
+      [rec.id]
+    );
+    await db.query(
+      `INSERT INTO audit_logs (actor_id, action, resource_type, resource_id, result, new_values)
+       VALUES ($1,'gps.allocation.resolved','gps_allocation_receipt',$2,'success',$3)`,
+      [req.user.userId, rec.id, JSON.stringify({ transactionId: req.params.transactionId })]
+    );
+    res.json({ ok: true, state: 'corrected' });
+  } catch (err) {
+    console.error('gps allocation resolve', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

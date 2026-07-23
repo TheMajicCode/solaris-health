@@ -174,6 +174,16 @@ async function processGPSSplit(booking) {
   );
   const tx = ins.rows[0];
 
+  // Evidence-before-payment: record a shadow allocation receipt so this
+  // split can always be explained and disputed (best-effort, non-fatal).
+  // Lazy require avoids a load-time circular dependency with gps-receipts.
+  try {
+    const { recordAllocationReceipt } = require('./gps-receipts');
+    await recordAllocationReceipt(tx);
+  } catch (err) {
+    console.warn('[gps] allocation receipt failed (non-fatal):', err.message);
+  }
+
   // Treasury deposits across the six funds.
   await depositTreasury(tx.id, split.treasury);
 

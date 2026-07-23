@@ -9,6 +9,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Sprout, Heart, Coins, TrendingUp, ChevronDown, Loader2, Leaf, Info,
+  ShieldQuestion, ShieldAlert, ShieldCheck,
 } from 'lucide-react';
 import { api } from '../../lib/api.js';
 import ValueFlowViz, { GPS_BUCKETS } from './ValueFlowViz.jsx';
@@ -115,6 +116,7 @@ export default function GPSLedger() {
                         </div>
                       );
                     })}
+                    <AllocationEvidence transactionId={t.id} />
                   </div>
                 )}
               </div>
@@ -176,6 +178,43 @@ export default function GPSLedger() {
         .luca .gpl-split-lbl{flex:1;font-size:13px;color:var(--ink)}
         .luca .gpl-split-pct{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted);width:42px;text-align:right}
         .luca .gpl-split-amt{font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:13px;color:var(--ink);width:64px;text-align:right}
+        .luca .gpl-ev{margin-top:12px;padding-top:10px;border-top:1px dashed var(--line)}
+        .luca .gpl-ev-link{display:inline-flex;align-items:center;gap:6px;background:var(--surface-2);
+          border:1px solid var(--line);color:var(--ink);font-size:12px;font-weight:600;padding:6px 12px;
+          border-radius:99px;cursor:pointer}
+        .luca .gpl-ev-link:hover{border-color:var(--mint-line)}
+        .luca .gpl-ev-link.warn{color:#A2541F;background:#FBEFE0;border-color:#EFD9BF;margin-top:10px}
+        .luca .gpl-ev-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+        .luca .gpl-ev-state{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:700;
+          padding:3px 9px;border-radius:99px;text-transform:uppercase;letter-spacing:.04em}
+        .luca .gpl-ev-state.proposed{background:var(--mint-soft);color:var(--teal-d)}
+        .luca .gpl-ev-state.disputed{background:#FBEFE0;color:#A2541F}
+        .luca .gpl-ev-state.corrected{background:#E9F3DA;color:#5E7F2C}
+        .luca .gpl-ev-shadow{font-size:11px;color:var(--muted-2);font-style:italic}
+        .luca .gpl-ev-plain{font-size:12.5px;color:var(--muted);margin:10px 0 8px}
+        .luca .gpl-ev-lines{display:flex;flex-direction:column;gap:5px}
+        .luca .gpl-ev-line{font-size:12px;color:var(--ink);padding-left:12px;position:relative}
+        .luca .gpl-ev-line::before{content:'·';position:absolute;left:2px;color:var(--teal)}
+        .luca .gpl-ev-meta{margin-top:10px;font-size:11px;color:var(--muted-2)}
+        .luca .gpl-ev-meta code{font-family:'IBM Plex Mono',monospace;font-size:10.5px;background:var(--surface-2);
+          padding:1px 5px;border-radius:5px}
+        .luca .gpl-ev-disputes{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+        .luca .gpl-ev-dispute{font-size:12px;color:var(--ink);background:var(--surface-2);border-radius:10px;
+          padding:8px 10px;display:flex;flex-direction:column;gap:3px}
+        .luca .gpl-ev-dstatus{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+        .luca .gpl-ev-dstatus.open{color:#A2541F}
+        .luca .gpl-ev-dstatus.resolved{color:#5E7F2C}
+        .luca .gpl-ev-dreason{font-style:italic;color:var(--muted)}
+        .luca .gpl-ev-dres{color:var(--ink)}
+        .luca .gpl-ev-form{margin-top:10px}
+        .luca .gpl-ev-ta{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:10px;
+          padding:8px 10px;font-size:12.5px;font-family:inherit;resize:vertical;background:var(--surface)}
+        .luca .gpl-ev-actions{display:flex;gap:8px;margin-top:8px}
+        .luca .gpl-ev-btn{border:none;background:var(--teal-d);color:#fff;font-size:12px;font-weight:600;
+          padding:7px 14px;border-radius:99px;cursor:pointer}
+        .luca .gpl-ev-btn:disabled{opacity:.6;cursor:default}
+        .luca .gpl-ev-btn.ghost{background:var(--surface-2);color:var(--ink);border:1px solid var(--line)}
+        .luca .gpl-ev-err{margin-top:8px;font-size:12px;color:#A23B2E}
         .luca .gpl-empty,.luca .gpl-loading{text-align:center;padding:40px 20px;color:var(--muted);
           background:var(--surface);border:1px dashed var(--line);border-radius:var(--r)}
         .luca .gpl-empty svg{color:var(--teal);margin-bottom:8px}
@@ -185,6 +224,113 @@ export default function GPSLedger() {
         .luca .gpl-spin{animation:spin 1s linear infinite}
         @keyframes spin{to{transform:rotate(360deg)}}
       `}</style>
+    </div>
+  );
+}
+
+/**
+ * AllocationEvidence — "why does this allocation exist?"
+ *
+ * Loads the shadow allocation receipt (evidence hash + policy version +
+ * state) on demand, explains each leg in plain language, and gives the
+ * member a human dispute path. No real money moves — everything here is
+ * a transparent, evidence-backed proposal.
+ */
+function AllocationEvidence({ transactionId }) {
+  const [info, setInfo] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [disputing, setDisputing] = useState(false);
+  const [reason, setReason] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const load = async () => {
+    setLoading(true); setError(null);
+    try { setInfo(await api.explainGpsAllocation(transactionId)); }
+    catch (e) { setError(e?.message || 'Could not load the allocation evidence.'); }
+    finally { setLoading(false); }
+  };
+
+  const sendDispute = async () => {
+    if (reason.trim().length < 5) { setError('Please describe what looks wrong (a sentence is enough).'); return; }
+    setSending(true); setError(null);
+    try {
+      await api.disputeGpsAllocation(transactionId, reason.trim());
+      setDisputing(false); setReason('');
+      await load();
+    } catch (e) { setError(e?.message || 'Could not send the dispute.'); }
+    finally { setSending(false); }
+  };
+
+  if (!info) {
+    return (
+      <div className="gpl-ev">
+        <button className="gpl-ev-link" onClick={load} disabled={loading}>
+          {loading ? <Loader2 size={13} className="gpl-spin" /> : <ShieldQuestion size={13} />}
+          Why this allocation?
+        </button>
+        {error && <div className="gpl-ev-err">{error}</div>}
+      </div>
+    );
+  }
+
+  const r = info.receipt || {};
+  const stateMeta = {
+    proposed: { label: 'Proposed', cls: 'proposed', Icon: ShieldQuestion },
+    disputed: { label: 'Disputed', cls: 'disputed', Icon: ShieldAlert },
+    corrected: { label: 'Reviewed & corrected', cls: 'corrected', Icon: ShieldCheck },
+  }[r.state] || { label: r.state, cls: 'proposed', Icon: ShieldQuestion };
+
+  return (
+    <div className="gpl-ev open">
+      <div className="gpl-ev-head">
+        <span className={`gpl-ev-state ${stateMeta.cls}`}><stateMeta.Icon size={12} /> {stateMeta.label}</span>
+        <span className="gpl-ev-shadow">Shadow allocation — no real money has moved</span>
+      </div>
+      <p className="gpl-ev-plain">{info.plain}</p>
+      <div className="gpl-ev-lines">
+        {(info.explanation || []).map((l) => (
+          <div className="gpl-ev-line" key={l.role}>{l.because}</div>
+        ))}
+      </div>
+      <div className="gpl-ev-meta">
+        Policy {r.policyVersion} · evidence <code>{String(r.evidenceHash || '').slice(0, 12)}…</code>
+        {r.evidenceVerified ? ' · verified' : ' · verification failed'}
+      </div>
+      {(info.disputes || []).length > 0 && (
+        <div className="gpl-ev-disputes">
+          {info.disputes.map((d) => (
+            <div className="gpl-ev-dispute" key={d.id}>
+              <span className={`gpl-ev-dstatus ${d.status}`}>{d.status === 'resolved' ? 'Resolved' : 'Under review'}</span>
+              <span className="gpl-ev-dreason">“{d.reason}”</span>
+              {d.resolution && <span className="gpl-ev-dres">→ {d.resolution}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+      {info.canDispute && !disputing && (
+        <button className="gpl-ev-link warn" onClick={() => setDisputing(true)}>
+          <ShieldAlert size={13} /> Something looks wrong — dispute this
+        </button>
+      )}
+      {disputing && (
+        <div className="gpl-ev-form">
+          <textarea
+            className="gpl-ev-ta"
+            rows={2}
+            placeholder="Tell us what looks wrong — a human will review it."
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+          <div className="gpl-ev-actions">
+            <button className="gpl-ev-btn" onClick={sendDispute} disabled={sending}>
+              {sending ? 'Sending…' : 'Send to a human'}
+            </button>
+            <button className="gpl-ev-btn ghost" onClick={() => { setDisputing(false); setError(null); }}>Cancel</button>
+          </div>
+        </div>
+      )}
+      {error && <div className="gpl-ev-err">{error}</div>}
     </div>
   );
 }

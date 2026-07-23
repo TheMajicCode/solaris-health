@@ -91,7 +91,44 @@ Sprint start: 2026-07-23 (UTC)
 - **Tests:** new `backend/tests/agent-authority.test.js` (7 tests incl. end-to-end: disable → chat 403 → same token still reads sovereignty status → re-enable; real audit row asserted after a live chat). Fixed FK cleanup in two older suites (audit rows now reference users). Full backend **95/95**, lint 0 errors.
 - **Deferred:** frontend toggle UI for the LUCA kill-switch (API-only for now) — spec's done-condition (disableable without deleting/logging out + scoped authority model) is met server-side.
 
-### Slice 8 — GPS evidence receipts — PENDING
+### Slice 8 — GPS evidence receipts — DONE
+
+- **Migration `021_gps_allocation_receipts.sql`** (applied): `gps_allocation_receipts`
+  (one per `gps_transactions` row; canonical PHI-free evidence JSONB, sha256
+  `evidence_hash`, `policy_version` = `gps-split-v1`, state
+  `proposed → disputed → corrected`, `shadow = TRUE` always — no code path sets it
+  false) and `gps_allocation_disputes` (human dispute path: reason, open/resolved,
+  resolution note, resolver). Additive only.
+- **`backend/src/lib/gps-receipts.js`**: deterministic canonical-JSON evidence
+  builder (UUIDs, amounts, split fractions, timestamps only — no names/PHI),
+  sha256 hashing, idempotent `recordAllocationReceipt`, `verifyReceipt`
+  re-hash check, and `explainAllocation` → six plain-language "because" lines.
+  The policy fractions embedded in the evidence are the public `GPS_SPLIT`
+  (85/5/3/3/2/2) — no hidden protocol royalties.
+- **`gps-engine.processGPSSplit`** now records a shadow allocation receipt for
+  every new split (best-effort, non-fatal, lazy require to avoid a cycle).
+- **Routes** (`backend/src/routes/gps.js`):
+  - `GET /api/gps/allocations/:txId/explain` — participants (patient,
+    contributor, owning provider) or admin only; lazily backfills receipts for
+    pre-Slice-8 transactions; returns receipt (hash, policy version, state,
+    shadow), verification result, explanation lines, dispute history.
+  - `POST /api/gps/allocations/:txId/dispute` — participant raises a dispute
+    with a reason; state → `disputed`; audited (`gps.allocation.disputed`).
+  - `POST /api/gps/allocations/:txId/resolve` — admin-only human resolution
+    with a note; state → `corrected`; audited (`gps.allocation.resolved`).
+- **UI** (`src/components/gps/GPSLedger.jsx`): each Value Trail transaction now
+  has a "Why this allocation?" panel — state pill, "shadow allocation, no real
+  money has moved" note, six plain-language explanation lines, policy version +
+  evidence hash, dispute history, and a "Something looks wrong — dispute this"
+  human path. Warm style preserved (gpl-* pattern). `api.js`:
+  `explainGpsAllocation`, `disputeGpsAllocation`.
+- **Tests**: `backend/tests/gps-allocations.test.js` — 8 tests (PHI-free
+  deterministic evidence hash, idempotent + verifiable receipts, participant
+  explain, non-participant 403, dispute lifecycle + audit row, empty-reason 400,
+  admin resolve → corrected, non-admin resolve 403).
+- **Evidence**: backend 103/103 (13 suites), lint 0 errors; frontend 30/30,
+  build PASS.
+- Simulated by design: allocations are shadow proposals; no settlement exists.
 ### Slice 9 — Dead-end sweep — PENDING
 ### Slice 10 — Docs & handoff — PENDING
 

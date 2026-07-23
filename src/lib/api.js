@@ -376,6 +376,8 @@ class ApiClient {
   getReferralEarnings() { return this.request('/gps/referrals/my-earnings'); }
   applyReferralCode(code) { return this.request('/gps/referrals/apply', { method: 'POST', body: JSON.stringify({ code }) }); }
   processGps(bookingId) { return this.request(`/gps/process/${bookingId}`, { method: 'POST', body: JSON.stringify({}) }); }
+  explainGpsAllocation(transactionId) { return this.request(`/gps/allocations/${transactionId}/explain`); }
+  disputeGpsAllocation(transactionId, reason) { return this.request(`/gps/allocations/${transactionId}/dispute`, { method: 'POST', body: JSON.stringify({ reason }) }); }
   getGpsStats() { return this.request('/gps/stats'); }
   getGpsLeaderboard() { return this.request('/gps/leaderboard'); }
 
