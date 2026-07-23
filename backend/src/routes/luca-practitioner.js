@@ -17,6 +17,7 @@ const { authMiddleware } = require('../middleware/auth');
 const { providerOnly } = require('../middleware/providerOnly');
 const { getAIProvider } = require('../lib/ai');
 const { recordAIReceipt } = require('../lib/ai/receipts');
+const { redactForExternalAI, isExternalProvider } = require('../lib/phi-boundary');
 
 const router = express.Router();
 
@@ -272,16 +273,18 @@ router.post('/practitioner/messages', authMiddleware, providerOnly, async (req, 
     const context = await buildPractitionerContext(userId);
 
     let ai = getAIProvider();
+    // PHI boundary rule (policy v0): restricted identifiers never go to external models.
+    const outbound = isExternalProvider(ai) ? redactForExternalAI(content).text : content;
     let reply;
     let errorClass = null;
     const startedAt = Date.now();
     try {
-      reply = await ai.complete({ system: SYSTEM_PROMPT, prompt: content, context });
+      reply = await ai.complete({ system: SYSTEM_PROMPT, prompt: outbound, context });
     } catch (e) {
       console.error('AI provider error, falling back to mock:', e.message);
       errorClass = /timed out/i.test(e.message || '') ? 'provider_timeout' : 'provider_error';
       const fallback = getAIProvider({ ...process.env, LUCA_AI_MODE: 'mock' });
-      reply = await fallback.complete({ system: SYSTEM_PROMPT, prompt: content, context });
+      reply = await fallback.complete({ system: SYSTEM_PROMPT, prompt: outbound, context });
       ai = { ...fallback, degraded: ai.degraded || errorClass };
     }
     const latencyMs = Date.now() - startedAt;

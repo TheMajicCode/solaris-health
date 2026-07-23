@@ -1830,7 +1830,7 @@ function CoachPage({ user, go }) {
             />
             <Btn variant="primary" icon={Send} onClick={() => send()} disabled={sending || !input.trim()}>Send</Btn>
           </div>
-          <div className="coach-disclaimer">LUCA guides and educates — never diagnoses or prescribes.</div>
+          <div className="coach-disclaimer">LUCA guides and educates — never diagnoses or prescribes. Pre-production preview · not for emergencies — if this is urgent, contact local emergency services.</div>
         </div>
       </div>
 

@@ -20,6 +20,7 @@ const db = require('../db');
 const { authMiddleware } = require('../middleware/auth');
 const { getAIProvider } = require('../lib/ai');
 const { recordAIReceipt } = require('../lib/ai/receipts');
+const { redactForExternalAI, isExternalProvider } = require('../lib/phi-boundary');
 const { computeTriggers, buildTriggerInstructions } = require('../lib/luca-triggers');
 const { MILESTONE_DEFS_COUNT } = require('./journeys');
 
@@ -419,22 +420,26 @@ router.post('/messages', authMiddleware, async (req, res) => {
     // 2. Build rich health context + per-call rule-engine triggers
     const passportContext = await buildContext(userId);
     const triggers = await computeTriggers(userId, content);
-    console.log('[LUCA triggers]', userId, triggers);
+    console.log('[LUCA triggers]', userId, Object.keys(triggers)); // keys only — never trigger values (health-derived)
     const triggerHints = buildTriggerInstructions(triggers);
     const context = triggerHints ? `${triggerHints}\n\n${passportContext}` : passportContext;
 
     // 3. Use AIProvider (cloud mode = VM LLM, never the Abacus RAG bot)
     let ai = getAIProvider();
+    // PHI boundary rule (policy v0): restricted identifiers (SSN/card/IBAN-like)
+    // never leave the platform toward an external model. The member's stored
+    // message is untouched; only the outbound copy is redacted.
+    const outbound = isExternalProvider(ai) ? redactForExternalAI(content).text : content;
     let reply;
     let errorClass = null;
     const startedAt = Date.now();
     try {
-      reply = await ai.complete({ system: SYSTEM_PROMPT, prompt: content, context });
+      reply = await ai.complete({ system: SYSTEM_PROMPT, prompt: outbound, context });
     } catch (e) {
       console.error('AI provider error, falling back to mock:', e.message);
       errorClass = /timed out/i.test(e.message || '') ? 'provider_timeout' : 'provider_error';
       const fallback = getAIProvider({ ...process.env, LUCA_AI_MODE: 'mock' });
-      reply = await fallback.complete({ system: SYSTEM_PROMPT, prompt: content, context });
+      reply = await fallback.complete({ system: SYSTEM_PROMPT, prompt: outbound, context });
       ai = { ...fallback, degraded: ai.degraded || errorClass };
     }
     const latencyMs = Date.now() - startedAt;

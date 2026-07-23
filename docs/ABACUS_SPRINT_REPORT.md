@@ -47,7 +47,15 @@ Sprint start: 2026-07-23 (UTC)
 - Vault export: `gatherRecord` pulls receipts; `buildVaultExport` emits `ai/execution-receipts.jsonl` + manifest listing + export-event count.
 - `backend/tests/ai-receipts.test.js` (7 tests): one receipt per chat turn, correct hashes/provenance, NO raw prompt/reply/PHI copy-through (canary-string check on serialized row AND on export file), export roundtrip via GET /api/export/me, insert-failure safety.
 - Evidence: backend jest 68/68 pass, lint 0 errors, migration applied ("Migrations complete!").
-### Slice 3 — PHI boundary truthfulness — PENDING
+### Slice 3 — PHI boundary truthfulness — DONE
+
+- **UI truth:** strengthened LUCA coach disclaimer in `src/components/LucaPassport.jsx` — "LUCA guides and educates — never diagnoses or prescribes. Pre-production preview · not for emergencies…". Compliance-claim sweep of `src/` found no misleading HIPAA/compliance claims; `LAUNCH_GATES.md` already states pre-HIPAA honestly.
+- **New `backend/src/lib/phi-boundary.js`:** `classifySensitivity` (SSN/card/IBAN patterns → `restricted_identifiers`), `redactForExternalAI` (replaces with `[REDACTED:*]`, returns counts), `isExternalProvider` (boundary = any provider not `mock:`/`local:`).
+- **Wired into both LUCA routes** (`luca.js`, `luca-practitioner.js`): the *outbound* prompt is redacted only when the provider is external; the member's stored message is untouched; degraded-fallback path uses the same redacted outbound copy.
+- **Log hygiene:** `[LUCA triggers]` log no longer prints health-derived trigger values (keys only). Audit of other routes: only error objects are logged.
+- **Docs:** added "External AI provider & retention boundary" section to `docs/SECURITY.md` (what crosses the boundary per mode, redaction rule v0, retention per table, no-compliance-claim caveat).
+- **Tests:** new `backend/tests/phi-boundary.test.js` (8 tests, offline). Full backend suite **76/76**, backend lint 0 errors. Frontend **30/30**, build PASS.
+
 ### Slice 4 — Incident response + read-only mode — PENDING
 ### Slice 5 — Migration/rollback hardening — PENDING
 ### Slice 6 — Passport sovereignty status — PENDING

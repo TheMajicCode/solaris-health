@@ -69,6 +69,49 @@ security is a first-class concern.
 
 ---
 
+## External AI provider & retention boundary
+
+LUCA's AI calls go through a single factory (`backend/src/lib/ai/index.js`). What
+crosses the boundary, and what is retained, is explicit:
+
+| Mode (`LUCA_AI_MODE`) | Where inference runs | Crosses network boundary? |
+|---|---|---|
+| `mock` (default, no key) | In-process canned responses | No |
+| `local` | Self-hosted OpenAI-compatible endpoint (e.g. Ollama) | LAN only |
+| `abacus` / `cloud` / OpenAI-compatible | Managed external provider | **Yes** |
+
+**What is sent to an external provider (per request):** the system prompt, a
+context summary built from the member's Passport (assessment archetype, recent
+check-in metrics, upcoming bookings), and the chat message. Nothing is sent when
+running in `mock`/`local` mode.
+
+**Restricted-identifier redaction (rule v0):** before any prompt leaves the
+boundary to an external provider, `backend/src/lib/phi-boundary.js` scans it and
+replaces SSN-like, payment-card-like, and IBAN-like tokens with `[REDACTED:*]`
+placeholders (`redactForExternalAI`). The member's original message is stored
+unmodified in their own record; only the *outbound* copy is redacted. Health
+content itself (symptoms, metrics) is the product's purpose and is sent as-is
+under the member's consent basis — this rule targets identifiers that should
+never be needed for coaching.
+
+**What is retained where:**
+
+- `luca_messages` (Postgres): full conversation history, including `model_id`
+  and `inputs_hash` — the member's own data, exportable and deletable.
+- `ai_execution_receipts` (Postgres): **hashes only** (SHA-256 of input/output),
+  provider id, compute target, latency, degraded/error class, policy version.
+  No prompt or response text — receipts are safe to export and audit.
+- Application logs: no prompt/response bodies, no health-derived trigger values;
+  errors log error class/message only.
+- External provider retention is governed by that provider's terms; the provider
+  id recorded in each receipt (`abacus:<model>` etc.) makes the responsible
+  party auditable per interaction.
+
+> ⚠️ This is a pre-HIPAA engineering control, not a compliance certification.
+> See `LAUNCH_GATES.md` for the honest launch-readiness state.
+
+---
+
 ## Input validation
 
 - All SQL uses **parameterized queries** (`$1, $2, …`) — no string concatenation.
