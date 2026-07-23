@@ -35,7 +35,11 @@ Sprint start: 2026-07-23 (UTC)
 - Imported sprint context into repo: `AGENTS.md`, `docs/ABACUS_MASTER_CONTEXT.md`, `docs/ABACUS_OVERNIGHT_SPRINT_PROMPT.md`, `.abacusai/skills/solaris-sovereign-sprint/SKILL.md`.
 - Created this ledger.
 
-### Slice 1 — Abacus AI provider mode — PENDING
+### Slice 1 — Abacus AI provider mode — DONE
+- `backend/src/lib/ai/index.js`: added `LUCA_AI_MODE=abacus` (OpenAI-compatible port, default base URL `https://routellm.abacus.ai/v1`, provider id `abacus:<model>`), AbortController timeout on every remote adapter (`LUCA_AI_TIMEOUT_MS`, default 20000ms, exported `requestTimeoutMs`), provider label passthrough for `cloud` mode. `cloud`/`anthropic`/`local`/`mock` untouched in behavior; missing key still degrades safely to mock (never throws at construction).
+- `backend/.env.example`: documents abacus mode, timeout, provider label; pinned-model guidance for health-adjacent flows.
+- `backend/tests/luca.test.js`: +4 provider-factory unit tests (abacus selection, key-missing degradation, local keyless, timeout parsing) — all offline, zero network.
+- Evidence: backend jest 61/61 pass (was 57), lint 0 errors.
 ### Slice 2 — AI execution receipts — PENDING
 ### Slice 3 — PHI boundary truthfulness — PENDING
 ### Slice 4 — Incident response + read-only mode — PENDING

@@ -1,9 +1,9 @@
 /**
  * LUCA AI concierge tests.
  *
- * Covers the pure rule-based mock provider (non-diagnostic, deterministic) and
- * the chat HTTP routes. Forces LUCA_AI_MODE=mock so the suite is fully offline
- * and never incurs a cloud LLM call.
+ * Covers the pure rule-based mock provider (non-diagnostic, deterministic), provider
+ * selection, and the chat HTTP routes. Forces LUCA_AI_MODE=mock so the suite is fully
+ * offline and never incurs a cloud LLM call.
  */
 process.env.LUCA_AI_MODE = 'mock';
 
@@ -11,6 +11,43 @@ const request = require('supertest');
 const app = require('../src/server');
 const db = require('../src/db');
 const { createMockReply } = require('../src/lib/ai/mock');
+const { getAIProvider, requestTimeoutMs } = require('../src/lib/ai');
+
+describe('AI provider factory', () => {
+  it('selects Abacus RouteLLM explicitly without making a network call', () => {
+    const provider = getAIProvider({
+      LUCA_AI_MODE: 'abacus',
+      LUCA_AI_API_KEY: 'test-key',
+      LUCA_AI_MODEL: 'claude-sonnet-4-6',
+    });
+
+    expect(provider.id).toBe('abacus:claude-sonnet-4-6');
+    expect(provider.degraded).toBeUndefined();
+  });
+
+  it('degrades Abacus mode to mock when its key is missing', () => {
+    const provider = getAIProvider({ LUCA_AI_MODE: 'abacus' });
+
+    expect(provider.id).toBe('mock:luca-reflex-v0');
+    expect(provider.degraded).toMatch(/Abacus RouteLLM/);
+  });
+
+  it('keeps local mode keyless and provider-specific', () => {
+    const provider = getAIProvider({
+      LUCA_AI_MODE: 'local',
+      LUCA_AI_MODEL: 'local-test-model',
+    });
+
+    expect(provider.id).toBe('local:local-test-model');
+    expect(provider.degraded).toBeUndefined();
+  });
+
+  it('uses a safe timeout default and accepts a positive override', () => {
+    expect(requestTimeoutMs({})).toBe(20000);
+    expect(requestTimeoutMs({ LUCA_AI_TIMEOUT_MS: '12500' })).toBe(12500);
+    expect(requestTimeoutMs({ LUCA_AI_TIMEOUT_MS: '-1' })).toBe(20000);
+  });
+});
 
 describe('createMockReply (rule-based fallback)', () => {
   it('responds to sleep-related prompts with sleep guidance', () => {
@@ -69,7 +106,9 @@ describe('LUCA chat routes', () => {
   });
 
   it('returns an (initially empty) message history', async () => {
-    const res = await request(app).get('/api/luca/messages').set('Authorization', `Bearer ${token}`);
+    const res = await request(app)
+      .get('/api/luca/messages')
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.messages)).toBe(true);
   });
@@ -93,7 +132,9 @@ describe('LUCA chat routes', () => {
   });
 
   it('persists the conversation so history grows', async () => {
-    const res = await request(app).get('/api/luca/messages').set('Authorization', `Bearer ${token}`);
+    const res = await request(app)
+      .get('/api/luca/messages')
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     // user message + assistant reply from the previous test
     expect(res.body.messages.length).toBeGreaterThanOrEqual(2);
