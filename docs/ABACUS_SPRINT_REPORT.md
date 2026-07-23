@@ -129,7 +129,30 @@ Sprint start: 2026-07-23 (UTC)
 - **Evidence**: backend 103/103 (13 suites), lint 0 errors; frontend 30/30,
   build PASS.
 - Simulated by design: allocations are shadow proposals; no settlement exists.
-### Slice 9 — Dead-end sweep — PENDING
+### Slice 9 — Dead-end sweep — DONE
+
+- **Smoke test extended 10 → 18 steps** (`backend/scripts/smoke-test.js`), now
+  covering the core member journeys end-to-end over HTTP: registration → token
+  identity → onboarding skip → LUCA recommendations → daily check-in → week
+  strip → journal → audio → vault export → **Solaris assessment (submit +
+  latest)** → **Passport (completeness + sovereignty-status)** → **LUCA
+  suggestion action (journey start)** → **explore practitioners (directory +
+  detail)** → **booking request + cancel round-trip** → **intake (templates +
+  inbox)** → **GPS transparency (treasury + my-ledger)** → **logout with token
+  revocation check** (post-logout `/api/users/me` must 401).
+- **Result: 18/18 PASS** against a fresh server running the sprint branch
+  (local instance on :5057, real dev DB, 38 providers in directory; booking
+  requested and cancelled cleanly).
+- **No real dead ends found** at the API layer on the swept journeys. Existing
+  "coming soon" states (online payment in BookingFlow, community voting in
+  Treasury, Nostr login) are honest, non-trapping labels — left as-is per spec.
+- Practitioner response path verified wired end-to-end by inspection
+  (`/api/provider/bookings/:id/confirm|cancel|complete` ⇄ `api.confirmBooking`
+  /`declineBooking`/`completeBooking`); consented Passport view endpoints
+  (`/api/consent/*`, `/api/consent/granted/:memberId`) exist with grant/revoke
+  covered in Slice 6. Browser-level E2E for the practitioner role was not
+  re-run this slice (documented, not claimed).
+- No UI changes needed; look and feel untouched.
 ### Slice 10 — Docs & handoff — PENDING
 
 ## Commits

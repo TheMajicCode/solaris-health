@@ -119,8 +119,92 @@ async function run() {
     return 'vault produced';
   });
 
-  // 10. Report (test user is left in place; no self-delete endpoint)
-  await step('10. Report test account', async () => `left in place: ${email}`);
+  // 10. Solaris assessment (submit + read back)
+  await step('10. Assessment submit + latest (POST /api/assessment/submit)', async () => {
+    const { status } = await req('POST', '/api/assessment/submit', {
+      aspects: { mental: 70, emotional: 65, physical: 60, spiritual: 75 },
+      systems: { digestive: 60, nervous: 70, immune: 65 },
+      answers: [],
+    });
+    if (status !== 200 && status !== 201) throw new Error(`submit status ${status}`);
+    const latest = await req('GET', '/api/assessment/latest');
+    if (latest.status !== 200) throw new Error(`latest status ${latest.status}`);
+    return 'assessment stored + readable';
+  });
+
+  // 11. Passport (completeness + sovereignty status)
+  await step('11. Passport loads (completeness + sovereignty-status)', async () => {
+    const a = await req('GET', '/api/passport/completeness');
+    if (a.status !== 200) throw new Error(`completeness status ${a.status}`);
+    const b = await req('GET', '/api/passport/sovereignty-status');
+    if (b.status !== 200) throw new Error(`sovereignty status ${b.status}`);
+    if (!b.json?.rights?.export?.api) throw new Error('no export right surfaced');
+  });
+
+  // 12. LUCA suggestion action → start a journey
+  await step('12. Suggestion action starts a journey (POST /api/journeys/start)', async () => {
+    const { status, json } = await req('POST', '/api/journeys/start', { journeyType: 'your_path' });
+    if (status !== 200) throw new Error(`status ${status}`);
+    if (json?.journey?.status !== 'active') throw new Error('journey not active');
+  });
+
+  // 13. Explore practitioners (marketplace directory + detail)
+  let providerId = null;
+  await step('13. Explore practitioners (GET /api/marketplace/providers)', async () => {
+    const { status, json } = await req('GET', '/api/marketplace/providers');
+    if (status !== 200) throw new Error(`status ${status}`);
+    const list = json?.providers || json;
+    if (!Array.isArray(list) || !list.length) return 'directory empty (no seed) — skipping detail';
+    providerId = list[0].id;
+    const detail = await req('GET', `/api/marketplace/providers/${providerId}`);
+    if (detail.status !== 200) throw new Error(`detail status ${detail.status}`);
+    return `${list.length} providers`;
+  });
+
+  // 14. Booking request + cancel (round trip, leaves no active booking)
+  await step('14. Booking request + cancel (POST /api/bookings/request)', async () => {
+    if (!providerId) return 'skipped — no providers in directory';
+    const d = new Date(Date.now() + 7 * 24 * 3600 * 1000);
+    const date = d.toISOString().slice(0, 10);
+    const { status, json } = await req('POST', '/api/bookings/request', {
+      providerId, date, startTime: '10:00',
+    });
+    if (status === 409) return 'slot conflict (bookings work; slot taken)';
+    if (status !== 200 && status !== 201) throw new Error(`request status ${status}`);
+    const bookingId = json?.booking?.id || json?.id;
+    if (!bookingId) throw new Error('no booking id returned');
+    const cancel = await req('PUT', `/api/bookings/${bookingId}/cancel`, { reason: 'smoke test cleanup' });
+    if (cancel.status !== 200) throw new Error(`cancel status ${cancel.status}`);
+    return 'requested + cancelled';
+  });
+
+  // 15. Intake system (templates + patient inbox)
+  await step('15. Intake templates + inbox (GET /api/intake/...)', async () => {
+    const t = await req('GET', '/api/intake/templates');
+    if (t.status !== 200) throw new Error(`templates status ${t.status}`);
+    const i = await req('GET', '/api/intake/inbox');
+    if (i.status !== 200) throw new Error(`inbox status ${i.status}`);
+  });
+
+  // 16. GPS transparency (public treasury + own value trail)
+  await step('16. GPS treasury + my-ledger (GET /api/gps/...)', async () => {
+    const t = await req('GET', '/api/gps/treasury');
+    if (t.status !== 200) throw new Error(`treasury status ${t.status}`);
+    const l = await req('GET', '/api/gps/my-ledger');
+    if (l.status !== 200) throw new Error(`ledger status ${l.status}`);
+  });
+
+  // 17. Logout revokes the token
+  await step('17. Logout revokes token (POST /api/auth/logout)', async () => {
+    const { status } = await req('POST', '/api/auth/logout');
+    if (status !== 200) throw new Error(`logout status ${status}`);
+    const after = await req('GET', '/api/users/me');
+    if (after.status !== 401) throw new Error(`token still valid after logout (status ${after.status})`);
+    return 'token rejected after logout';
+  });
+
+  // 18. Report (test user is left in place; no self-delete endpoint)
+  await step('18. Report test account', async () => `left in place: ${email}`);
 
   const passed = results.filter((r) => r.ok).length;
   const total = results.length;
