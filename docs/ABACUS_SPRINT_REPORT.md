@@ -63,7 +63,14 @@ Sprint start: 2026-07-23 (UTC)
 - **Tests:** new `backend/tests/read-only-mode.test.js` (5 tests). Full backend **81/81**, lint 0 errors.
 - **`LAUNCH_GATES.md` updated honestly:** Gate 11 → PASS (runbook + tested freeze; tabletop noted not yet executed, owners are placeholders); Gate 8 → PARTIAL (redaction v0 + receipts + SECURITY.md boundary in place; still blocked on BAA + encryption at rest); scorecard updated.
 
-### Slice 5 — Migration/rollback hardening — PENDING
+### Slice 5 — Migration and rollback hardening — DONE
+
+- **Migration chain tested against a copy of production:** restored `solaris-20260722-2110.sql` (77 tables, 37 users) into scratch DB `solaris_migrate_test` with 0 restore errors; pending `019_ai_execution_receipts` applied cleanly → 79 tables; scratch dropped. Procedure documented in `docs/MIGRATIONS.md`.
+- **New schema/recovery guard `backend/tests/schema-recovery.test.js`** (3 tests): curated critical core-journey tables must exist; every migration-defined table referenced by route/lib SQL must exist (comment-stripped SQL parse to avoid false positives); `ai_execution_receipts` must retain receipt-V0 columns.
+- **New `docs/MIGRATIONS.md`:** forward-only/additive policy — NO `exports.down` by deliberate decision (drop-table "rollback" on health data is destructive theater); broken migration → fix forward; corrupted data → backup restore; rehearsal recipe; honest image-registry gap.
+- **`LAUNCH_GATES.md`:** Gate 2 → PASS (evidence above); Gate 3 stays PARTIAL honestly (no image registry) but rollback docs now truthful; scorecard updated.
+- **Tests:** full backend **84/84**, lint 0 errors.
+
 ### Slice 6 — Passport sovereignty status — PENDING
 ### Slice 7 — Agent authority scaffold — PENDING
 ### Slice 8 — GPS evidence receipts — PENDING

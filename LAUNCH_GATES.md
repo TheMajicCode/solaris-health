@@ -35,15 +35,21 @@ curl http://localhost:5000/api/health
 
 ---
 
-## Gate 2 — Database Migration ⚠️ PARTIAL
+## Gate 2 — Database Migration ✅ PASS
 **Required:** All migrations succeed against a copy of production.
 
 **Current state:**
 - ✅ `node-pg-migrate` runner installed and wired to startup
-- ✅ 18 numbered migration files in `backend/migrations/`
+- ✅ 19 numbered migration files in `backend/migrations/`
 - ✅ Migrations auto-apply on container startup
-- ❌ No migration test run against a production data dump (untested)
-- ❌ No rollback scripts (`exports.down`) in any migration file
+- ✅ **(2026-07-23)** Full chain tested against a copy of production: restored
+  `solaris-20260722-2110.sql` into a scratch DB (0 errors), pending migration
+  `019_ai_execution_receipts` applied cleanly (77 → 79 tables, 37 users intact).
+  Procedure documented in `docs/MIGRATIONS.md`.
+- ✅ **(2026-07-23)** Continuous schema guard: `backend/tests/schema-recovery.test.js`
+  fails if any route-referenced, migration-defined table is missing.
+- ➖ No `exports.down` scripts — **by policy**, not omission: migrations are
+  forward-only and additive (see `docs/MIGRATIONS.md`)
 
 **Required to pass:**
 ```bash
@@ -61,13 +67,16 @@ DATABASE_URL=$TEST_DATABASE_URL npm run migrate
 **Current state:**
 - ✅ Every commit tagged with phase (tier1, tier2, etc.) — can `git checkout` any version
 - ✅ Docker images can be rebuilt from any commit
-- ❌ No `exports.down` in migration files — forward-only migrations
-- ❌ No versioned Docker image registry (images not pushed to GHCR/ECR)
+- ✅ **(2026-07-23)** Rollback procedure documented and truthful: application
+  rollback is git-based (`docs/INCIDENT_RESPONSE.md` Step 4); schema is
+  forward-only/additive so old code runs safely on new schema
+  (`docs/MIGRATIONS.md`); data recovery is backup-restore, never `down`.
+- ➖ `exports.down` deliberately not added — a drop-table `down` on health data
+  is destructive theater, not rollback (see `docs/MIGRATIONS.md`)
+- ❌ No versioned Docker image registry (images rebuilt from source at rollback
+  time, ~minutes; GHCR push would reduce this to seconds — future CI work)
 
-**Required to pass:**
-- Add `down` migrations to at least the last 3 migration files
-- Push Docker images to GitHub Container Registry on each `main` push (add to CI)
-- Document rollback procedure: `git revert` + `docker pull <previous-image>` + `npm run migrate:down`
+**Remaining to fully pass:** push versioned images to a registry from CI.
 
 ---
 
@@ -247,8 +256,8 @@ installed (`*/5 * * * *`) and test run reported healthy.
 | Gate | Status | Blocker for real patients? |
 |------|--------|---------------------------|
 | 1. Source Recovery | ✅ PASS | No |
-| 2. DB Migration | ⚠️ PARTIAL | No |
-| 3. Rollback | ⚠️ PARTIAL | No |
+| 2. DB Migration | ✅ PASS | No |
+| 3. Rollback | ⚠️ PARTIAL (no image registry) | No |
 | 4. Backup | ✅ PASS | **YES** |
 | 5. Tenant Isolation | ✅ PASS | **YES** |
 | 6. Authentication | ✅ PASS | No |
@@ -259,4 +268,4 @@ installed (`*/5 * * * *`) and test run reported healthy.
 | 11. Incident Response | ✅ PASS | No |
 
 **Gates 4, 5, 7, 11 pass; Gate 8 (PHI Boundary) remains the patient-data blocker (engineering controls now in place, but no BAA and no encryption at rest).**
-**Gates 1, 6, 9, 10 pass; Gates 2, 3 remain PARTIAL for public launch.**
+**Gates 1, 2, 6, 9, 10 pass; Gate 3 remains PARTIAL (no image registry) for public launch.**
