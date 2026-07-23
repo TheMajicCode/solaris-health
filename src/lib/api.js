@@ -30,7 +30,14 @@ class ApiClient {
     }
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Request failed' }));
-      throw new Error(err.error || 'Request failed');
+      const e = new Error(err.error || 'Request failed');
+      // Preserve structured error metadata so callers can react to specific
+      // states (e.g. LUCA paused by the owner → agentDisabled) instead of
+      // treating every failure as a generic error.
+      e.status = res.status;
+      e.body = err;
+      e.agentDisabled = !!err.agentDisabled;
+      throw e;
     }
     if (res.status === 204) return null;
     return res.json();
@@ -164,6 +171,8 @@ class ApiClient {
   createContribution(data) { return this.request('/contributions', { method: 'POST', body: JSON.stringify(data) }); }
   getCredentials() { return this.request('/credentials'); }
   getAgents() { return this.request('/agents'); }
+  getLucaAgent() { return this.request('/agents/luca'); }
+  setLucaEnabled(enabled) { return this.request(`/agents/luca/${enabled ? 'enable' : 'disable'}`, { method: 'POST', body: JSON.stringify({}) }); }
 
   // ---- Public practitioner directory (no auth) ----
   getPublicPractitioners(params = {}) {

@@ -1360,13 +1360,30 @@ function SovereigntyCard({ onExport, exporting }) {
   const [status, setStatus] = useState(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [revoking, setRevoking] = useState(null);
+  const [agent, setAgent] = useState(null);
+  const [togglingAgent, setTogglingAgent] = useState(false);
 
   const load = () => {
     api.getSovereigntyStatus()
       .then((s) => setStatus(s || null))
       .catch(() => setStatus(null));
+    api.getLucaAgent()
+      .then((a) => setAgent(a || null))
+      .catch(() => setAgent(null));
   };
   useEffect(() => { load(); }, []);
+
+  const toggleLuca = async () => {
+    if (!agent || togglingAgent) return;
+    setTogglingAgent(true);
+    try {
+      const res = await api.setLucaEnabled(!agent.active);
+      setAgent((a) => (a ? { ...a, active: res.active } : a));
+      toast.success(res.message || (res.active ? 'LUCA is back by your side.' : 'LUCA is switched off.'));
+    } catch {
+      toast.error('Could not update LUCA right now — please try again.');
+    } finally { setTogglingAgent(false); }
+  };
 
   if (!status) return null;
 
@@ -1428,6 +1445,21 @@ function SovereigntyCard({ onExport, exporting }) {
           {status.ai.provider && (
             <div className="tiny muted2" style={{ marginTop: 6 }}>
               Last interaction: {fmtShort(status.ai.at)}
+            </div>
+          )}
+          {agent && (
+            <div className="between" style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--line, rgba(10,43,41,0.08))', gap: 10 }}>
+              <div>
+                <div className="tiny f6">LUCA can act for you</div>
+                <div className="tiny muted2" style={{ lineHeight: 1.5 }}>
+                  {agent.active
+                    ? 'Pause LUCA anytime. Your data, Passport and session stay untouched.'
+                    : 'LUCA is paused — you turned it off. Re-enable anytime.'}
+                </div>
+              </div>
+              <div style={{ opacity: togglingAgent ? 0.5 : 1 }}>
+                <Toggle on={!!agent.active} onClick={toggleLuca} />
+              </div>
             </div>
           )}
         </div>
@@ -1754,6 +1786,8 @@ function CoachPage({ user, go }) {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [degraded, setDegraded] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [resuming, setResuming] = useState(false);
   const [latest, setLatest] = useState(null);
   const [voiceOn, setVoiceOn] = useState(() => {
     try { return localStorage.getItem('luca_voice_enabled') === 'true'; } catch { return false; }
@@ -1828,6 +1862,22 @@ function CoachPage({ user, go }) {
     playTts(idx, last.content);
   }, [messages, voiceOn, sending, playTts, ttsFailed]);
 
+  useEffect(() => {
+    api.getLucaAgent().then((a) => setPaused(a ? !a.active : false)).catch(() => { /* best-effort */ });
+  }, []);
+
+  const reenableLuca = async () => {
+    if (resuming) return;
+    setResuming(true);
+    try {
+      const res = await api.setLucaEnabled(true);
+      setPaused(false);
+      toast.success(res.message || 'LUCA is back by your side.');
+    } catch {
+      toast.error('Could not re-enable LUCA right now — please try again.');
+    } finally { setResuming(false); }
+  };
+
   const send = async (text) => {
     const content = (text ?? input).trim();
     if (!content || sending) return;
@@ -1838,8 +1888,13 @@ function CoachPage({ user, go }) {
       const res = await api.sendLucaMessage(content);
       setDegraded(!!res?.degraded);
       setMessages((m) => [...m, { role: 'assistant', content: res?.reply || '…', model: res?.model, suggestions: res?.suggestions || [], created_at: new Date().toISOString() }]);
-    } catch {
-      setMessages((m) => [...m, { role: 'assistant', content: 'LUCA is taking a moment — try again shortly.', created_at: new Date().toISOString() }]);
+    } catch (e) {
+      if (e?.agentDisabled) {
+        setPaused(true);
+        setMessages((m) => [...m, { role: 'assistant', content: 'LUCA is paused — you turned it off. Re-enable anytime.', created_at: new Date().toISOString() }]);
+      } else {
+        setMessages((m) => [...m, { role: 'assistant', content: 'LUCA is taking a moment — try again shortly.', created_at: new Date().toISOString() }]);
+      }
     } finally { setSending(false); }
   };
 
@@ -1856,9 +1911,11 @@ function CoachPage({ user, go }) {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="row gap-2" style={{ alignItems: 'center' }}>
               <span className="dp" style={{ fontSize: 17, fontWeight: 700, color: 'var(--gold-ink)' }}>LUCA</span>
-              {degraded
-                ? <Pill tone="gold" icon={Clock}>Offline mode</Pill>
-                : <Pill tone="mint" icon={Bot}>Online</Pill>}
+              {paused
+                ? <Pill tone="gold" icon={Bot}>Paused</Pill>
+                : degraded
+                  ? <Pill tone="gold" icon={Clock}>Offline mode</Pill>
+                  : <Pill tone="mint" icon={Bot}>Online</Pill>}
             </div>
             <div className="tiny muted" style={{ marginTop: 1 }}>Heart-Centered Intelligence</div>
           </div>
@@ -1932,15 +1989,26 @@ function CoachPage({ user, go }) {
         </div>
 
         <div className="coach-footer">
-          <div className="coach-input-row">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && send()}
-              placeholder="Ask LUCA anything..."
-            />
-            <Btn variant="primary" icon={Send} onClick={() => send()} disabled={sending || !input.trim()}>Send</Btn>
-          </div>
+          {paused ? (
+            <div className="between" style={{ gap: 12, flexWrap: 'wrap', padding: '4px 2px' }}>
+              <div className="small muted" style={{ lineHeight: 1.5 }}>
+                LUCA is paused — you turned it off. Your data, Passport and session are untouched.
+              </div>
+              <Btn variant="primary" icon={Bot} onClick={reenableLuca} disabled={resuming}>
+                {resuming ? 'Re-enabling…' : 'Re-enable LUCA'}
+              </Btn>
+            </div>
+          ) : (
+            <div className="coach-input-row">
+              <input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && send()}
+                placeholder="Ask LUCA anything…"
+              />
+              <Btn variant="primary" icon={Send} onClick={() => send()} disabled={sending || !input.trim()}>Send</Btn>
+            </div>
+          )}
           <div className="coach-disclaimer">LUCA guides and educates — never diagnoses or prescribes. Pre-production preview · not for emergencies — if this is urgent, contact local emergency services.</div>
         </div>
       </div>
@@ -3852,8 +3920,11 @@ function LucaWidget({ user, hidden, go }) {
     try {
       const res = await api.sendLucaMessage(content);
       setMessages((m) => [...m, { role: 'assistant', content: res?.reply || '…', model: res?.model, suggestions: res?.suggestions || [], created_at: new Date().toISOString() }]);
-    } catch {
-      setMessages((m) => [...m, { role: 'assistant', content: 'LUCA is taking a moment — try again shortly.', created_at: new Date().toISOString() }]);
+    } catch (e) {
+      const msg = e?.agentDisabled
+        ? 'LUCA is paused — you turned it off. Re-enable anytime from your Passport.'
+        : 'LUCA is taking a moment — try again shortly.';
+      setMessages((m) => [...m, { role: 'assistant', content: msg, created_at: new Date().toISOString() }]);
     } finally { setSending(false); }
   };
 

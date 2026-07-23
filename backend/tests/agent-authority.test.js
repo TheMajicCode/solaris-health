@@ -135,6 +135,12 @@ describe('LUCA agent HTTP routes', () => {
       .get('/api/passport/sovereignty-status').set('Authorization', `Bearer ${token}`);
     expect(me.status).toBe(200);
 
+    // The member-facing toggle reads this endpoint — it must reflect the paused state.
+    const state = await request(app)
+      .get('/api/agents/luca').set('Authorization', `Bearer ${token}`);
+    expect(state.status).toBe(200);
+    expect(state.body.active).toBe(false);
+
     // Re-enable brings LUCA back.
     const on = await request(app)
       .post('/api/agents/luca/enable').set('Authorization', `Bearer ${token}`);
