@@ -42,6 +42,7 @@ function buildVaultExport(record) {
     user, assessment, contributions = [], messages = [], credentials = [],
     journal = [], healthDocs = [], habitTicks = [], audioUnlocks = [],
     aiReceipts = [],
+    agentAuthority = null,
   } = record;
   const exportedAt = new Date().toISOString();
   const files = [];
@@ -214,6 +215,18 @@ function buildVaultExport(record) {
     files.push({
       path: 'ai/execution-receipts.jsonl',
       contents: lines.join('\n') + '\n',
+    });
+  }
+
+  // AGENTS — the user's LUCA agent identity + scoped capability grants (no PHI)
+  if (agentAuthority && (agentAuthority.agents?.length || agentAuthority.grants?.length)) {
+    files.push({
+      path: 'agents/authority.json',
+      contents: JSON.stringify({
+        note: 'Your AI agents and exactly what they are allowed to do on your behalf. Revocable at any time.',
+        agents: agentAuthority.agents,
+        capability_grants: agentAuthority.grants,
+      }, null, 2) + '\n',
     });
   }
 

@@ -46,6 +46,9 @@ describe('receipt written per LUCA chat turn', () => {
   afterAll(async () => {
     if (userId) {
       await db.query('DELETE FROM ai_execution_receipts WHERE user_id = $1', [userId]);
+      await db.query('DELETE FROM audit_logs WHERE actor_id = $1', [userId]);
+      await db.query('DELETE FROM agent_capability_grants WHERE owner_id = $1', [userId]);
+      await db.query('DELETE FROM agents WHERE owner_id = $1', [userId]);
       await db.query('DELETE FROM luca_messages WHERE user_id = $1', [userId]);
       await db.query('DELETE FROM reward_events WHERE user_id = $1', [userId]);
       await db.query('DELETE FROM users WHERE id = $1', [userId]);

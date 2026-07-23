@@ -21,6 +21,7 @@ const { authMiddleware } = require('../middleware/auth');
 const { getAIProvider } = require('../lib/ai');
 const { recordAIReceipt } = require('../lib/ai/receipts');
 const { redactForExternalAI, isExternalProvider } = require('../lib/phi-boundary');
+const { checkCapability, recordGrantUse } = require('../lib/agent-authority');
 const { computeTriggers, buildTriggerInstructions } = require('../lib/luca-triggers');
 const { MILESTONE_DEFS_COUNT } = require('./journeys');
 
@@ -414,6 +415,17 @@ router.post('/messages', authMiddleware, async (req, res) => {
 
     const userId = req.user.userId;
 
+    // 0. Agent authority (Slice 7): LUCA acts only under an active, unexpired
+    // capability grant. A disabled LUCA never deletes data or logs anyone out.
+    const authority = await checkCapability(userId, 'luca.chat').catch(() => ({ allowed: true, grant: null }));
+    if (!authority.allowed) {
+      return res.status(403).json({
+        error: 'LUCA is currently switched off for your account. Your data and Passport are untouched — you can re-enable LUCA anytime from your Passport.',
+        reason: authority.reason,
+        agentDisabled: true,
+      });
+    }
+
     // 1. Persist user message
     await db.query('INSERT INTO luca_messages (user_id, role, content) VALUES ($1,$2,$3)', [userId, 'user', content]);
 
@@ -477,6 +489,7 @@ router.post('/messages', authMiddleware, async (req, res) => {
       degraded: Boolean(ai.degraded),
       errorClass,
     });
+    recordGrantUse(authority.grant, { result: 'success' }); // audit: grant exercised (best-effort)
 
     res.json({ reply: cleanReply, suggestions, model: ai.id, degraded: ai.degraded || null });
   } catch (err) {

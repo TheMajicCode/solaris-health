@@ -67,6 +67,10 @@ async function gatherRecord(userId) {
     [userId]
   ).catch(() => ({ rows: [] }));
 
+  // Agent authority (Slice 7): the user's LUCA agent + capability grants — PHI-free
+  const { exportAgentAuthority } = require('../lib/agent-authority');
+  const agentAuthority = await exportAgentAuthority(userId).catch(() => ({ agents: [], grants: [] }));
+
   // Unlocked audio practices
   const audioUnlocks = await db.query(
     `SELECT al.title, al.description, al.tags_json, ua.unlocked_at
@@ -89,6 +93,7 @@ async function gatherRecord(userId) {
     habitTicks: habitTicks.rows,
     audioUnlocks: audioUnlocks.rows,
     aiReceipts: aiReceipts.rows,
+    agentAuthority,
   };
 }
 

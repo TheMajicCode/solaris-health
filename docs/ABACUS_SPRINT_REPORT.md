@@ -79,7 +79,18 @@ Sprint start: 2026-07-23 (UTC)
 - **Truthfulness check:** storage copy avoids unverified claims (no encryption-at-rest claim); AI copy matches actual compute target (in_process / local / managed_cloud with redaction note).
 - **Tests:** new `backend/tests/sovereignty-status.test.js` (4 tests: auth required, six questions answered plainly, latest receipt surfaced, no raw UUID in plain layer). Backend **88/88**, lint 0 errors. Frontend 30/30, build PASS (1 pre-existing lint error elsewhere, untouched).
 
-### Slice 7 — Agent authority scaffold — PENDING
+### Slice 7 — Agent authority scaffold — DONE
+
+- **Audit first:** existing `agents` table already provides agent identity + owner FK + `active` kill-switch; `audit_logs` provides the audit sink. Only the grants model was missing.
+- **Migration `020_agent_capability_grants.sql`** (additive): scoped capability grants per agent — capability, jsonb scope, `requires_human_approval`, status active/revoked, `expires_at`/`revoked_at`, UNIQUE(agent_id, capability). Applied.
+- **New `backend/src/lib/agent-authority.js`:** `ensureLucaAgent` (lazy one-LUCA-per-user + default grants `luca.chat`, `passport.read.summary`), `checkCapability` (agent active + grant active + unexpired), `recordGrantUse` (best-effort audit → `audit_logs` action `agent.grant.used`), `setLucaActive`, `revokeGrant`, `exportAgentAuthority`.
+- **Enforcement:** `POST /api/luca/messages` now checks `luca.chat` authority before any AI call → 403 plain-language refusal when disabled (user, data, session untouched); audits grant use after each successful reply.
+- **Owner routes** in `agents.js`: `GET /api/agents/luca` (identity + grants), `POST /api/agents/luca/disable|enable`, `PATCH /api/agents/grants/:id/revoke`.
+- **Export representation:** vault export now emits `agents/authority.json` (agents + capability grants, PHI-free).
+- **No Ory/JumpCloud/Nostr/wallet settlement** (per anti-goals).
+- **Tests:** new `backend/tests/agent-authority.test.js` (7 tests incl. end-to-end: disable → chat 403 → same token still reads sovereignty status → re-enable; real audit row asserted after a live chat). Fixed FK cleanup in two older suites (audit rows now reference users). Full backend **95/95**, lint 0 errors.
+- **Deferred:** frontend toggle UI for the LUCA kill-switch (API-only for now) — spec's done-condition (disableable without deleting/logging out + scoped authority model) is met server-side.
+
 ### Slice 8 — GPS evidence receipts — PENDING
 ### Slice 9 — Dead-end sweep — PENDING
 ### Slice 10 — Docs & handoff — PENDING

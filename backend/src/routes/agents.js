@@ -1,8 +1,72 @@
 const express = require('express');
 const db = require('../db');
 const { authMiddleware } = require('../middleware/auth');
+const {
+  ensureLucaAgent,
+  setLucaActive,
+  revokeGrant,
+} = require('../lib/agent-authority');
 
 const router = express.Router();
+
+// ---- LUCA agent authority (Slice 7) ----
+// The user-owned LUCA agent: identity, kill-switch and capability grants.
+// Disabling LUCA never deletes the user, their data, or their session.
+
+// GET /api/agents/luca — the caller's LUCA agent + its grants
+router.get('/luca', authMiddleware, async (req, res) => {
+  try {
+    const agent = await ensureLucaAgent(req.user.userId);
+    const grants = await db.query(
+      `SELECT id, capability, scope, requires_human_approval, status,
+              granted_at, expires_at, revoked_at
+         FROM agent_capability_grants
+        WHERE agent_id=$1 ORDER BY granted_at`,
+      [agent.id]
+    );
+    res.json({
+      id: agent.id,
+      name: agent.name,
+      purpose: agent.purpose,
+      active: agent.active,
+      grants: grants.rows,
+    });
+  } catch (err) {
+    console.error('Get LUCA agent error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/agents/luca/disable | /enable — owner kill-switch
+router.post('/luca/:action(disable|enable)', authMiddleware, async (req, res) => {
+  try {
+    const active = req.params.action === 'enable';
+    const agent = await setLucaActive(req.user.userId, active);
+    if (!agent) return res.status(404).json({ error: 'Agent not found' });
+    res.json({
+      id: agent.id,
+      active: agent.active,
+      message: active
+        ? 'LUCA is back by your side.'
+        : 'LUCA is switched off. Your data, Passport and session are untouched.',
+    });
+  } catch (err) {
+    console.error('Toggle LUCA agent error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PATCH /api/agents/grants/:id/revoke — owner revokes one capability grant
+router.patch('/grants/:id/revoke', authMiddleware, async (req, res) => {
+  try {
+    const grant = await revokeGrant(req.user.userId, req.params.id);
+    if (!grant) return res.status(404).json({ error: 'Grant not found or already revoked' });
+    res.json(grant);
+  } catch (err) {
+    console.error('Revoke grant error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 // Get all agents for authenticated user
 router.get('/', authMiddleware, async (req, res) => {
