@@ -219,7 +219,42 @@ Sprint start: 2026-07-23 (UTC)
 - No container image registry (rollback = rebuild from a previous git ref).
 
 ## Deployment state
-- (updated post-deploy below)
+- **Deployed and verified live** at https://solaris-health.abacusai.cloud on 2026-07-23.
+- Sequence: `git tag sprint-v4-checkpoint` → `docker compose build frontend backend`
+  → `docker compose up -d frontend backend`. Backend startup: "No migrations to run"
+  (019–021 already applied to the shared Postgres). Health endpoint returns
+  `{"status":"ok","checks":{"database":"ok"}}`.
+- Live verification (post-deploy, against the public URL):
+  - Smoke test 18/18 PASS (`SMOKE_BASE_URL=… node backend/scripts/smoke-test.js`).
+  - Tenant isolation 8/8 PASS (`API_URL=… node tests/tenant-isolation.test.js`).
+  - Browser boot verified for fresh visitor (onboarding) and returning user (assessment).
+- Rollback: `git checkout main && docker compose build frontend backend && docker compose up -d`
+  (main was the pre-sprint live code), or revert to tag `sprint-v4-checkpoint`.
+
+## Post-sprint hotfix — blank screen on load (2026-07-23)
+- **Symptom:** returning users saw a blank dark screen at the live URL; recurred after
+  each deploy.
+- **Root cause:** the PWA service worker (`public/sw.js`, `solaris-v3`) served the app
+  shell **cache-first**, pinning the browser to a stale `index.html` that referenced an
+  old content-hashed JS bundle. Every redeploy produces a new hashed bundle name, so the
+  old filename 404s → the app never mounts → blank screen.
+- **Fix (commits `4a59286`, `497b9c6`, `2c8e9ed`):**
+  - `sw.js` → `solaris-v4`: **network-first** for navigations/HTML (fresh `index.html`
+    always used; cached shell is offline-only); hashed assets stay cache-first; old caches
+    purged on `activate`; `skipWaiting` + `clients.claim`.
+  - `src/main.jsx`: register with `updateViaCache:'none'` and a guarded `controllerchange`
+    self-heal reload so already-affected clients recover automatically.
+  - `src/lib/api.js`: 20s `AbortController` timeout on every request + `AppContext` 25s boot
+    failsafe, so a hung `/users/me` can never freeze the "Awakening Solaris…" splash.
+  - `deploy/solaris-health.conf` (now tracked + symlinked): `location = /sw.js` forces
+    `no-store` at the origin so a new service worker is always detected.
+- **Verified live:** a browser stuck on the old `solaris-v3` stale shell recovered after a
+  single reload; `caches` now holds only `solaris-v4` with the current bundle
+  (`index-CUiD7rBZ.js`) and the app mounts. Future deploys cannot reproduce the stale-shell
+  blank screen because HTML is network-first.
+- **Residual note:** a client already stuck on a blank page (its old bundle 404'd, so no JS
+  runs) needs one manual refresh to recover; all subsequent loads and all future deploys
+  are self-healing. FE tests 30/30, lint at baseline (15/137), build PASS after the hotfix.
 
 ## Next best step
 - Build the member-facing LUCA-disable toggle (Settings) on top of the existing
