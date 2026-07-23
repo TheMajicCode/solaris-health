@@ -97,4 +97,119 @@ router.get('/completeness', authMiddleware, async (req, res) => {
   }
 });
 
+// GET /api/passport/sovereignty-status — one truthful answer to:
+// who am I here, which identity methods are connected, who has access,
+// where my data lives, which AI handled my last LUCA interaction, and
+// how I export or revoke. Plain language first; identifiers live under
+// `advanced` for the details disclosure — never as the main UX.
+router.get('/sovereignty-status', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const safe = (q, params) => db.query(q, params).then((r) => r.rows).catch(() => []);
+
+    const [userRows, wallets, consents, lastReceipt] = await Promise.all([
+      safe(
+        `SELECT id, email, full_name, role, country, city, created_at, did, nostr_npub
+           FROM users WHERE id=$1 AND deleted_at IS NULL`,
+        [userId]
+      ),
+      safe(
+        `SELECT chain, label, verified, is_primary FROM wallet_addresses WHERE user_id=$1`,
+        [userId]
+      ),
+      safe(
+        `SELECT pc.id, pc.granted_sections, pc.status, pc.responded_at, pc.expires_at,
+                u.full_name AS practitioner_name
+           FROM passport_consents pc
+           JOIN users u ON u.id = pc.practitioner_id
+          WHERE pc.member_id=$1 AND pc.status='granted'
+          ORDER BY pc.responded_at DESC NULLS LAST`,
+        [userId]
+      ),
+      safe(
+        `SELECT provider, compute_target, event_type, degraded, created_at
+           FROM ai_execution_receipts
+          WHERE user_id=$1
+          ORDER BY created_at DESC LIMIT 1`,
+        [userId]
+      ),
+    ]);
+
+    if (!userRows.length) return res.status(404).json({ error: 'User not found' });
+    const u = userRows[0];
+
+    const identityMethods = [
+      { method: 'email', label: 'Email & password', connected: true, detail: u.email },
+      { method: 'did', label: 'Decentralized ID (DID)', connected: Boolean(u.did) },
+      { method: 'nostr', label: 'Nostr key', connected: Boolean(u.nostr_npub) },
+      {
+        method: 'wallet',
+        label: 'Crypto wallet',
+        connected: wallets.length > 0,
+        detail: wallets.length
+          ? `${wallets.length} linked (${[...new Set(wallets.map((w) => w.chain))].join(', ')})`
+          : undefined,
+      },
+    ];
+
+    const ai = lastReceipt.length
+      ? {
+          provider: lastReceipt[0].provider,
+          computeTarget: lastReceipt[0].compute_target,
+          interaction: lastReceipt[0].event_type,
+          degraded: lastReceipt[0].degraded,
+          at: lastReceipt[0].created_at,
+          plain:
+            lastReceipt[0].compute_target === 'in_process'
+              ? 'Your last LUCA reply was generated inside Solaris itself — nothing left the server.'
+              : lastReceipt[0].compute_target === 'local'
+                ? 'Your last LUCA reply was generated on Solaris-controlled hardware.'
+                : 'Your last LUCA reply used a managed cloud AI provider; identifying numbers are stripped before anything is sent, and only content hashes are kept in the receipt.',
+        }
+      : { provider: null, plain: 'You have not talked with LUCA yet, so no AI has handled your data.' };
+
+    res.json({
+      identity: {
+        name: u.full_name,
+        role: u.role,
+        memberSince: u.created_at,
+        location: [u.city, u.country].filter(Boolean).join(', ') || null,
+        plain: `You are ${u.full_name || 'a Solaris member'} — a sovereign ${u.role === 'patient' ? 'member' : u.role} of Solaris. Your Passport belongs to you.`,
+      },
+      identityMethods,
+      access: {
+        practitioners: consents.map((c) => ({
+          id: c.id, // needed for PUT /api/consent/:id/revoke
+          name: c.practitioner_name,
+          sections: c.granted_sections,
+          since: c.responded_at,
+          expires: c.expires_at,
+        })),
+        plain: consents.length
+          ? `${consents.length} practitioner${consents.length > 1 ? 's' : ''} can currently view parts of your Passport — only the sections you granted, and you can revoke at any time.`
+          : 'No one else can view your Passport right now. Practitioners only ever see it with your explicit consent.',
+      },
+      storage: {
+        plain:
+          'Your data lives in Solaris\u2019s own PostgreSQL database on a server we operate — not inside a third-party health platform. Daily backups are kept under Solaris\u2019s own cloud storage account.',
+        exportFormats: ['JSON vault export', 'ZIP archive'],
+      },
+      ai,
+      rights: {
+        export: { api: '/api/export/me', zip: '/api/export/me.zip' },
+        revokeConsent: '/api/consent/:id/revoke',
+        plain: 'You can export everything Solaris holds about you at any time, and revoke any practitioner\u2019s access with one tap.',
+      },
+      advanced: {
+        subjectId: u.id,
+        did: u.did || null,
+        nostrNpub: u.nostr_npub || null,
+      },
+    });
+  } catch (err) {
+    console.error('passport sovereignty-status', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;

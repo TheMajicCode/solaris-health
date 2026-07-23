@@ -369,6 +369,7 @@ class ApiClient {
 
   // ---- Sovereign Passport completeness ----
   getPassportCompleteness() { return this.request('/passport/completeness'); }
+  getSovereigntyStatus() { return this.request('/passport/sovereignty-status'); }
   getGpsTreasury() { return this.request('/gps/treasury'); }
   getGpsTreasuryBreakdown() { return this.request('/gps/treasury/breakdown'); }
   getReferralCode() { return this.request('/gps/referrals/my-code'); }

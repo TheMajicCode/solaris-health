@@ -71,7 +71,14 @@ Sprint start: 2026-07-23 (UTC)
 - **`LAUNCH_GATES.md`:** Gate 2 → PASS (evidence above); Gate 3 stays PARTIAL honestly (no image registry) but rollback docs now truthful; scorecard updated.
 - **Tests:** full backend **84/84**, lint 0 errors.
 
-### Slice 6 — Passport sovereignty status — PENDING
+### Slice 6 — Passport sovereignty status — DONE
+
+- **No new schema needed (no ADR required):** every sovereignty question is answerable from existing tables (`users.did/nostr_npub`, `wallet_addresses`, `passport_consents`, `ai_execution_receipts`, export routes) — verified against the live schema before building.
+- **New endpoint `GET /api/passport/sovereignty-status`** (`backend/src/routes/passport.js`): plain-language answers to who am I / identity methods (email, DID, Nostr, wallets) / who has access (granted consents + revoke ids) / where data is stored / which AI provider+compute target handled the latest LUCA interaction (from receipts) / export+revoke rights. Raw UUID/DID/npub live only under `advanced`.
+- **New UI `SovereigntyCard`** in `src/components/LucaPassport.jsx`, rendered on the Health Passport page below the export card: four tiles (sign-in methods, who can see it with one-tap Revoke via existing `api.revokeConsent`, where it lives, AI & your data), rights row with Export, and an "Advanced details" disclosure for technical identifiers. Matches the existing warm card style (Card/SectionHead/Pill/Btn, tint gradient).
+- **Truthfulness check:** storage copy avoids unverified claims (no encryption-at-rest claim); AI copy matches actual compute target (in_process / local / managed_cloud with redaction note).
+- **Tests:** new `backend/tests/sovereignty-status.test.js` (4 tests: auth required, six questions answered plainly, latest receipt surfaced, no raw UUID in plain layer). Backend **88/88**, lint 0 errors. Frontend 30/30, build PASS (1 pre-existing lint error elsewhere, untouched).
+
 ### Slice 7 — Agent authority scaffold — PENDING
 ### Slice 8 — GPS evidence receipts — PENDING
 ### Slice 9 — Dead-end sweep — PENDING

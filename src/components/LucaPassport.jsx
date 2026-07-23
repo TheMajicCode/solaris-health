@@ -1353,6 +1353,115 @@ function MiniStat({ icon: Icon, label, value, tone = 'teal' }) {
 const greeting = () => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'; };
 const roleLabel = (r) => ({ patient: 'Member', practitioner: 'Practitioner', admin: 'Administrator' }[r] || 'Member');
 
+/* ---- Sovereignty status card (Slice 6): who am I, who has access, where my
+   data lives, which AI touched it last, and how to export/revoke — in plain
+   language, with identifiers tucked behind an advanced-details disclosure. ---- */
+function SovereigntyCard({ onExport, exporting }) {
+  const [status, setStatus] = useState(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [revoking, setRevoking] = useState(null);
+
+  const load = () => {
+    api.getSovereigntyStatus()
+      .then((s) => setStatus(s || null))
+      .catch(() => setStatus(null));
+  };
+  useEffect(() => { load(); }, []);
+
+  if (!status) return null;
+
+  const revoke = async (id) => {
+    setRevoking(id);
+    try {
+      await api.revokeConsent(id);
+      toast.success('Access revoked. Your Passport is yours.');
+      load();
+    } catch {
+      toast.error('Could not revoke right now — please try again.');
+    } finally { setRevoking(null); }
+  };
+
+  return (
+    <Card className="tint" style={{ background: 'linear-gradient(180deg,#FBFEFC,#F4F9F7)' }}>
+      <SectionHead eyebrow="Sovereignty" title="Who holds your Passport" action={<Pill tone="gold" icon={ShieldCheck}>You do</Pill>} />
+      <div className="small muted" style={{ lineHeight: 1.6, marginBottom: 14 }}>{status.identity.plain}</div>
+
+      <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 12 }}>
+        <div className="card flat" style={{ padding: 14, background: 'var(--surface-2)' }}>
+          <div className="tiny f6 row gap-2" style={{ marginBottom: 8 }}><BadgeCheck size={14} className="t-teal" /> Ways you sign in</div>
+          {status.identityMethods.map((m) => (
+            <div key={m.method} className="between" style={{ padding: '3px 0' }}>
+              <span className="tiny muted">{m.label}</span>
+              {m.connected
+                ? <span className="tiny t-mint row gap-1"><Check size={12} /> Connected</span>
+                : <span className="tiny muted2">Not connected</span>}
+            </div>
+          ))}
+        </div>
+
+        <div className="card flat" style={{ padding: 14, background: 'var(--surface-2)' }}>
+          <div className="tiny f6 row gap-2" style={{ marginBottom: 8 }}><Users size={14} className="t-teal" /> Who can see it</div>
+          <div className="tiny muted" style={{ lineHeight: 1.55 }}>{status.access.plain}</div>
+          {status.access.practitioners.map((p) => (
+            <div key={p.id} className="between" style={{ padding: '6px 0' }}>
+              <span className="tiny f6">{p.name}</span>
+              <button
+                className="tiny"
+                style={{ background: 'none', border: 'none', color: 'var(--rose, #C0564F)', cursor: 'pointer', textDecoration: 'underline' }}
+                disabled={revoking === p.id}
+                onClick={() => revoke(p.id)}
+              >
+                {revoking === p.id ? 'Revoking…' : 'Revoke'}
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="card flat" style={{ padding: 14, background: 'var(--surface-2)' }}>
+          <div className="tiny f6 row gap-2" style={{ marginBottom: 8 }}><Globe size={14} className="t-teal" /> Where it lives</div>
+          <div className="tiny muted" style={{ lineHeight: 1.55 }}>{status.storage.plain}</div>
+        </div>
+
+        <div className="card flat" style={{ padding: 14, background: 'var(--surface-2)' }}>
+          <div className="tiny f6 row gap-2" style={{ marginBottom: 8 }}><Bot size={14} className="t-teal" /> AI & your data</div>
+          <div className="tiny muted" style={{ lineHeight: 1.55 }}>{status.ai.plain}</div>
+          {status.ai.provider && (
+            <div className="tiny muted2" style={{ marginTop: 6 }}>
+              Last interaction: {fmtShort(status.ai.at)}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="between" style={{ marginTop: 14, flexWrap: 'wrap', gap: 10 }}>
+        <div className="tiny muted2" style={{ lineHeight: 1.5, maxWidth: 520 }}>{status.rights.plain}</div>
+        <div className="row gap-2">
+          {onExport && (
+            <Btn variant="ghost" icon={Download} onClick={onExport} disabled={exporting}>
+              {exporting ? 'Preparing…' : 'Export everything'}
+            </Btn>
+          )}
+          <Btn variant="ghost" icon={Eye} onClick={() => setShowAdvanced((v) => !v)}>
+            {showAdvanced ? 'Hide details' : 'Advanced details'}
+          </Btn>
+        </div>
+      </div>
+
+      {showAdvanced && (
+        <div className="card flat" style={{ marginTop: 10, padding: 14, background: 'var(--surface-2)' }}>
+          <div className="tiny muted2" style={{ marginBottom: 6 }}>Technical identifiers — you never need these day to day.</div>
+          <div className="tiny" style={{ fontFamily: 'monospace', wordBreak: 'break-all', lineHeight: 1.7 }}>
+            <div>Subject ID: {status.advanced.subjectId}</div>
+            {status.advanced.did && <div>DID: {status.advanced.did}</div>}
+            {status.advanced.nostrNpub && <div>Nostr: {status.advanced.nostrNpub}</div>}
+            {status.ai.provider && <div>Last AI provider: {status.ai.provider} · compute: {status.ai.computeTarget}{status.ai.degraded ? ' · degraded fallback' : ''}</div>}
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 /* ============================== PATIENT — HEALTH PASSPORT ============================== */
 const SYS_SHORT = { bioelectrical: 'Bio', hydration: 'Hydr', circadian: 'Circ', microbiome: 'Micro', respiratory: 'Resp', neurological: 'Neuro', cardiovascular: 'Cardio', nutritional: 'Nutri' };
 const ASPECT_ICONS = { physical: Activity, mental: Brain, emotional: Heart, spiritual: Sparkles };
@@ -1482,6 +1591,8 @@ function HealthPage({ go }) {
         </div>
         <Btn variant="primary" icon={Download} onClick={exportVault} disabled={exporting}>{exporting ? 'Preparing…' : 'Export My Vault'}</Btn>
       </Card>
+
+      <SovereigntyCard onExport={exportVault} exporting={exporting} />
 
       {!resp ? (
         <Card><Empty icon={HeartPulse} title="No assessment on file" sub="Complete the Solaris Method assessment to populate your 360° health passport." /></Card>
