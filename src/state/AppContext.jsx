@@ -63,6 +63,14 @@ export function AppProvider({ children }) {
 
   useEffect(() => { loadUser(); }, [loadUser]);
 
+  // Boot failsafe: never let the "Awakening Solaris…" splash hang forever.
+  // If bootstrap has not resolved within 25s (e.g. an unexpected stall), drop the
+  // splash so the user always reaches a usable screen instead of a blank one.
+  useEffect(() => {
+    const t = setTimeout(() => setLoading(false), 25000);
+    return () => clearTimeout(t);
+  }, []);
+
   const login = async (email, password) => {
     const { user } = await api.login(email, password);
     await loadUser();

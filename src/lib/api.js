@@ -13,7 +13,21 @@ class ApiClient {
   async request(endpoint, options = {}) {
     const headers = { 'Content-Type': 'application/json', ...options.headers };
     if (this.token) headers.Authorization = `Bearer ${this.token}`;
-    const res = await fetch(`${API_URL}${endpoint}`, { ...options, headers });
+    // Timeout guard: a hung request must never freeze the boot splash forever.
+    // Without this, a stalled /users/me leaves `loading` true and the app shows
+    // only the dark "Awakening Solaris…" screen indefinitely (perceived as blank).
+    const timeoutMs = options.timeoutMs || 20000;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let res;
+    try {
+      res = await fetch(`${API_URL}${endpoint}`, { ...options, headers, signal: controller.signal });
+    } catch (e) {
+      if (e && e.name === 'AbortError') throw new Error('Request timed out', { cause: e });
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
     if (!res.ok) {
       const err = await res.json().catch(() => ({ error: 'Request failed' }));
       throw new Error(err.error || 'Request failed');
