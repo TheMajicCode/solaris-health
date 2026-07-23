@@ -124,9 +124,14 @@ never be needed for coaching.
   receipt (`gps_allocation_receipts`, migration 021) whose evidence document
   contains only structural facts (UUIDs, amounts, split fractions, timestamps) —
   never names or health data — plus a sha256 evidence hash and policy version.
-  Allocations are `shadow = TRUE` always: no real settlement exists. Disputes and
-  resolutions are audited (`gps.allocation.disputed` / `gps.allocation.resolved`)
-  and access to explanations is restricted to allocation participants or admins.
+  Allocations are `shadow = TRUE` always: no real settlement exists. Receipts are
+  evidence anyone with access can verify — GPS is a standalone, self-configured
+  open protocol with no central adjudicating authority; Solaris is only the
+  default recipient configuration until the receiving identity sets its own end
+  address. A participant can flag a receipt that looks off; flags and any
+  corrections are logged on the record and audited (`gps.allocation.disputed` /
+  `gps.allocation.resolved`), and access to explanations is restricted to
+  allocation participants or admins.
 - **Read-only mode** — setting `READ_ONLY_MODE=true` freezes all mutating routes
   (503 `{ readOnly: true }`) while reads, login and logout continue to work; used
   as the incident-response write-freeze (see `docs/INCIDENT_RESPONSE.md`).

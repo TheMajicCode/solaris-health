@@ -119,9 +119,10 @@ Sprint start: 2026-07-23 (UTC)
 - **UI** (`src/components/gps/GPSLedger.jsx`): each Value Trail transaction now
   has a "Why this allocation?" panel — state pill, "shadow allocation, no real
   money has moved" note, six plain-language explanation lines, policy version +
-  evidence hash, dispute history, and a "Something looks wrong — dispute this"
-  human path. Warm style preserved (gpl-* pattern). `api.js`:
-  `explainGpsAllocation`, `disputeGpsAllocation`.
+  evidence hash, flag history, and a "Question this receipt" path (flags are
+  logged on the record next to the evidence — receipts are verifiable evidence,
+  not tickets waiting on an authority). Warm style preserved (gpl-* pattern).
+  `api.js`: `explainGpsAllocation`, `disputeGpsAllocation`.
 - **Tests**: `backend/tests/gps-allocations.test.js` — 8 tests (PHI-free
   deterministic evidence hash, idempotent + verifiable receipts, participant
   explain, non-participant 403, dispute lifecycle + audit row, empty-reason 400,
@@ -202,11 +203,13 @@ Sprint start: 2026-07-23 (UTC)
 - **Simulated by design (unchanged posture):** GPS economic layer is shadow-mode
   (no real settlement; receipts carry `shadow=TRUE`); payments are simulated sats
   (`payments-sim`); LUCA remains non-diagnostic.
-- **Deferred (documented, not claimed):** frontend LUCA-disable toggle (Slice 7 —
-  API + export exist; UI toggle not built); browser-level practitioner E2E
-  (verified wired by inspection only); admin dispute-resolution UI (resolve is
-  API-only, admin JWT required); Gate 3 image registry; Gate 8 BAA /
-  encryption-at-rest.
+- **Deferred (documented, not claimed):** browser-level practitioner E2E
+  (verified wired by inspection only); Gate 3 image registry; Gate 8 BAA /
+  encryption-at-rest. (The member-facing LUCA pause toggle has since been
+  built — see follow-up work below. An admin dispute dashboard is deliberately
+  NOT planned: GPS receipts are self-verifying evidence in an open,
+  self-configured protocol, not tickets for a central authority — member flags
+  stay on the record via the audited flag path instead.)
 
 ## Known risks / debt at end of sprint
 - Frontend lint: 15 pre-existing errors (mostly empty catch blocks / hooks rules) — not blocking build or tests; unchanged from baseline.
@@ -256,7 +259,25 @@ Sprint start: 2026-07-23 (UTC)
   runs) needs one manual refresh to recover; all subsequent loads and all future deploys
   are self-healing. FE tests 30/30, lint at baseline (15/137), build PASS after the hotfix.
 
+## Follow-up work (post-sprint, this branch)
+- **Member-facing Pause LUCA toggle** — built on the existing agent-authority
+  API: SovereigntyCard "LUCA can act for you" toggle, honest paused states in
+  the LUCA chat and floating widget (user stays logged in; one-tap re-enable).
+- **GPS reframed from "dispute resolution" to transparency & verifiability** —
+  receipts are evidence anyone with access can verify; a member can flag a
+  receipt ("Question this receipt" → logged on the record, still audited). No
+  admin dispute dashboard — GPS is a standalone, self-configured open protocol
+  with no central adjudicating authority; Solaris is only the default recipient
+  configuration until the receiving identity sets its own end address
+  (Lightning address today, more rails possible later). Backend routes and
+  migration 021 unchanged.
+- **"What is GPS" interactive explainer** — first section of the Economic
+  Passport page: plain-language definition, follow-one-payment split flow
+  (illustrative amounts only), individual → community → nation → world ripple,
+  and protocol-truth callouts (open source, no one controls it, identity-first,
+  verifiable receipts).
+
 ## Next best step
-- Build the member-facing LUCA-disable toggle (Settings) on top of the existing
-  agent-authority API, and a minimal admin queue for GPS allocation disputes —
-  both are small UI slices over already-tested endpoints.
+- Browser-level practitioner E2E, and letting a member set their own GPS end
+  address (Lightning address) from the Passport — the protocol-aligned next
+  slice now that receipts and the explainer are in place.

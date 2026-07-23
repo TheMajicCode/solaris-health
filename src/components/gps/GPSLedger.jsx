@@ -232,9 +232,11 @@ export default function GPSLedger() {
  * AllocationEvidence — "why does this allocation exist?"
  *
  * Loads the shadow allocation receipt (evidence hash + policy version +
- * state) on demand, explains each leg in plain language, and gives the
- * member a human dispute path. No real money moves — everything here is
- * a transparent, evidence-backed proposal.
+ * state) on demand and explains each leg in plain language. Receipts are
+ * evidence anyone can verify — not tickets waiting on an authority. A member
+ * can still flag a receipt that looks off; the flag is logged on the record
+ * next to the evidence. No real money moves — everything here is a
+ * transparent, evidence-backed proposal.
  */
 function AllocationEvidence({ transactionId }) {
   const [info, setInfo] = useState(null);
@@ -251,14 +253,14 @@ function AllocationEvidence({ transactionId }) {
     finally { setLoading(false); }
   };
 
-  const sendDispute = async () => {
-    if (reason.trim().length < 5) { setError('Please describe what looks wrong (a sentence is enough).'); return; }
+  const sendFlag = async () => {
+    if (reason.trim().length < 5) { setError('Please describe what looks off (a sentence is enough).'); return; }
     setSending(true); setError(null);
     try {
       await api.disputeGpsAllocation(transactionId, reason.trim());
       setDisputing(false); setReason('');
       await load();
-    } catch (e) { setError(e?.message || 'Could not send the dispute.'); }
+    } catch (e) { setError(e?.message || 'Could not log your flag.'); }
     finally { setSending(false); }
   };
 
@@ -277,8 +279,8 @@ function AllocationEvidence({ transactionId }) {
   const r = info.receipt || {};
   const stateMeta = {
     proposed: { label: 'Proposed', cls: 'proposed', Icon: ShieldQuestion },
-    disputed: { label: 'Disputed', cls: 'disputed', Icon: ShieldAlert },
-    corrected: { label: 'Reviewed & corrected', cls: 'corrected', Icon: ShieldCheck },
+    disputed: { label: 'Flagged', cls: 'disputed', Icon: ShieldAlert },
+    corrected: { label: 'Corrected on the record', cls: 'corrected', Icon: ShieldCheck },
   }[r.state] || { label: r.state, cls: 'proposed', Icon: ShieldQuestion };
 
   return (
@@ -301,7 +303,7 @@ function AllocationEvidence({ transactionId }) {
         <div className="gpl-ev-disputes">
           {info.disputes.map((d) => (
             <div className="gpl-ev-dispute" key={d.id}>
-              <span className={`gpl-ev-dstatus ${d.status}`}>{d.status === 'resolved' ? 'Resolved' : 'Under review'}</span>
+              <span className={`gpl-ev-dstatus ${d.status}`}>{d.status === 'resolved' ? 'Answered on the record' : 'Flag logged'}</span>
               <span className="gpl-ev-dreason">“{d.reason}”</span>
               {d.resolution && <span className="gpl-ev-dres">→ {d.resolution}</span>}
             </div>
@@ -310,7 +312,7 @@ function AllocationEvidence({ transactionId }) {
       )}
       {info.canDispute && !disputing && (
         <button className="gpl-ev-link warn" onClick={() => setDisputing(true)}>
-          <ShieldAlert size={13} /> Something looks wrong — dispute this
+          <ShieldAlert size={13} /> Question this receipt
         </button>
       )}
       {disputing && (
@@ -318,13 +320,13 @@ function AllocationEvidence({ transactionId }) {
           <textarea
             className="gpl-ev-ta"
             rows={2}
-            placeholder="Tell us what looks wrong — a human will review it."
+            placeholder="Note what looks off. Your flag is logged on the record, next to the evidence."
             value={reason}
             onChange={(e) => setReason(e.target.value)}
           />
           <div className="gpl-ev-actions">
-            <button className="gpl-ev-btn" onClick={sendDispute} disabled={sending}>
-              {sending ? 'Sending…' : 'Send to a human'}
+            <button className="gpl-ev-btn" onClick={sendFlag} disabled={sending}>
+              {sending ? 'Logging…' : 'Log my flag'}
             </button>
             <button className="gpl-ev-btn ghost" onClick={() => { setDisputing(false); setError(null); }}>Cancel</button>
           </div>
