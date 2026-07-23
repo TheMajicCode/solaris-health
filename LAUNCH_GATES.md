@@ -163,12 +163,15 @@ future enhancement; current labelling + full audit trail satisfy the launch gate
 
 ---
 
-## Gate 8 — PHI Boundary ❌ NOT CONFIGURED
+## Gate 8 — PHI Boundary ⚠️ PARTIAL (engineering controls in place; no BAA)
 **Required:** No regulated data enters a service without the proper agreement and configuration.
 
 **Current state:**
 - ✅ De-identification intent: raw patient data should stay on local node (luca-node)
 - ✅ Vault export gives patients full data portability
+- ✅ **(2026-07-23)** Explicit boundary documented in `docs/SECURITY.md` ("External AI provider & retention boundary")
+- ✅ **(2026-07-23)** Restricted-identifier redaction v0 (`backend/src/lib/phi-boundary.js`): SSN/card/IBAN patterns stripped from outbound prompts to external AI providers (tested, `tests/phi-boundary.test.js`)
+- ✅ **(2026-07-23)** AI execution receipts (`ai_execution_receipts`, hashes only — no PHI) record provider + compute target per interaction
 - ❌ No BAA (Business Associate Agreement) with any cloud provider
 - ❌ No encryption at rest for health documents or journal entries
 - ❌ Private messaging keys stored in `localStorage` (XSS-accessible)
@@ -222,43 +225,20 @@ installed (`*/5 * * * *`) and test run reported healthy.
 
 ---
 
-## Gate 11 — Incident Response ❌ MISSING
+## Gate 11 — Incident Response ✅ PASS (runbook + tested write-freeze; tabletop not yet executed)
 **Required:** One written page explaining how to freeze writes, roll back, and restore.
 
-**Playbook (write this and keep it up to date):**
-
-### Step 1 — Freeze writes
-```bash
-# Put backend in read-only mode (temporarily set env var and restart)
-docker compose exec backend sh -c 'echo READ_ONLY=true > /tmp/readonly_flag'
-# Or: scale backend to 0
-docker compose stop backend
-```
-
-### Step 2 — Capture state
-```bash
-docker exec luca-passport-postgres-1 pg_dump -U postgres luca_passport_db > incident-$(date +%Y%m%d-%H%M).sql
-```
-
-### Step 3 — Roll back application
-```bash
-git log --oneline -10  # find the last good commit
-git checkout <good-commit-hash>
-docker compose up -d --build
-```
-
-### Step 4 — Restore database (if data was corrupted)
-```bash
-docker exec -i luca-passport-postgres-1 psql -U postgres -c 'DROP DATABASE luca_passport_db; CREATE DATABASE luca_passport_db;'
-docker exec -i luca-passport-postgres-1 psql -U postgres luca_passport_db < incident-YYYYMMDD-HHMM.sql
-```
-
-### Step 5 — Verify and resume
-```bash
-curl https://solaris-health.abacusai.cloud/api/health
-node backend/scripts/smoke-test.js
-docker compose start backend
-```
+**Current state (2026-07-23):**
+- ✅ Executable runbook: `docs/INCIDENT_RESPONSE.md` — freeze, evidence capture,
+  backup, app rollback, DB restore decision tree (rehearse-first), secret
+  rotation, notification, tabletop checklist. All commands match this
+  deployment (verified container names / DB creds).
+- ✅ Real `READ_ONLY_MODE=true` write-freeze middleware in `backend/src/server.js`
+  (mutations → 503, reads + login keep working) — 5 tests in
+  `backend/tests/read-only-mode.test.js`.
+- ⚠️ Tabletop rehearsal not yet executed against production; owner table still
+  has placeholders. Run the checklist at the bottom of the runbook before
+  public launch.
 
 ---
 
@@ -273,10 +253,10 @@ docker compose start backend
 | 5. Tenant Isolation | ✅ PASS | **YES** |
 | 6. Authentication | ✅ PASS | No |
 | 7. AI Safety | ✅ PASS | **YES** |
-| 8. PHI Boundary | ❌ FAIL | **YES** |
+| 8. PHI Boundary | ⚠️ PARTIAL | **YES** (no BAA / no encryption at rest) |
 | 9. Load | ✅ PASS | No (beta) |
 | 10. Monitoring | ✅ PASS | No (beta) |
-| 11. Incident Response | ⚠️ PARTIAL | No |
+| 11. Incident Response | ✅ PASS | No |
 
-**Gates 4, 5, 7 now pass; Gate 8 (PHI Boundary) remains the only patient-data blocker.**
-**Gates 1, 6, 9, 10 pass; Gates 2, 3, 11 remain PARTIAL for public launch.**
+**Gates 4, 5, 7, 11 pass; Gate 8 (PHI Boundary) remains the patient-data blocker (engineering controls now in place, but no BAA and no encryption at rest).**
+**Gates 1, 6, 9, 10 pass; Gates 2, 3 remain PARTIAL for public launch.**

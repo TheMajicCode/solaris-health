@@ -114,6 +114,23 @@ app.use('/api/auth/register', authLimiter);
 
 app.use(express.json({ limit: '2mb' })); // base64 doc uploads (reduced from 15mb)
 
+// ---- Incident write-freeze (READ_ONLY_MODE) ----
+// When READ_ONLY_MODE=true (checked per-request so a container env change +
+// restart is all that's needed), all mutating API requests are rejected with
+// 503 while reads keep working. Login stays allowed so operators/members can
+// still authenticate and inspect state during an incident.
+// See docs/INCIDENT_RESPONSE.md — "Step 1: Freeze writes".
+const READ_ONLY_ALLOWED_PATHS = new Set(['/api/auth/login', '/api/auth/logout']);
+app.use((req, res, next) => {
+  if (String(process.env.READ_ONLY_MODE).toLowerCase() !== 'true') return next();
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
+  if (READ_ONLY_ALLOWED_PATHS.has(req.path)) return next();
+  return res.status(503).json({
+    error: 'Solaris is temporarily in read-only mode for maintenance. Your data is safe — please try again shortly.',
+    readOnly: true,
+  });
+});
+
 // ---- Health & monitoring ----
 // Liveness probe (legacy path, kept for backwards compatibility)
 app.get('/health', (req, res) => {

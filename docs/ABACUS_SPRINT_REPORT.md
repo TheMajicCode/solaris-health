@@ -56,7 +56,13 @@ Sprint start: 2026-07-23 (UTC)
 - **Docs:** added "External AI provider & retention boundary" section to `docs/SECURITY.md` (what crosses the boundary per mode, redaction rule v0, retention per table, no-compliance-claim caveat).
 - **Tests:** new `backend/tests/phi-boundary.test.js` (8 tests, offline). Full backend suite **76/76**, backend lint 0 errors. Frontend **30/30**, build PASS.
 
-### Slice 4 — Incident response + read-only mode — PENDING
+### Slice 4 — Incident response + read-only mode — DONE
+
+- **New `docs/INCIDENT_RESPONSE.md`:** executable runbook — write-freeze (real `READ_ONLY_MODE` switch), evidence capture, backup status (existing `solaris-backup.sh` daily cron), git-based app rollback, DB restore decision tree with rehearse-into-scratch-DB-first rule, secret rotation, notify/review, quarterly tabletop checklist. Container names (`luca-passport-{backend,frontend,postgres}-1`) and DB creds verified against the live deployment before writing.
+- **New `READ_ONLY_MODE` middleware** in `backend/src/server.js`: when env `READ_ONLY_MODE=true` (checked per-request), mutating API requests → 503 `{readOnly:true}`; GET/HEAD/OPTIONS + login/logout stay open.
+- **Tests:** new `backend/tests/read-only-mode.test.js` (5 tests). Full backend **81/81**, lint 0 errors.
+- **`LAUNCH_GATES.md` updated honestly:** Gate 11 → PASS (runbook + tested freeze; tabletop noted not yet executed, owners are placeholders); Gate 8 → PARTIAL (redaction v0 + receipts + SECURITY.md boundary in place; still blocked on BAA + encryption at rest); scorecard updated.
+
 ### Slice 5 — Migration/rollback hardening — PENDING
 ### Slice 6 — Passport sovereignty status — PENDING
 ### Slice 7 — Agent authority scaffold — PENDING
