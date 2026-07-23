@@ -37,7 +37,7 @@ import LucaPassport from '../components/LucaPassport.jsx';
 describe('<LucaPassport /> shell', () => {
   it('renders the brand and sovereign passport chrome without crashing', async () => {
     render(<LucaPassport />);
-    expect(screen.getByText('LUCA')).toBeInTheDocument();
+    expect(screen.getByText('SOLARIS')).toBeInTheDocument();
     expect(screen.getByText(/Sovereign Passport/i)).toBeInTheDocument();
   });
 
