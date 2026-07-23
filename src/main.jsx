@@ -125,8 +125,19 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   </React.StrictMode>,
 )
 
-// Register service worker for PWA / offline shell
+// Register service worker for PWA / offline shell.
 if ('serviceWorker' in navigator) {
+  // Self-heal: when an updated SW replaces a previously-controlling one, reload once
+  // so a client that booted from a stale cached shell picks up the fresh app shell.
+  // Guarded so it only fires on an actual update (not a first-ever registration) and
+  // never loops.
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloading) return;
+    reloading = true;
+    window.location.reload();
+  });
   window.addEventListener('load', () => {
     navigator.serviceWorker
       .register('/sw.js')
