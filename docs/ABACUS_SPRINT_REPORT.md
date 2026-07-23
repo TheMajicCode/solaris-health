@@ -153,12 +153,75 @@ Sprint start: 2026-07-23 (UTC)
   covered in Slice 6. Browser-level E2E for the practitioner role was not
   re-run this slice (documented, not claimed).
 - No UI changes needed; look and feel untouched.
-### Slice 10 — Docs & handoff — PENDING
+### Slice 10 — Docs & handoff — DONE
+- **Docs updated to match reality:**
+  - `README.md`: test badge 57→103 backend tests; testing section now states 133
+    automated tests (103 backend, 30 frontend) plus 18-step smoke test and 8-check
+    tenant-isolation script; new "Sovereignty & governance layer (sprint v4)"
+    feature section; vault-export bullet mentions AI receipts + agent authority exports.
+  - `docs/ARCHITECTURE.md`: sovereignty modules added to component map; new
+    "Sovereignty & governance layer (sprint v4)" section (AI receipts, PHI boundary,
+    sovereignty status, agent authority, GPS allocation evidence, read-only mode,
+    migrations 019–021); TOC updated.
+  - `docs/SECURITY.md`: new "Agent authority & economic transparency (sprint v4)" section.
+  - `LAUNCH_GATES.md`: unchanged — statuses already accurate (gates 1,2,4,5,6,7,9,10,11
+    PASS; gate 3 PARTIAL: no container image registry; gate 8 PARTIAL: no BAA /
+    encryption-at-rest).
+- **Full validation sweep (branch code, pre-deploy):**
+  - Frontend: 30/30 tests PASS; production build PASS (2.12s, chunk-size warnings only);
+    lint 15 errors / 137 warnings = exact pre-existing baseline (no new debt).
+  - Backend: 103/103 tests PASS (13 suites); lint 0 errors / 4 warnings;
+    `migrate:status` → "No migrations to run".
+  - Smoke test 18/18 PASS and tenant isolation 8/8 PASS against branch code
+    (local server, real DB).
+  - Diff review vs `main`: 43 files, +3989/−137; no secrets (only `.env.example`
+    placeholders), no PHI in logs/receipts (hashes only), all new endpoints
+    auth-guarded (dispute-resolve is admin-only), migrations additive only.
 
 ## Commits
 - `d0c4336` chore: preserve pre-sprint working changes (Economic Passport coming-soon banner, nav navigation)
-- (slice commits appended below as they land)
+- `d7837fa` Slice 0: sprint ledger, context import, brand test fix
+- `b6921e6` Slice 1: AI provider hardening, abacus mode, request timeouts
+- `a1a535d` Slice 2: migration 019 ai_execution_receipts, receipts lib, vault export
+- `c23a553` Slice 3: PHI boundary module, outbound redaction, SECURITY.md boundary section
+- `8995f97` Slice 4: incident response runbook, READ_ONLY_MODE middleware
+- `2ee499e` Slice 5: prod-copy migration test, schema recovery test, MIGRATIONS.md
+- `b8b1ce3` Slice 6: sovereignty-status endpoint + SovereigntyCard
+- `ea7bb5d` Slice 7: migration 020 agent_capability_grants, agent-authority lib, agents routes, authority export
+- `def0b04` Slice 8: migration 021 GPS allocation receipts, evidence/explain/dispute/resolve, GPSLedger evidence UI
+- `07579ec` Slice 9: smoke test extended 10→18 steps, dead-end sweep
+- (Slice 10 commit: docs & handoff — this commit)
 
-## Known risks / debt at baseline
-- Frontend lint: 15 pre-existing errors (mostly empty catch blocks / hooks rules) — not blocking build or tests.
+## Implemented vs simulated vs deferred
+- **Implemented & tested:** AI execution receipts (019), PHI boundary + outbound
+  redaction, READ_ONLY_MODE, sovereignty-status endpoint + card, agent capability
+  grants (020) + authority export, GPS allocation receipts/evidence/explain/
+  dispute/resolve (021) + ledger evidence UI, extended smoke test, incident
+  response + migrations docs. Evidence: 103/103 backend, 30/30 frontend,
+  18/18 smoke, 8/8 tenant isolation.
+- **Simulated by design (unchanged posture):** GPS economic layer is shadow-mode
+  (no real settlement; receipts carry `shadow=TRUE`); payments are simulated sats
+  (`payments-sim`); LUCA remains non-diagnostic.
+- **Deferred (documented, not claimed):** frontend LUCA-disable toggle (Slice 7 —
+  API + export exist; UI toggle not built); browser-level practitioner E2E
+  (verified wired by inspection only); admin dispute-resolution UI (resolve is
+  API-only, admin JWT required); Gate 3 image registry; Gate 8 BAA /
+  encryption-at-rest.
+
+## Known risks / debt at end of sprint
+- Frontend lint: 15 pre-existing errors (mostly empty catch blocks / hooks rules) — not blocking build or tests; unchanged from baseline.
 - `jest --forceExit` masks open handles in backend tests (pre-existing).
+- GPS receipts are recorded best-effort in `processGPSSplit` (a receipt write failure
+  does not roll back the split); explain endpoint lazily backfills, mitigating gaps.
+- Containers share one Postgres with dev; migrations 019–021 are already applied to it,
+  so container rebuilds ship code only — a future split of dev/prod DBs will need
+  migration execution wired into deploys.
+- No container image registry (rollback = rebuild from a previous git ref).
+
+## Deployment state
+- (updated post-deploy below)
+
+## Next best step
+- Build the member-facing LUCA-disable toggle (Settings) on top of the existing
+  agent-authority API, and a minimal admin queue for GPS allocation disputes —
+  both are small UI slices over already-tested endpoints.

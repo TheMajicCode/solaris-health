@@ -7,7 +7,7 @@ Heal · Learn · Earn — own your health data, end to end.
 
 [![CI](https://placehold.co/1200x600/e2e8f0/1e293b?text=Continuous_Integration__CI__status_badge_showing_b)
 [![License: MIT](https://img.shields.io/badge/License-MIT-gold.svg)](./LICENSE)
-[![Backend Tests](https://img.shields.io/badge/backend%20tests-57%20passing-brightgreen.svg)](./backend/tests)
+[![Backend Tests](https://img.shields.io/badge/backend%20tests-103%20passing-brightgreen.svg)](./backend/tests)
 [![Frontend Tests](https://img.shields.io/badge/frontend%20tests-30%20passing-brightgreen.svg)](./src/__tests__)
 [![Node](https://img.shields.io/badge/node-%E2%89%A520-339933.svg)](https://nodejs.org)
 
@@ -102,7 +102,23 @@ approval workflows, and a practitioner portal.
 `daily_checkin` +5 · `booking_request` +30.
 
 ### 📦 Sovereign vault export
-One click serializes the full record into a portable, open, round-trippable archive.
+One click serializes the full record into a portable, open, round-trippable archive —
+now including `ai/execution-receipts.jsonl` (every AI call, hashed, with provider +
+policy version) and `agents/authority.json` (your LUCA's capability grants).
+
+### 🛡️ Sovereignty & governance layer (sprint v4)
+- **AI execution receipts** — every LUCA call is recorded (provider, model, sha256
+  input/output hashes, latency, consent basis; no plaintext content).
+- **PHI boundary** — sensitive identifiers are redacted before any text leaves for an
+  external AI provider (`lib/phi-boundary.js`).
+- **Sovereignty status card** — the Passport answers "who am I, who has access, where
+  is my data, which AI saw it, how do I export/revoke" in plain language.
+- **Agent capability grants** — your LUCA agent runs on explicit, revocable
+  capabilities; every use is audited; LUCA can be disabled without deleting you.
+- **GPS evidence before payment** — every value split gets a shadow allocation receipt
+  (PHI-free evidence + sha256 hash + policy version) that the UI can explain, and any
+  participant can dispute to a human (`proposed → disputed → corrected`). No real money moves.
+- **Read-only mode** — `READ_ONLY_MODE=true` freezes all writes for incident response.
 
 ---
 
@@ -249,7 +265,7 @@ It never touches the `users` row, so the login stays valid.
 
 ## Testing
 
-The project ships with **87 automated tests** (57 backend, 30 frontend).
+The project ships with **133 automated tests** (103 backend, 30 frontend), plus an 18-step HTTP smoke test (`backend/scripts/smoke-test.js`) and an 8-check tenant-isolation script (`tests/tenant-isolation.test.js`).
 
 ```bash
 # Backend — Jest + Supertest

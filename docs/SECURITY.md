@@ -112,6 +112,25 @@ never be needed for coaching.
 
 ---
 
+## Agent authority & economic transparency (sprint v4)
+
+- **Agent capability grants** — the LUCA agent acts only under explicit grants
+  (`agent_capability_grants`, migration 020): scoped capabilities, optional expiry,
+  revocation, and a human-approval flag for sensitive actions. Every grant use is
+  written to `audit_logs` (`agent.grant.used`). Disabling LUCA
+  (`POST /api/agents/luca/disable`) blocks agent chat with `403 { agentDisabled }`
+  without deleting or logging out the user.
+- **GPS allocation evidence** — every value split records a shadow allocation
+  receipt (`gps_allocation_receipts`, migration 021) whose evidence document
+  contains only structural facts (UUIDs, amounts, split fractions, timestamps) —
+  never names or health data — plus a sha256 evidence hash and policy version.
+  Allocations are `shadow = TRUE` always: no real settlement exists. Disputes and
+  resolutions are audited (`gps.allocation.disputed` / `gps.allocation.resolved`)
+  and access to explanations is restricted to allocation participants or admins.
+- **Read-only mode** — setting `READ_ONLY_MODE=true` freezes all mutating routes
+  (503 `{ readOnly: true }`) while reads, login and logout continue to work; used
+  as the incident-response write-freeze (see `docs/INCIDENT_RESPONSE.md`).
+
 ## Input validation
 
 - All SQL uses **parameterized queries** (`$1, $2, …`) — no string concatenation.

@@ -13,6 +13,7 @@ integration, the sovereign vault export, and the deployment topology.
 - [Hexagonal AI provider](#hexagonal-ai-provider)
 - [Web3 integration](#web3-integration)
 - [Sovereign vault export](#sovereign-vault-export)
+- [Sovereignty & governance layer (sprint v4)](#sovereignty--governance-layer-sprint-v4)
 - [Deployment topology](#deployment-topology)
 - [Design principles](#design-principles)
 
@@ -80,7 +81,7 @@ flowchart TB
 | **Middleware** | `middleware/auth.js` — JWT generation + verification, role guards |
 | **AI** | `lib/ai/index.js` (provider port), `lib/ai/mock.js` (offline adapter) |
 | **Web3** | `lib/web3.js` — chain registry, validation, balances, tx, signature verify |
-| **Sovereignty** | `lib/vault-export.js` — portable vault serializer |
+| **Sovereignty** | `lib/vault-export.js` — portable vault serializer; `lib/ai/receipts.js` — AI execution receipts; `lib/phi-boundary.js` — outbound PHI redaction; `lib/agent-authority.js` — agent capability grants; `lib/gps-receipts.js` — GPS allocation evidence receipts |
 | **Helpers** | `lib/helpers.js` — reward awards, user shaping |
 | **Data** | `db.js` — `pg` pool |
 
@@ -207,6 +208,19 @@ the route layer (`routes/export.js`, `routes/timeline.js POST /export`) gathers 
 record, calls `buildVaultExport`, and zips the result with `archiver`.
 
 ---
+
+## Sovereignty & governance layer (sprint v4)
+
+Added by the sovereign sprint (migrations `019`–`021`, all additive):
+
+| Concern | Implementation |
+|---------|----------------|
+| **AI execution receipts** | `lib/ai/receipts.js` + `ai_execution_receipts` — every AI call stores provider, model, compute target, sha256 input/result hashes, latency, data class and consent basis. Exported in the vault as `ai/execution-receipts.jsonl`. |
+| **PHI boundary** | `lib/phi-boundary.js` — classification + redaction of SSNs/cards/IBANs on any text sent to an *external* AI provider; keys-only trigger logging. |
+| **Sovereignty status** | `GET /api/passport/sovereignty-status` + a Passport card answering identity/access/storage/AI/rights in plain language (raw IDs only under `advanced`). |
+| **Agent authority** | `agents` + `agent_capability_grants` (migration `020`) — one user-owned LUCA with explicit, expirable, revocable capabilities; every grant use audited to `audit_logs`; LUCA can be disabled (`POST /api/agents/luca/disable`) without touching the account. Exported as `agents/authority.json`. |
+| **GPS evidence before payment** | `lib/gps-receipts.js` + `gps_allocation_receipts` / `gps_allocation_disputes` (migration `021`) — every value split records a shadow allocation receipt: canonical PHI-free evidence JSON, sha256 evidence hash, policy version (`gps-split-v1`), state machine `proposed → disputed → corrected`. `GET /api/gps/allocations/:id/explain` explains the allocation; any participant can dispute to a human; admin resolves. `shadow = TRUE` always — no real settlement exists. |
+| **Read-only mode** | `READ_ONLY_MODE=true` env flag — server-wide middleware rejects mutations with `503 { readOnly: true }` while reads, login and logout keep working (incident response write-freeze). |
 
 ## Deployment topology
 
