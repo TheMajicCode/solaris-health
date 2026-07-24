@@ -210,7 +210,7 @@ export default function BookingFlow({ providerId, provider: provIn, services: sv
                 <div className="bkf-gps">
                   <div className="bkf-gps-head">🌱 How your payment flows</div>
                   <p className="bkf-gps-sub">
-                    No hidden platform cut. Through the Generative Prosperity System, every dollar is
+                    No hidden platform cut. Through GPS — the Global Prosperous Split — 90% goes to your practitioner, always, and every dollar is
                     transparently shared — and you earn LOVE rewards while seeding the community commons.
                   </p>
                   <ValueFlowViz total={price} compact />

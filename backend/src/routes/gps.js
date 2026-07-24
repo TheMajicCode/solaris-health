@@ -1,5 +1,5 @@
 /**
- * gps.js — Generative Prosperity System API (mounted at /api/gps).
+ * gps.js — GPS (Global Prosperous Split) API (mounted at /api/gps).
  *
  * Surfaces the economic coordination layer to the frontend: a patient's
  * value trail, provider/contributor earnings, the regenerative treasury,
@@ -326,11 +326,22 @@ router.get('/allocations/:transactionId/explain', authMiddleware, async (req, re
       [rec.id, req.user.userId]
     );
 
+    // Evidence may arrive as a JSON string depending on the pg type parser.
+    let evidenceObj = rec.evidence;
+    if (typeof evidenceObj === 'string') {
+      try { evidenceObj = JSON.parse(evidenceObj); } catch { evidenceObj = {}; }
+    }
+    evidenceObj = evidenceObj || {};
+
     res.json({
       receipt: {
         id: rec.id,
         transactionId: tx.id,
         policyVersion: rec.policy_version,
+        // gps-receipt/1.0 fields (present on receipts built after the GPS
+        // protocol config seam; older receipts predate them).
+        receiptVersion: evidenceObj.receiptVersion || null,
+        policyHash: evidenceObj.policyHash || null,
         evidenceHash: rec.evidence_hash,
         evidenceVerified: verifyReceipt(rec),
         state: rec.allocation_state,

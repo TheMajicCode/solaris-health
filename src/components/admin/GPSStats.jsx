@@ -1,5 +1,5 @@
 /**
- * GPSStats — the admin view of the Generative Prosperity System economy.
+ * GPSStats — the admin view of the GPS (Global Prosperous Split) economy.
  *
  * Surfaces platform-wide value flow: gross volume, how it split across the six
  * buckets, the regenerative treasury balance, the top ecosystem builders, and a
@@ -64,7 +64,7 @@ export default function GPSStats() {
           <div className="ags-kicker"><Activity size={14} /> GPS Economy</div>
           <h2>The living economy, at a glance</h2>
           <p>
-            Every completed session routes value through the Generative Prosperity System. This is the
+            Every completed session routes value through GPS — the Global Prosperous Split. This is the
             platform-wide picture — value created, value returned to providers, and value seeded back
             into the commons.
           </p>

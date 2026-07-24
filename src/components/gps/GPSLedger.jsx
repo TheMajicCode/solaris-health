@@ -1,8 +1,9 @@
 /**
  * GPSLedger — the patient's "Value Trail".
  *
- * Every transaction the member makes is shown with its full six-way GPS split,
- * the LOVE points earned, and its contribution to the regenerative commons.
+ * Every transaction the member makes is shown with its GPS split (90% to the
+ * provider, up to 10% through the regenerative envelope), the LOVE points
+ * earned, and its contribution to the regenerative commons.
  * "You own your economic trail."
  */
 
@@ -54,23 +55,23 @@ export default function GPSLedger() {
   return (
     <div className="gpl">
       <div className="gpl-hero">
-        <div className="gpl-hero-badge"><Leaf size={13} /> Generative Prosperity System</div>
+        <div className="gpl-hero-badge"><Leaf size={13} /> GPS — Global Prosperous Split</div>
         <h2 className="gpl-hero-h">Your Value Trail</h2>
-        <p className="gpl-hero-sub">Every transaction you make builds the ecosystem — and a share always flows back to you.</p>
+        <p className="gpl-hero-sub">90% of every payment goes to your practitioner, always — and up to 10% flows through the regenerative envelope, building the ecosystem around you.</p>
         <button className="gpl-how-link" onClick={() => setShowHow((v) => !v)}>
           <Info size={13} /> How GPS works {showHow ? '▲' : '▼'}
         </button>
         {showHow && (
           <div className="gpl-how">
             <ValueFlowViz total={100} compact />
-            <p className="gpl-how-note">Value flows to where value was created. Every seed you plant feeds the person, the provider, the local node, and the regenerative commons.</p>
+            <p className="gpl-how-note">Value flows to where value was created: 90% to your practitioner, always — the rest through a capped regenerative envelope that feeds the people and commons behind your care.</p>
           </div>
         )}
       </div>
 
       <div className="gpl-cards">
         <SummaryCard icon={Coins} tone="teal" label="Total spent" value={money(s.total_spent)} sub={`${s.tx_count || 0} transactions`} />
-        <SummaryCard icon={Heart} tone="gold" label="LOVE earned" value={`${lovePoints}`} sub="Reciprocity credits (2% back)" />
+        <SummaryCard icon={Heart} tone="gold" label="LOVE earned" value={`${lovePoints}`} sub="Reciprocity credits (1% back)" />
         <SummaryCard icon={Sprout} tone="green" label="Treasury contributed" value={money(s.treasury_contributed)} sub="To the regenerative commons" />
         <SummaryCard icon={TrendingUp} tone="mint" label="Ecosystem impact" value={`${s.impact_score || 0}`} sub="Your regenerative footprint" />
       </div>
@@ -296,7 +297,10 @@ function AllocationEvidence({ transactionId }) {
         ))}
       </div>
       <div className="gpl-ev-meta">
-        Policy {r.policyVersion} · evidence <code>{String(r.evidenceHash || '').slice(0, 12)}…</code>
+        Policy <code>{r.policyVersion}</code>
+        {r.receiptVersion ? <> · {r.receiptVersion}</> : null}
+        {' · evidence '}<code>{String(r.evidenceHash || '').slice(0, 12)}…</code>
+        {r.policyHash ? <> · policy hash <code>{String(r.policyHash).slice(0, 12)}…</code></> : null}
         {r.evidenceVerified ? ' · verified' : ' · verification failed'}
       </div>
       {(info.disputes || []).length > 0 && (

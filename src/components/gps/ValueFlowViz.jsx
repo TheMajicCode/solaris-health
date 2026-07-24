@@ -1,6 +1,6 @@
 /**
  * ValueFlowViz — an animated diagram of how a transaction's value flows
- * through the Generative Prosperity System (GPS).
+ * through GPS — the Global Prosperous Split.
  *
  * Center = the transaction amount; six buckets radiate out with their share.
  * Reused in the "How GPS Works" explainer and on the booking confirmation.
@@ -9,7 +9,8 @@
 import React from 'react';
 import { Stethoscope, Users, Server, Sprout, Code2, Heart } from 'lucide-react';
 
-// The canonical six-way split. Fractions sum to 1.
+// The six ledger buckets (provider 90% + five envelope legs). Percents sum to 100.
+// Mirrors backend/src/lib/gps/protocol-config.js LEGACY_COLUMN_BPS.
 export const GPS_BUCKETS = [
   { key: 'provider', pct: 90, label: 'Service Provider', tag: 'Sovereign income', icon: Stethoscope, color: '#0E7C66' },
   { key: 'contributor', pct: 1, label: 'Referral Lineage', tag: 'Ecosystem builder', icon: Users, color: '#2FA88C' },

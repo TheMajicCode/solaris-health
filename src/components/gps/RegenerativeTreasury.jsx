@@ -60,7 +60,7 @@ export default function RegenerativeTreasury() {
       <div className="rgt-hero">
         <div className="rgt-hero-badge"><Sprout size={13} /> The Regenerative Commons</div>
         <h2 className="rgt-hero-h">The Solaris Community Treasury</h2>
-        <p className="rgt-hero-sub">A shared fund that grows with every booking. 3% of each transaction is planted here — regenerating health, food, education, and resilience for all.</p>
+        <p className="rgt-hero-sub">A shared fund that grows with every booking. 2.5% of each transaction is planted here — regenerating health, food, education, and resilience for all.</p>
         <div className="rgt-balance">
           <span className="rgt-balance-lbl">Total commons balance</span>
           <span className="rgt-balance-val">{money(tre?.balance)}</span>

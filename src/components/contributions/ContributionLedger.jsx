@@ -91,6 +91,10 @@ export default function ContributionLedger({ user }) {
           <div className="ctl-level-next">
             {lv.nextThreshold ? `${lv.pointsToNext.toLocaleString()} points to next band` : 'Highest band reached'}
           </div>
+          <div className="ctl-level-gps">
+            Contributions are the currency GPS recognises: the same attested record the regenerative
+            envelope (up to 10% of every payment) rewards when it routes value back to builders.
+          </div>
         </div>
 
         <form className="ctl-form" onSubmit={submit}>
@@ -185,6 +189,7 @@ export default function ContributionLedger({ user }) {
         .luca .ctl-level-pts-lbl{font-size:12px;color:var(--muted);margin-top:3px}
         .luca .ctl-level-bar{height:9px;border-radius:99px;background:var(--surface-2);margin-top:14px;overflow:hidden}
         .luca .ctl-level-bar-fill{height:100%;border-radius:99px;transition:width .6s ease}
+        .luca .ctl-level-gps{font-size:11.5px;color:var(--muted-2,#8aa09a);line-height:1.5;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line,#e3ece8)}
         .luca .ctl-level-next{font-size:11.5px;color:var(--muted);margin-top:8px}
         .luca .ctl-form{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px}
         .luca .ctl-form-h{display:flex;align-items:center;gap:7px;font-family:'Space Grotesk',sans-serif;font-weight:700;

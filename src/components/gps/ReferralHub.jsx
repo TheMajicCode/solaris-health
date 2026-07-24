@@ -2,7 +2,7 @@
  * ReferralHub — "Become an Ecosystem Builder".
  *
  * Every member gets a personal referral code. When someone they refer books
- * care, the referrer earns 5% of that booking through the GPS contributor
+ * care, the referrer earns 1% of that booking through the GPS referral-lineage
  * share. Shows the code, share tools, referral stats, and a leaderboard.
  */
 
@@ -63,7 +63,7 @@ export default function ReferralHub() {
       <div className="rfh-hero">
         <div className="rfh-hero-badge"><Sprout size={13} /> Ecosystem Builder</div>
         <h2 className="rfh-hero-h">Become an Ecosystem Builder</h2>
-        <p className="rfh-hero-sub">Share Solaris Health. Earn <b>5%</b> of any booking from someone you refer — value flows to where value was created.</p>
+        <p className="rfh-hero-sub">Share Solaris Health. Earn <b>1%</b> of any booking from someone you refer — value flows to where value was created.</p>
 
         <div className="rfh-code-wrap">
           <div className="rfh-code-block">
@@ -94,7 +94,7 @@ export default function ReferralHub() {
         <div className="rfh-panel">
           <h3 className="rfh-panel-h"><Users size={15} /> Who you've brought in</h3>
           {referrals.length === 0 ? (
-            <p className="rfh-empty">No one yet — share your code to start growing the regenerative economy. You earn 5% every time they book care.</p>
+            <p className="rfh-empty">No one yet — share your code to start growing the regenerative economy. You earn 1% every time they book care.</p>
           ) : (
             <div className="rfh-ref-list">
               {referrals.map((r, i) => (

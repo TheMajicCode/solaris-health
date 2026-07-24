@@ -3,7 +3,7 @@
  * Mounted at /api/provider/earnings.
  *
  * Reads the payment_splits table (see migration 014). Every value is clearly
- * SIMULATED — this demonstrates how the Generative Prosperity System routes value
+ * SIMULATED — this demonstrates how GPS (the Global Prosperous Split) routes value
  * back to the practitioner, and is never real money movement.
  */
 

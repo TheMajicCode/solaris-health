@@ -89,7 +89,7 @@ export default function PaymentModal({
         {status === 'idle' && (
           <div className="paym-body">
             <p className="paym-intro">
-              Paying this plan triggers the <strong>Generative Prosperity System</strong>: your payment is split
+              Paying this plan triggers <strong>GPS — the Global Prosperous Split</strong>: 90% goes to the provider, always, and the rest is split
               across everyone who created value — the provider, your onboarder, the local node, the commons,
               and more. Watch it happen.
             </p>

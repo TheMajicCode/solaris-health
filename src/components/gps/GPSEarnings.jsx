@@ -1,7 +1,7 @@
 /**
  * GPSEarnings — the provider's "Sovereign Income" dashboard.
  *
- * Shows total value earned through the Generative Prosperity System, the
+ * Shows total value earned through GPS — the Global Prosperous Split — the
  * split between settled and pending, a per-booking value trail, and any
  * contributor / referral earnings the provider has accrued.
  */
@@ -110,7 +110,7 @@ export default function GPSEarnings() {
             {showHow && (
               <div className="gpe-how-body">
                 <p className="gpe-how-note">
-                  The Generative Prosperity System replaces a hidden platform fee with a transparent,
+                  GPS — the Global Prosperous Split — replaces a hidden platform fee with a transparent,
                   regenerative split. Here's where a sample <strong>$100</strong> session flows:
                 </p>
                 <ValueFlowViz total={100} />
@@ -200,7 +200,7 @@ export default function GPSEarnings() {
               </div>
 
               <p className="gpe-split-note">
-                <Info size={13} /> In the Generative Prosperity System, value flows directly to the people
+                <Info size={13} /> In GPS — the Global Prosperous Split — value flows directly to the people
                 who create it — practitioners keep the majority share, and every split is visible, never hidden.
               </p>
             </section>

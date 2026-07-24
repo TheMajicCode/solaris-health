@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { api } from '../lib/api.js';
+import { STATIC_GPS_POLICY } from '../lib/gps-policy.js';
 import HealthTimeline from './HealthTimeline.jsx';
 import TrendCharts from './TrendCharts.jsx';
 import SecureChat from './SecureChat.jsx';
@@ -672,7 +673,7 @@ const TAB_META = {
   'my-bookings': { title: 'My Bookings', sub: 'Your appointments with marketplace providers — upcoming, pending, and past.' },
   'booking-oversight': { title: 'Booking Oversight', sub: 'Monitor and resolve appointments across every provider on the platform.' },
   messages: { title: 'Secure Messages', sub: 'End-to-end encrypted conversations with your care network — only you can read them.' },
-  wallet: { title: 'Economic Passport', sub: 'Your LOVE points, contributions, crypto wallets, and value flows.' },
+  wallet: { title: 'Economic Passport', sub: 'Your sovereign economic identity — GPS value flows, LOVE points, and simulated receipts.' },
   treasury: { title: 'Community Treasury', sub: 'The regenerative commons — every transaction seeds our shared prosperity.' },
   'gps-economy': { title: 'GPS Economy', sub: 'The living economy — how value flows, splits, and returns to the commons.' },
   drafts: { title: 'Draft Queue', sub: 'Review and approve AI-prepared triage summaries before they reach patients.' },
@@ -685,9 +686,9 @@ const TAB_META = {
   // Provider workspace (unified — shown alongside patient tabs)
   'my-practice': { title: 'My Practice', sub: 'Manage your listings, bookings, reviews, and analytics — all in one place.' },
   // Solaris-native pages
-  'gps-map': { title: 'The Network', sub: 'A living map of Solaris nodes and the health, wealth & sovereignty they reclaim.' },
-  contributions: { title: 'Contributions', sub: 'Your attested contribution record and the network leaderboard. Levels reward what you give.' },
-  identity: { title: 'Identity & Data', sub: 'Your sovereign identity, wallet, and one-click data export. You own all of it.' },
+  'gps-map': { title: 'The Network', sub: 'The GPS ecosystem, live — every node a sovereign identity, every payment regenerating the whole network.' },
+  contributions: { title: 'Contributions', sub: 'Your attested contribution record — the same recognition the GPS envelope rewards. Levels honour what you give, never what you extract.' },
+  identity: { title: 'Identity & Data', sub: 'Identity above endpoints — your sovereign identity, GPS end address, and one-click data export. You own all of it.' },
   'aura-admin': { title: 'Clinic Console', sub: "Aura Dental's operations — appointments, simulated payments, follow-ups, and GPS treasury." },
 };
 
@@ -1463,6 +1464,18 @@ function SovereigntyCard({ onExport, exporting }) {
               </div>
             </div>
           )}
+        </div>
+
+        <div className="card flat" style={{ padding: 14, background: 'var(--surface-2)' }}>
+          <div className="tiny f6 row gap-2" style={{ marginBottom: 8 }}><Zap size={14} className="t-teal" /> Your GPS end address</div>
+          <div className="tiny muted" style={{ lineHeight: 1.55 }}>
+            In GPS — the Global Prosperous Split — value routes to an identity, not a bank account.
+            Your share currently settles to the <strong>Solaris default end address</strong>.
+          </div>
+          <div className="between" style={{ marginTop: 8, gap: 8 }}>
+            <span className="tiny" style={{ fontFamily: 'monospace' }}>{STATIC_GPS_POLICY.identity.endAddress.current}</span>
+            <span className="tiny muted2">Set your own end address — coming soon</span>
+          </div>
         </div>
       </div>
 
@@ -3542,7 +3555,7 @@ function IdentityPage({ user }) {
       </div>
 
       <Card>
-        <SectionHead eyebrow="Generative Prosperity System" title="See value flow through the ecosystem" />
+        <SectionHead eyebrow="GPS — Global Prosperous Split" title="See value flow through the ecosystem" />
         <p className="small" style={{ color: 'var(--muted)', margin: '4px 0 14px', maxWidth: 620, lineHeight: 1.6 }}>
           Run a simulated treatment-plan payment and watch it split across the provider, your onboarder,
           the local node, and the regenerative commons — each leg cryptographically proven. No real funds move.
