@@ -59,7 +59,7 @@ export default function GPSEarnings() {
           <div className="gpe-kicker"><Coins size={14} /> Sovereign Income</div>
           <h2>Your value, in full view</h2>
           <p>
-            Every completed session flows <strong>85% straight to you</strong> — no opaque platform
+            Every completed session flows <strong>90% straight to you, always</strong> — no opaque platform
             cut. The remaining value is transparently seeded across the people and commons that make
             your practice possible. This is what you've grown so far.
           </p>
@@ -98,7 +98,7 @@ export default function GPSEarnings() {
             <div className="gpe-card">
               <div className="gpe-card-ico" style={{ background: '#7FAE4B' }}><TrendingUp size={16} /></div>
               <span className="gpe-card-lbl">Your share</span>
-              <span className="gpe-card-val">85%</span>
+              <span className="gpe-card-val">90%</span>
               <span className="gpe-card-sub">of every transaction</span>
             </div>
           </div>

@@ -11,12 +11,12 @@ import { Stethoscope, Users, Server, Sprout, Code2, Heart } from 'lucide-react';
 
 // The canonical six-way split. Fractions sum to 1.
 export const GPS_BUCKETS = [
-  { key: 'provider', pct: 85, label: 'Service Provider', tag: 'Sovereign income', icon: Stethoscope, color: '#0E7C66' },
-  { key: 'contributor', pct: 5, label: 'Contributor', tag: 'Ecosystem builder', icon: Users, color: '#2FA88C' },
-  { key: 'infrastructure', pct: 3, label: 'Local Infrastructure', tag: 'Node operators', icon: Server, color: '#5FB89F' },
-  { key: 'treasury', pct: 3, label: 'Regenerative Treasury', tag: 'Community commons', icon: Sprout, color: '#7FAE4B' },
-  { key: 'software', pct: 2, label: 'Software', tag: 'Platform upkeep', icon: Code2, color: '#8A94A6' },
-  { key: 'userReward', pct: 2, label: 'Your Rewards', tag: 'LOVE credits', icon: Heart, color: '#E3AC46' },
+  { key: 'provider', pct: 90, label: 'Service Provider', tag: 'Sovereign income', icon: Stethoscope, color: '#0E7C66' },
+  { key: 'contributor', pct: 1, label: 'Referral Lineage', tag: 'Ecosystem builder', icon: Users, color: '#2FA88C' },
+  { key: 'infrastructure', pct: 1, label: 'Infrastructure & Open Tech', tag: 'Node operators', icon: Server, color: '#5FB89F' },
+  { key: 'treasury', pct: 2.5, label: 'Regenerative Treasury', tag: 'Community commons', icon: Sprout, color: '#7FAE4B' },
+  { key: 'software', pct: 4.5, label: 'Coordination & Education', tag: 'Solaris upkeep', icon: Code2, color: '#8A94A6' },
+  { key: 'userReward', pct: 1, label: 'Your Sovereignty Reward', tag: 'LOVE credits', icon: Heart, color: '#E3AC46' },
 ];
 
 const money = (n) => `$${(Number(n) || 0).toFixed(2)}`;

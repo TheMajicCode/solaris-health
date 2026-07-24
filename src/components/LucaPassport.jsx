@@ -3858,8 +3858,9 @@ function EconomicPassportPage({ user }) {
             Economic Passport
           </h2>
           <p style={{ margin: 0, fontSize: 13.5, color: 'rgba(255,255,255,0.72)', lineHeight: 1.55, maxWidth: 480 }}>
-            Your sovereign economic identity — earn, split, and regenerate value as you participate in the Solaris ecosystem.
-            Full activation is on the way; here's a glimpse of how GPS works when it goes live.
+            Your sovereign economic identity, powered by GPS — the Global Prosperous Split.
+            90% of every payment goes to your practitioner, always; up to 10% flows through a regenerative
+            envelope back into the ecosystem. Full activation is on the way — everything below is a simulated preview.
           </p>
         </div>
       </div>

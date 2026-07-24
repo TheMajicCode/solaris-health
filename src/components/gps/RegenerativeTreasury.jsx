@@ -112,7 +112,7 @@ export default function RegenerativeTreasury() {
           <div className="rgt-card">
             <h3 className="rgt-card-h"><Info size={15} /> How it works</h3>
             <ValueFlowViz total={100} compact />
-            <p className="rgt-how-note">Every transaction on Solaris Health is split six ways. The Regenerative Treasury (3%) is the community's shared endowment — owned by no one, growing for everyone. <b>Every transaction plants a seed.</b></p>
+            <p className="rgt-how-note">Under GPS — the Global Prosperous Split — 90% of every payment goes to the practitioner and up to 10% flows through a regenerative envelope. The Regenerative Treasury (2.5% of each payment) is the community's shared endowment — owned by no one, growing for everyone. <b>Every transaction plants a seed.</b></p>
           </div>
         </div>
 
