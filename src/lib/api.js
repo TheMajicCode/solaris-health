@@ -387,6 +387,7 @@ class ApiClient {
   uploadProfilePhoto(image) { return this.request('/users/upload-photo', { method: 'POST', body: JSON.stringify({ image }) }); }
 
   // ---- GPS (Generative Prosperity System) ----
+  getGpsPolicy() { return this.request('/gps/policy'); }
   getGpsLedger(limit = 20, offset = 0) { return this.request(`/gps/my-ledger?limit=${limit}&offset=${offset}`); }
   getGpsEarnings() { return this.request('/gps/my-earnings'); }
 

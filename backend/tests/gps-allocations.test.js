@@ -42,7 +42,7 @@ beforeAll(async () => {
     `INSERT INTO gps_transactions
        (total_amount, currency, provider_share, contributor_share, infrastructure_share,
         treasury_share, software_share, user_reward_share, patient_id, status, split_template)
-     VALUES (100, 'USD', 85, 5, 3, 3, 2, 2, $1, 'pending', 'default')
+     VALUES (100, 'USD', 90, 1, 1, 2.5, 4.5, 1, $1, 'pending', 'default')
      RETURNING id`,
     [patientId]
   );
@@ -72,7 +72,7 @@ describe('gps-receipts library', () => {
     // Structural facts only.
     expect(evidence.policyVersion).toBe(GPS_POLICY_VERSION);
     expect(evidence.totalAmount).toBe(100);
-    expect(evidence.shares.provider).toBe(85);
+    expect(evidence.shares.provider).toBe(90);
     const str = JSON.stringify(evidence).toLowerCase();
     expect(str).not.toMatch(/name|email|diagnos|symptom/);
     // Deterministic hash.
@@ -147,7 +147,7 @@ describe('dispute → resolve lifecycle', () => {
     const res = await request(app)
       .post(`/api/gps/allocations/${txId}/resolve`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ resolution: 'Reviewed: split matches policy gps-split-v1. No correction needed.' });
+      .send({ resolution: 'Reviewed: split matches policy gps:policy:solaris:aura-consultation:v0.1. No correction needed.' });
     expect(res.status).toBe(200);
     expect(res.body.state).toBe('corrected');
 

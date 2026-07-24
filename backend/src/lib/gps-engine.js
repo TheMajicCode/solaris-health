@@ -1,5 +1,5 @@
 /**
- * gps-engine.js — the Generative Prosperity System value-split engine.
+ * gps-engine.js — the GPS (Global Prosperous Split) value-split engine.
  *
  * Every completed booking is routed through processGPSSplit(), which divides
  * the transaction value across the whole ecosystem and records an immutable
@@ -15,15 +15,16 @@
 const db = require('../db');
 const { createNotification } = require('./notifications');
 
-/** The default GPS split template. Fractions must sum to 1. */
-const GPS_SPLIT = {
-  provider: 0.85,       // Sovereign income
-  contributor: 0.05,    // Ecosystem builder (referrer) — or platform if none
-  infrastructure: 0.03, // Local node operators
-  treasury: 0.03,       // Regenerative commons
-  software: 0.02,       // Platform maintenance / open-source
-  userReward: 0.02,     // Patient LOVE / education credits
-};
+/**
+ * The default GPS split template, derived from the protocol config seam
+ * (backend/src/lib/gps/protocol-config.js — GPS Protocol Suite v1.0, Aura
+ * pilot profile). Provider ALWAYS receives 90%; the 10% GPS ecosystem
+ * envelope maps onto the six legacy ledger columns. Fractions sum to 1.
+ */
+const { getLegacySplitFractions } = require('./gps/protocol-config');
+const GPS_SPLIT = getLegacySplitFractions();
+// → { provider: 0.90, contributor: 0.01, infrastructure: 0.01,
+//     treasury: 0.025, software: 0.045, userReward: 0.01 }
 
 /**
  * How the 3% treasury share is distributed across the six community funds.
@@ -187,13 +188,13 @@ async function processGPSSplit(booking) {
   // Treasury deposits across the six funds.
   await depositTreasury(tx.id, split.treasury);
 
-  // LOVE points to the patient (2% share → reciprocity credits).
+  // LOVE points to the patient (user-sovereignty share → reciprocity credits).
   if (patientId && split.userReward > 0) {
     const lovePoints = split.userReward * LOVE_POINTS_PER_DOLLAR;
     await awardLovePoints(patientId, lovePoints, 'GPS reward — your booking fed the ecosystem');
   }
 
-  // Credit + reward the referral contributor (5% share).
+  // Credit + reward the referral contributor (referral & community lineage share).
   if (contributorId && split.contributor > 0) {
     await creditContributor(contributorId, 'referral', split.contributor);
     await db.query(
@@ -277,16 +278,17 @@ async function ensureReferralCode(userId, username) {
 }
 
 /**
- * The data-driven default split policy for the Solaris sprint, expressed in
- * basis points (10000 = 100%). Used when an organization has no explicit
- * `split_policies_v2` row. 90/3/2/2/2/1.
+ * The data-driven default split policy, expressed in basis points
+ * (10000 = 100%). Used when an organization has no explicit
+ * `split_policies_v2` row. Aligned with the protocol config seam:
+ * 90% provider + the 10% GPS ecosystem envelope (capped at 1000 bps).
  */
 const DEFAULT_SPLIT_POLICY_BPS = [
   { role: 'provider',           recipient_ref: 'org:provider',     share_bps: 9000, immutable: false },
-  { role: 'onboarder',          recipient_ref: 'user:onboarder',   share_bps: 300,  immutable: true },
-  { role: 'infrastructure',     recipient_ref: 'network:infra',    share_bps: 200,  immutable: false },
-  { role: 'community_treasury', recipient_ref: 'community:home',   share_bps: 200,  immutable: false, location_routing: 'home' },
-  { role: 'software',           recipient_ref: 'network:software', share_bps: 200,  immutable: false },
+  { role: 'onboarder',          recipient_ref: 'user:onboarder',   share_bps: 100,  immutable: true },
+  { role: 'infrastructure',     recipient_ref: 'network:infra',    share_bps: 100,  immutable: false },
+  { role: 'community_treasury', recipient_ref: 'community:home',   share_bps: 250,  immutable: false, location_routing: 'home' },
+  { role: 'software',           recipient_ref: 'network:software', share_bps: 450,  immutable: false },
   { role: 'patient_education',  recipient_ref: 'user:payer',       share_bps: 100,  immutable: false },
 ];
 
@@ -314,7 +316,7 @@ async function getSplitPolicy(orgId) {
       console.error('getSplitPolicy error:', err.message);
     }
   }
-  return { policyId: null, name: 'Default Split (90/3/2/2/2/1)', recipients: DEFAULT_SPLIT_POLICY_BPS };
+  return { policyId: null, name: 'Solaris GPS Default (90% provider / 10% ecosystem envelope)', recipients: DEFAULT_SPLIT_POLICY_BPS };
 }
 
 /**

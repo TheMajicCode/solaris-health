@@ -1,7 +1,7 @@
 'use strict';
 /**
- * gps-receipts.js — evidence-before-payment for the Generative Prosperity
- * System (Slice 8).
+ * gps-receipts.js — evidence-before-payment for GPS (Global Prosperous
+ * Split) allocations (Slice 8).
  *
  * Every GPS allocation gets an allocation receipt:
  *   - a canonical, PHI-free evidence document (UUIDs, amounts, fractions,
@@ -12,16 +12,23 @@
  *   - shadow = true always: these are SHADOW allocations. No real money
  *     moves, and nothing in this module can trigger settlement.
  *
- * The split policy itself lives in gps-engine.js (GPS_SPLIT) and is fully
- * visible — there are no hidden protocol royalties.
+ * The split policy lives in the protocol config seam
+ * (./gps/protocol-config.js) and is fully visible — there are no hidden
+ * protocol royalties.
  */
 
 const crypto = require('crypto');
 const db = require('../db');
 const { GPS_SPLIT } = require('./gps-engine');
+const { POLICY, POLICY_HASH, PROTOCOL } = require('./gps/protocol-config');
 
-/** Version tag for the split policy encoded in GPS_SPLIT (85/5/3/3/2/2). */
-const GPS_POLICY_VERSION = 'gps-split-v1';
+/**
+ * Version tag for the active split policy. Sourced from the protocol config
+ * seam (GPS Protocol Suite v1.0 — Aura pilot profile, 90% provider / 10%
+ * ecosystem envelope). Historical receipts keep the policy version they
+ * were created with (append-only — receipts are never rewritten).
+ */
+const GPS_POLICY_VERSION = POLICY.id; // 'gps:policy:solaris:aura-consultation:v0.1'
 
 /** Stable stringify (sorted keys) so the evidence hash is deterministic. */
 function canonicalJSON(value) {
@@ -41,7 +48,9 @@ const sha256 = (s) => crypto.createHash('sha256').update(s, 'utf8').digest('hex'
 function buildEvidence(tx) {
   return {
     kind: 'gps.allocation.evidence',
+    receiptVersion: PROTOCOL.receiptVersion, // gps-receipt/1.0
     policyVersion: GPS_POLICY_VERSION,
+    policyHash: POLICY_HASH,
     transactionId: tx.id,
     bookingId: tx.booking_id || null,
     currency: tx.currency || 'USD',

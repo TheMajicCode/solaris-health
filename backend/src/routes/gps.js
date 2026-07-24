@@ -14,6 +14,7 @@ const { processGPSSplit, ensureReferralCode, FUND_LABELS, GPS_SPLIT } = require(
 const {
   recordAllocationReceipt, verifyReceipt, explainAllocation,
 } = require('../lib/gps-receipts');
+const { getGpsPolicy } = require('../lib/gps/protocol-config');
 
 const router = express.Router();
 
@@ -52,6 +53,14 @@ const FUND_META = {
 /* ----------------------- lightweight treasury cache ----------------------- */
 let treasuryCache = { at: 0, data: null };
 const TREASURY_TTL = 5 * 60 * 1000;
+
+/* ============================ PROTOCOL POLICY =========================== */
+// GET /api/gps/policy — the active (simulated) GPS policy snapshot.
+// Public protocol metadata: percentages, recipients, receipt schema shape.
+// Single source of truth for every GPS number shown in the UI.
+router.get('/policy', (req, res) => {
+  res.json(getGpsPolicy());
+});
 
 /* ============================ PATIENT LEDGER ============================ */
 // GET /api/gps/my-ledger?limit=&offset=
