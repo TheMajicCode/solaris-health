@@ -281,3 +281,69 @@ Sprint start: 2026-07-23 (UTC)
 - Browser-level practitioner E2E, and letting a member set their own GPS end
   address (Lightning address) from the Passport — the protocol-aligned next
   slice now that receipts and the explainer are in place.
+
+
+
+---
+
+# Sprint: GPS Protocol Alignment (GPS Protocol Suite v1.0)
+
+**Branch:** `agent/abacus-sovereign-sprint-v4` · **Source of truth:** uploaded
+`GPS_Protocol_Document_Suite_v1.0.zip` (distilled into `docs/GPS_PROTOCOL_NOTES.md`).
+
+## What the suite specifies (key facts adopted)
+- GPS = **Global Prosperous Split** — "a Lightning-native, identity-aware and
+  agent-ready protocol for regenerative value routing".
+- **90% to the provider, always**; a constitutional **10% (1000 bps) envelope cap**.
+- Aura consultation launch profile (illustrative, not the universal standard):
+  Solaris coordination 4% / regenerative health 1.5% / referral lineage 1% /
+  user sovereignty 1% / infrastructure & open tech 1% / local community cause 1%
+  / education & intelligence 0.5%.
+- Receipt schema **gps-receipt/1.0** (receipt id, issuer, policy id + hash,
+  context hash, allocations, settlement summary, privacy profile, signatures);
+  append-only ledger; privacy profiles PRIVATE→TREASURY_TRANSPARENT.
+- Identity above endpoints: value routes to an identity; Solaris is only the
+  default end address until the recipient sets their own (Lightning today).
+
+## What was built (one commit per step)
+1. **`9f85e80` — Protocol notes** (`docs/GPS_PROTOCOL_NOTES.md`): source-grounded
+   digest of all 15 suite documents.
+2. **`96e5ed5` — GPS config seam**: `backend/src/lib/gps/protocol-config.js`
+   (mock protocol adapter: policy id `gps:policy:solaris:aura-consultation:v0.1`,
+   9000 bps provider, 7 envelope recipients, policy hash, legacy 6-column
+   mapping); public `GET /api/gps/policy`; engine moved 85% → **90/10**
+   (`GPS_SPLIT` now derived from config); receipts stamped with
+   `receiptVersion: gps-receipt/1.0` + `policyHash`; migration 022 widens
+   `policy_version` to VARCHAR(80); frontend seam `src/lib/gps-policy.js`
+   (fetch with static fallback, largest-remainder `splitAmount`); +6 backend tests.
+3. **`ee57004` — Economic Passport GPS showcase rebuild**: new `GpsExplainer`
+   with hero fact ("90% goes to your practitioner, always"), animated SVG
+   payment flow (Payment → 90/10 Split → Regenerate → Ripple), envelope
+   subdivision per policy, **live gps-receipt/1.0 showcase** generated from the
+   chosen amount (simulated, no PHI, same shape as ledger receipts), ripple
+   layer and protocol-truth callouts; banner, treasury, earnings (85→90) and
+   flow-viz buckets aligned to 90/1/1/2.5/4.5/1.
+4. **`31b3288` — Section alignment**: Network/Contributions/Identity page copy
+   reframed to the ecosystem/identity-first protocol narrative; SovereigntyCard
+   gains an honest "Your GPS end address: solaris_default — set your own
+   (coming soon)" card (no real wallet/Lightning integration); GPS ledger
+   evidence view now surfaces receipt version + policy hash (conditionally —
+   older receipts predate them); referral copy 5%→1%, treasury 3%→2.5%,
+   LOVE back 2%→1%; user-visible "Generative Prosperity System" renamed to
+   "GPS — Global Prosperous Split".
+5. **This commit — validate & deploy**: sw cache `solaris-v4`→`solaris-v5`,
+   docker rebuild (frontend + backend), report below.
+
+## Validation
+- Frontend: `npm test -- --run` **30/30**, `npm run build` clean,
+  `npm run lint` at baseline **15 errors / 137 warnings** (no new).
+- Backend: `npx jest` **109/109** (14 suites) — includes 6 new policy tests.
+- Migration 022 applied locally; auto-applies on backend container boot.
+
+## Deferred (exact next tasks)
+- **Real end-address setter**: let a member save their own Lightning address as
+  their GPS end address (API + SovereigntyCard form) — currently an honest
+  "coming soon" placeholder on the Solaris default.
+- **User-editable receive policies / auto-configuration** (suite doc 04) and
+  recursion-aware routing beyond the single-hop simulation.
+- Everything remains **simulated / shadow mode** — no real money moves.
