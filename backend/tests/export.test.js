@@ -52,6 +52,32 @@ const baseRecord = () => ({
 });
 
 describe('buildVaultExport', () => {
+  it('serializes notifications to JSONL and round-trips them losslessly', () => {
+    const notifications = [
+      { type: 'message', title: 'New secure message', message: 'You have received a new secure message.', read: false, data: { conversationId: 'c1' }, created_at: '2026-03-01T10:00:00.000Z' },
+      { type: 'booking', title: 'Booking confirmed', message: 'Your booking was confirmed.', read: true, data: null, created_at: '2026-03-02T11:00:00.000Z' },
+    ];
+    const files = buildVaultExport({ ...baseRecord(), notifications });
+    const f = files.find((x) => x.path === 'notifications/log.jsonl');
+    expect(f).toBeDefined();
+    const parsed = f.contents.trim().split('\n').map((l) => JSON.parse(l));
+    expect(parsed).toHaveLength(2);
+    expect(parsed[0]).toMatchObject({ type: 'message', title: 'New secure message', read: false });
+    expect(parsed[0].data).toEqual({ conversationId: 'c1' });
+    expect(parsed[1]).toMatchObject({ type: 'booking', read: true, created_at: '2026-03-02T11:00:00.000Z' });
+    // manifest counts them
+    const manifest = JSON.parse(files.find((x) => x.path === 'manifest.json').contents);
+    expect(manifest.files).toContain('notifications/log.jsonl');
+    const log = files.find((x) => x.path === 'events/log.jsonl');
+    const exportEvent = log.contents.trim().split('\n').map((l) => JSON.parse(l)).find((e) => e.action === 'exported_vault');
+    expect(exportEvent.counts.notifications).toBe(2);
+  });
+
+  it('omits the notifications file when there are none', () => {
+    const files = buildVaultExport(baseRecord());
+    expect(files.find((x) => x.path === 'notifications/log.jsonl')).toBeUndefined();
+  });
+
   it('exports a stable schema version string', () => {
     expect(typeof VAULT_SCHEMA_VERSION).toBe('string');
     expect(VAULT_SCHEMA_VERSION).toMatch(/^\d+\.\d+$/);

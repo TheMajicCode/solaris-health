@@ -44,6 +44,7 @@ function buildVaultExport(record) {
     aiReceipts = [],
     agentAuthority = null,
     solarisIdentity = null,
+    notifications = [],
   } = record;
   const exportedAt = new Date().toISOString();
   const files = [];
@@ -260,6 +261,22 @@ function buildVaultExport(record) {
     });
   }
 
+  // NOTIFICATIONS — the user's in-app notification history (JSONL, append-only shape)
+  if (notifications && notifications.length) {
+    const lines = notifications.map((n) => JSON.stringify({
+      type: n.type,
+      title: n.title || null,
+      message: n.message || null,
+      read: Boolean(n.read),
+      data: n.data || null,
+      created_at: n.created_at ? new Date(n.created_at).toISOString() : null,
+    }));
+    files.push({
+      path: 'notifications/log.jsonl',
+      contents: lines.join('\n') + '\n',
+    });
+  }
+
   // EVENTS — append-only audit log. One line per meaningful action, then the export event.
   const actorId = user.did || `solaris:user:${user.id}`;
   const eventLines = [];
@@ -299,6 +316,7 @@ function buildVaultExport(record) {
       journal: journal.length, health_documents: healthDocs.length, audio_unlocks: audioUnlocks.length,
       ai_execution_receipts: aiReceipts.length,
       identity_bindings: solarisIdentity ? (solarisIdentity.bindings || []).length : 0,
+      notifications: notifications.length,
     },
     human_approval: 'self',
     timestamp: exportedAt,

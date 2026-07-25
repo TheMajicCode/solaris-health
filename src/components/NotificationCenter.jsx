@@ -13,7 +13,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Bell, Check, CheckCheck, X, PartyPopper, AlertTriangle, CalendarDays,
-  MessageSquare, Star, Info, Loader2,
+  MessageSquare, Star, Info, Loader2, BellRing, Smartphone,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '../lib/api.js';
@@ -53,6 +53,51 @@ function timeAgo(ts) {
   const dd = Math.floor(h / 24);
   if (dd < 7) return `${dd}d ago`;
   return new Date(ts).toLocaleDateString();
+}
+
+/* ------------------------- web push helpers ------------------------- */
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = window.atob(base64);
+  const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i += 1) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+
+const isIos = () => /iPad|iPhone|iPod/.test(navigator.userAgent);
+const isStandalone = () =>
+  window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator.standalone === true;
+
+/**
+ * Push status:
+ *  'unsupported'   browser can't do web push
+ *  'ios-install'   iOS Safari, not installed to Home Screen (push needs the installed app)
+ *  'denied'        permission blocked in browser settings
+ *  'off'           available but not subscribed
+ *  'on'            subscribed
+ *  'server-off'    server has push disabled (no VAPID keys)
+ */
+async function detectPushStatus() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+    return isIos() && !isStandalone() ? 'ios-install' : 'unsupported';
+  }
+  if (isIos() && !isStandalone()) return 'ios-install';
+  try {
+    const { enabled } = await api.getVapidPublicKey();
+    if (!enabled) return 'server-off';
+  } catch {
+    return 'server-off';
+  }
+  if (Notification.permission === 'denied') return 'denied';
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    return sub ? 'on' : 'off';
+  } catch {
+    return 'off';
+  }
 }
 
 export default function NotificationCenter({ onNavigate }) {
@@ -132,6 +177,59 @@ export default function NotificationCenter({ onNavigate }) {
     if (next) load(filter);
   };
 
+  /* ---- web push opt-in (never prompted automatically; only via this toggle) ---- */
+  const [pushStatus, setPushStatus] = useState(null); // null until detected
+  const [pushBusy, setPushBusy] = useState(false);
+
+  useEffect(() => {
+    if (!open || pushStatus !== null) return;
+    detectPushStatus().then(setPushStatus).catch(() => setPushStatus('unsupported'));
+  }, [open, pushStatus]);
+
+  const enablePush = async () => {
+    setPushBusy(true);
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') {
+        setPushStatus(perm === 'denied' ? 'denied' : 'off');
+        return;
+      }
+      const { publicKey } = await api.getVapidPublicKey();
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      });
+      const json = sub.toJSON();
+      await api.subscribePush({ endpoint: json.endpoint, keys: json.keys, userAgent: navigator.userAgent });
+      setPushStatus('on');
+      toast.success('Push notifications on');
+    } catch {
+      toast.error('Could not enable push notifications');
+      setPushStatus('off');
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  const disablePush = async () => {
+    setPushBusy(true);
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        try { await api.unsubscribePush(sub.endpoint); } catch { /* server best-effort */ }
+        await sub.unsubscribe();
+      }
+      setPushStatus('off');
+      toast('Push notifications off', { icon: '🔕' });
+    } catch {
+      toast.error('Could not disable push notifications');
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
   const markRead = async (n) => {
     if (n.read) return;
     setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
@@ -206,6 +304,43 @@ export default function NotificationCenter({ onNavigate }) {
               );
             })}
           </div>
+
+          {/* Push opt-in footer — quiet, opt-in only, honest about platform limits. */}
+          {pushStatus && pushStatus !== 'unsupported' && pushStatus !== 'server-off' && (
+            <div className="nc-push">
+              {pushStatus === 'ios-install' ? (
+                <div className="nc-push-row">
+                  <span className="nc-push-ico"><Smartphone size={14} /></span>
+                  <span className="nc-push-txt">
+                    On iPhone/iPad, add Solaris to your Home Screen (Share → Add to Home Screen) to enable push notifications.
+                  </span>
+                </div>
+              ) : pushStatus === 'denied' ? (
+                <div className="nc-push-row">
+                  <span className="nc-push-ico"><BellRing size={14} /></span>
+                  <span className="nc-push-txt">
+                    Push is blocked in your browser settings. You&apos;ll still see everything here in the app.
+                  </span>
+                </div>
+              ) : (
+                <div className="nc-push-row">
+                  <span className="nc-push-ico"><BellRing size={14} /></span>
+                  <span className="nc-push-txt">
+                    {pushStatus === 'on' ? 'Push notifications are on.' : 'Get a gentle push when something needs you.'}
+                    <span className="nc-push-sub"> Never includes message or health content.</span>
+                  </span>
+                  <button
+                    className={`nc-push-toggle ${pushStatus === 'on' ? 'on' : ''}`}
+                    disabled={pushBusy}
+                    onClick={pushStatus === 'on' ? disablePush : enablePush}
+                    aria-label={pushStatus === 'on' ? 'Turn off push notifications' : 'Turn on push notifications'}
+                  >
+                    {pushBusy ? <Loader2 size={12} className="nc-spin" /> : (pushStatus === 'on' ? 'On' : 'Enable')}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
       <style>{CSS}</style>
@@ -251,4 +386,13 @@ const CSS = `
 .luca .nc-item-time{font-size:11px;color:var(--muted);margin-top:2px}
 .luca .nc-dot-btn{width:20px;height:20px;border-radius:50%;background:var(--mint-soft);color:var(--teal-d);display:grid;place-items:center;flex-shrink:0;margin-top:2px}
 .luca .nc-dot-btn:hover{background:var(--teal-d);color:#fff}
+.luca .nc-push{border-top:1px solid var(--line);padding:10px 14px;background:var(--surface-2)}
+.luca .nc-push-row{display:flex;align-items:center;gap:9px}
+.luca .nc-push-ico{width:26px;height:26px;border-radius:8px;background:var(--mint-soft);color:var(--teal-d);display:grid;place-items:center;flex-shrink:0}
+.luca .nc-push-txt{font-size:12px;color:var(--muted-2);line-height:1.4;flex:1;min-width:0}
+.luca .nc-push-sub{color:var(--muted);font-size:11px}
+.luca .nc-push-toggle{font-size:11px;font-weight:700;padding:5px 12px;border-radius:999px;cursor:pointer;flex-shrink:0;
+  border:1px solid var(--teal-d,#06403B);background:var(--teal-d,#06403B);color:#fff;display:inline-flex;align-items:center;gap:4px}
+.luca .nc-push-toggle.on{background:var(--mint-soft);color:var(--teal-d);border-color:var(--line)}
+.luca .nc-push-toggle:disabled{opacity:.6;cursor:default}
 `;

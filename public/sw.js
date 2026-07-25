@@ -8,7 +8,7 @@
 // MUST be network-first so the freshly deployed index.html (which points at the
 // current bundle) is always used; the cached shell is only a last-resort offline
 // fallback. Hashed static assets remain cache-first (they are immutable).
-const CACHE_NAME = 'solaris-v6';
+const CACHE_NAME = 'solaris-v7';
 const SHELL_URL = '/index.html';
 
 self.addEventListener('install', () => {
@@ -80,5 +80,48 @@ self.addEventListener('fetch', (event) => {
           return res;
         })
     )
+  );
+});
+
+
+// ---------------------------------------------------------------------------
+// Web Push. Payloads are generated server-side from generic, PHI-free
+// templates ("You have a new secure message") — never message or health
+// content. `data.url` tells us which page to open on click.
+self.addEventListener('push', (event) => {
+  let payload = {};
+  try {
+    if (event.data) payload = event.data.json() || {};
+  } catch {
+    /* malformed payload — fall back to generic copy */
+  }
+  const title = payload.title || 'Solaris Health';
+  const body = payload.body || 'You have a new notification.';
+  const url = payload.url || '/';
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+      data: { url },
+    })
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // Focus an existing Solaris tab (navigating it to the target page) if we
+      // have one; otherwise open a new window.
+      for (const client of clientList) {
+        if ('focus' in client) {
+          if ('navigate' in client) client.navigate(url).catch(() => {});
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(url);
+    })
   );
 });

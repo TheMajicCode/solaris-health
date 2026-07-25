@@ -74,6 +74,12 @@ async function gatherRecord(userId) {
   // Solaris ID — permanent subject + bindings (ADR 001; PHI-safe: email is hash-only)
   const solarisIdentity = await require('../lib/identity').exportIdentity(userId).catch(() => null);
 
+  // Notifications — the user's in-app notification history
+  const notifications = await db.query(
+    'SELECT type, title, message, read, data, created_at FROM notifications WHERE user_id=$1 ORDER BY created_at ASC',
+    [userId]
+  ).catch(() => ({ rows: [] }));
+
   // Unlocked audio practices
   const audioUnlocks = await db.query(
     `SELECT al.title, al.description, al.tags_json, ua.unlocked_at
@@ -98,6 +104,7 @@ async function gatherRecord(userId) {
     aiReceipts: aiReceipts.rows,
     agentAuthority,
     solarisIdentity,
+    notifications: notifications.rows,
   };
 }
 

@@ -330,6 +330,9 @@ class ApiClient {
   markNotificationRead(id) { return this.request(`/notifications/${id}/read`, { method: 'PUT', body: JSON.stringify({}) }); }
   markAllNotificationsRead() { return this.request('/notifications/read-all', { method: 'PUT', body: JSON.stringify({}) }); }
   createTestNotification(data = {}) { return this.request('/notifications/test', { method: 'POST', body: JSON.stringify(data) }); }
+  getVapidPublicKey() { return this.request('/notifications/vapid-public-key'); }
+  subscribePush(subscription) { return this.request('/notifications/subscribe', { method: 'POST', body: JSON.stringify(subscription) }); }
+  unsubscribePush(endpoint) { return this.request('/notifications/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint }) }); }
 
   // ---- Bookings (patient) ----
   getAvailableSlots(providerId, serviceId, days = 60) {

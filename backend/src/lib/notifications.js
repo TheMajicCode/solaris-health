@@ -7,6 +7,7 @@
  */
 
 const { query } = require('../db');
+const { sendPushToUser } = require('./push');
 
 /**
  * Create an in-app notification for a user.
@@ -27,6 +28,10 @@ async function createNotification(userId, type, title, message, data = {}) {
        RETURNING id, user_id, type, title, message, read, data, created_at`,
       [userId, type || 'system', title || null, message || null, data ? JSON.stringify(data) : null]
     );
+    // Fan out a generic (PHI-free) web push — fire-and-forget, never blocks
+    // the request. Pass only the TYPE: push bodies are fixed templates and
+    // must never contain the in-app title/message content.
+    sendPushToUser(userId, type || 'system').catch(() => {});
     return r.rows[0] || null;
   } catch (err) {
     console.error('[notifications] createNotification failed (non-fatal):', err.message);

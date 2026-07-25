@@ -6,6 +6,7 @@ const {
   setLucaActive,
   revokeGrant,
 } = require('../lib/agent-authority');
+const { createNotification } = require('../lib/notifications');
 
 const router = express.Router();
 
@@ -43,6 +44,17 @@ router.post('/luca/:action(disable|enable)', authMiddleware, async (req, res) =>
     const active = req.params.action === 'enable';
     const agent = await setLucaActive(req.user.userId, active);
     if (!agent) return res.status(404).json({ error: 'Agent not found' });
+    // Record the state change in the notification center (system type,
+    // in-app; the generic push template carries no detail).
+    createNotification(
+      req.user.userId,
+      'system',
+      active ? 'LUCA re-enabled' : 'LUCA paused',
+      active
+        ? 'Your LUCA companion is active again.'
+        : 'Your LUCA companion is switched off. Your data and Passport are untouched.',
+      { agentId: agent.id }
+    ).catch(() => {});
     res.json({
       id: agent.id,
       active: agent.active,

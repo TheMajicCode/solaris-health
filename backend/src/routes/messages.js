@@ -25,6 +25,7 @@ const db = require('../db');
 const { authMiddleware } = require('../middleware/auth');
 const { audit } = require('../lib/helpers');
 const cryptoLib = require('../lib/crypto');
+const { createNotification } = require('../lib/notifications');
 
 const router = express.Router();
 
@@ -302,6 +303,16 @@ router.post('/send', authMiddleware, requireMessagingRole, async (req, res) => {
       resourceId: ins.rows[0].id, newValues: { conversationId: conv.id }, ip: clientIp(req),
     });
 
+    // Notify the recipient (in-app + generic push). Message content is E2E
+    // encrypted and NEVER included — the copy is deliberately generic.
+    createNotification(
+      otherParty(conv, req.user.userId),
+      'message',
+      'New secure message',
+      'You have received a new secure message.',
+      { conversationId: conv.id }
+    ).catch(() => {});
+
     res.status(201).json({ id: ins.rows[0].id, conversationId: conv.id, createdAt: ins.rows[0].created_at });
   } catch (err) { console.error('messages/send', err); res.status(500).json({ error: 'Server error' }); }
 });
@@ -359,6 +370,15 @@ router.post('/upload', authMiddleware, requireMessagingRole, async (req, res) =>
       actorId: req.user.userId, action: 'message.upload', resourceType: 'message_attachment',
       resourceId: att.rows[0].id, newValues: { conversationId: conv.id, size: size || null }, ip: clientIp(req),
     });
+
+    // Notify the recipient — generic copy only, no filenames or content.
+    createNotification(
+      otherParty(conv, req.user.userId),
+      'message',
+      'New secure message',
+      'You have received a new secure message.',
+      { conversationId: conv.id }
+    ).catch(() => {});
 
     res.status(201).json({
       id: msg.rows[0].id, conversationId: conv.id, createdAt: msg.rows[0].created_at,

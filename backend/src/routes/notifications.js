@@ -8,12 +8,16 @@
  *   PUT  /:id/read           mark one as read
  *   PUT  /read-all           mark all as read
  *   POST /test               create a test notification for the current user (dev)
+ *   GET  /vapid-public-key   web push public key (null when push not configured)
+ *   POST /subscribe          register a browser push subscription
+ *   POST /unsubscribe        revoke a browser push subscription
  */
 
 const express = require('express');
 const db = require('../db');
 const { authMiddleware } = require('../middleware/auth');
 const { createNotification } = require('../lib/notifications');
+const { getVapidPublicKey, isPushConfigured } = require('../lib/push');
 
 const router = express.Router();
 
@@ -118,6 +122,55 @@ router.post('/test', async (req, res) => {
     res.json({ ok: true, notification: n });
   } catch (err) {
     console.error('notifications test', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/* GET /vapid-public-key — public key for browser push subscription */
+router.get('/vapid-public-key', (req, res) => {
+  res.json({ publicKey: getVapidPublicKey(), enabled: isPushConfigured() });
+});
+
+/* POST /subscribe — register a browser push subscription for this user */
+router.post('/subscribe', async (req, res) => {
+  try {
+    if (!isPushConfigured()) return res.status(503).json({ error: 'Push notifications are not configured on this server' });
+    const { endpoint, keys, userAgent } = req.body || {};
+    if (!endpoint || typeof endpoint !== 'string' || !keys || !keys.p256dh || !keys.auth) {
+      return res.status(400).json({ error: 'A push subscription with endpoint and keys (p256dh, auth) is required' });
+    }
+    // Upsert on endpoint: a browser re-subscribing (or a different user on the
+    // same browser) takes over the endpoint and un-revokes it.
+    await db.query(
+      `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, user_agent)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (endpoint) DO UPDATE
+         SET user_id = EXCLUDED.user_id,
+             p256dh = EXCLUDED.p256dh,
+             auth = EXCLUDED.auth,
+             user_agent = EXCLUDED.user_agent,
+             revoked_at = NULL`,
+      [req.user.userId, endpoint, keys.p256dh, keys.auth, (userAgent || '').slice(0, 500) || null]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('push subscribe', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/* POST /unsubscribe — revoke a browser push subscription */
+router.post('/unsubscribe', async (req, res) => {
+  try {
+    const { endpoint } = req.body || {};
+    if (!endpoint) return res.status(400).json({ error: 'endpoint is required' });
+    await db.query(
+      'UPDATE push_subscriptions SET revoked_at=NOW() WHERE endpoint=$1 AND user_id=$2 AND revoked_at IS NULL',
+      [endpoint, req.user.userId]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('push unsubscribe', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
