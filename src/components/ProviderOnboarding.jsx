@@ -239,7 +239,7 @@ export default function ProviderOnboarding({ user, onClose, onCreated }) {
                   {form.latitude != null && (
                     <div className="pon-mapbox">
                       <MapContainer center={[form.latitude, form.longitude]} zoom={15} className="pon-map" scrollWheelZoom={false} zoomControl={false}>
-                        <TileLayer url="https://upload.wikimedia.org/wikipedia/commons/thumb/8/87/Tissot_mercator.png/500px-Tissot_mercator.png" />
+                        <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" attribution='&copy; OpenStreetMap contributors &copy; CARTO' />
                         <Marker position={[form.latitude, form.longitude]} icon={pin()} />
                       </MapContainer>
                       <span className="pon-map-ok"><MapPin size={13} /> Location set</span>

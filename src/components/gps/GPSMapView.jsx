@@ -99,8 +99,8 @@ export default function GPSMapView() {
           {loading && <div className="gmap-loading"><Loader2 size={20} className="gmap-spin" /> Loading network…</div>}
           <MapContainer center={EL_SALVADOR} zoom={6} scrollWheelZoom style={{ height: 500, width: '100%', borderRadius: 'var(--r,16px)' }}>
             <TileLayer
-              attribution='&copy; OpenStreetMap contributors'
-              url="https://carto.com/cdn.prod.website-files.com/63483ad423421bd16e7a7ae7/679a8d44834eee28248e5d08_63c58baac336446d24a9d653_taxi_nyc.png"
+              attribution='&copy; OpenStreetMap contributors &copy; CARTO'
+              url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
             />
             <FlyTo center={flyCenter} />
             {pins.map((o) => (

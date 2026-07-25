@@ -285,7 +285,7 @@ export default function ProviderDetailModal({ providerId, user, onClose, onUpdat
                   <div className="pdm-mapbox">
                     <MapContainer center={[Number(p.latitude), Number(p.longitude)]} zoom={14} className="pdm-map"
                       scrollWheelZoom={false} zoomControl={false} dragging={false} doubleClickZoom={false}>
-                      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution="&copy; OpenStreetMap" />
+                      <TileLayer url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" attribution='&copy; OpenStreetMap contributors &copy; CARTO' />
                       <Marker position={[Number(p.latitude), Number(p.longitude)]} icon={miniPin(accent)} />
                     </MapContainer>
                   </div>
