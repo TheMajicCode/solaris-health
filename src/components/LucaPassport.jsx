@@ -21,7 +21,7 @@ import {
   Briefcase, FileCheck, BarChart3, CalendarCheck, Sprout,
   BookOpen, Headphones, Play, Pause, Lock, Trash2, Music,
   Repeat, Shuffle, Rewind, FastForward, Upload, ListMusic,
-  CalendarClock, Volume2, VolumeX, Inbox, Mail,
+  CalendarClock, Volume2, VolumeX, Inbox, Mail, Copy, Fingerprint,
 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { api } from '../lib/api.js';
@@ -1358,12 +1358,18 @@ const roleLabel = (r) => ({ patient: 'Member', practitioner: 'Practitioner', adm
 /* ---- Sovereignty status card (Slice 6): who am I, who has access, where my
    data lives, which AI touched it last, and how to export/revoke — in plain
    language, with identifiers tucked behind an advanced-details disclosure. ---- */
+const BINDING_CHIP_LABEL = { did: 'DID', nostr: 'Nostr', wallet: 'Wallet', clinic: 'Clinic ID' };
+
 function SovereigntyCard({ onExport, exporting }) {
   const [status, setStatus] = useState(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [revoking, setRevoking] = useState(null);
   const [agent, setAgent] = useState(null);
   const [togglingAgent, setTogglingAgent] = useState(false);
+  const [identity, setIdentity] = useState(null);
+  const [idCopied, setIdCopied] = useState(false);
+  const [endAddrDraft, setEndAddrDraft] = useState('');
+  const [savingAddr, setSavingAddr] = useState(false);
 
   const load = () => {
     api.getSovereigntyStatus()
@@ -1372,8 +1378,33 @@ function SovereigntyCard({ onExport, exporting }) {
     api.getLucaAgent()
       .then((a) => setAgent(a || null))
       .catch(() => setAgent(null));
+    api.getIdentityMe()
+      .then((i) => setIdentity(i || null))
+      .catch(() => setIdentity(null));
   };
   useEffect(() => { load(); }, []);
+
+  const copySolarisId = async () => {
+    if (!identity?.solarisId) return;
+    try {
+      await navigator.clipboard.writeText(identity.solarisId);
+      setIdCopied(true);
+      setTimeout(() => setIdCopied(false), 1600);
+    } catch { toast.error('Could not copy — you can find the full ID under Advanced details.'); }
+  };
+
+  const saveEndAddress = async (value) => {
+    if (savingAddr) return;
+    setSavingAddr(true);
+    try {
+      const res = await api.setGpsEndAddress(value);
+      setIdentity((i) => (i ? { ...i, gps: res.gps } : i));
+      setEndAddrDraft('');
+      toast.success(value ? 'End address saved (simulated — no real payments).' : 'Back on the Solaris default end address.');
+    } catch (e) {
+      toast.error(e.message || 'Could not save that end address.');
+    } finally { setSavingAddr(false); }
+  };
 
   const toggleLuca = async () => {
     if (!agent || togglingAgent) return;
@@ -1404,6 +1435,50 @@ function SovereigntyCard({ onExport, exporting }) {
     <Card className="tint" style={{ background: 'linear-gradient(180deg,#FBFEFC,#F4F9F7)' }}>
       <SectionHead eyebrow="Sovereignty" title="Who holds your Passport" action={<Pill tone="gold" icon={ShieldCheck}>You do</Pill>} />
       <div className="small muted" style={{ lineHeight: 1.6, marginBottom: 14 }}>{status.identity.plain}</div>
+
+      {identity && (
+        <div
+          className="card flat"
+          style={{
+            padding: '12px 14px', marginBottom: 12, display: 'flex', alignItems: 'center',
+            flexWrap: 'wrap', gap: 12,
+            background: 'linear-gradient(135deg, #0A2B29, #123B36)', color: '#F4F9F7',
+          }}
+        >
+          <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(45,181,132,0.18)', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+            <Fingerprint size={18} style={{ color: '#2DB584' }} />
+          </div>
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <div className="tiny" style={{ color: 'rgba(244,249,247,0.65)', letterSpacing: '0.06em', textTransform: 'uppercase', fontSize: 10 }}>Your Solaris ID</div>
+            <div className="row gap-2" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 600 }}>{identity.solarisIdShort}</span>
+              <button
+                onClick={copySolarisId}
+                aria-label="Copy full Solaris ID"
+                style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, color: '#F4F9F7', cursor: 'pointer', padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11 }}
+              >
+                {idCopied ? <Check size={12} style={{ color: '#2DB584' }} /> : <Copy size={12} />}
+                {idCopied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            <div className="tiny" style={{ color: 'rgba(244,249,247,0.6)', lineHeight: 1.5, marginTop: 3 }}>
+              Permanent and yours. Emails, keys and wallets are replaceable pointers attached to it — full ID under Advanced details.
+            </div>
+          </div>
+          <div className="row gap-1" style={{ flexWrap: 'wrap' }}>
+            {(identity.bindings || []).filter((b) => b.status !== 'revoked' && b.type !== 'email').map((b) => (
+              <span key={b.type} className="tiny" style={{ padding: '3px 9px', borderRadius: 999, background: 'rgba(45,181,132,0.15)', color: '#7FDBB6', border: '1px solid rgba(45,181,132,0.3)' }}>
+                {BINDING_CHIP_LABEL[b.type] || b.type} · {b.status === 'active' ? 'linked' : b.status}
+              </span>
+            ))}
+            {(identity.comingSoon || []).map((t) => (
+              <span key={t} className="tiny" style={{ padding: '3px 9px', borderRadius: 999, background: 'rgba(255,255,255,0.06)', color: 'rgba(244,249,247,0.5)', border: '1px dashed rgba(255,255,255,0.2)' }}>
+                {BINDING_CHIP_LABEL[t] || t} · coming soon
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 12 }}>
         <div className="card flat" style={{ padding: 14, background: 'var(--surface-2)' }}>
@@ -1469,13 +1544,59 @@ function SovereigntyCard({ onExport, exporting }) {
         <div className="card flat" style={{ padding: 14, background: 'var(--surface-2)' }}>
           <div className="tiny f6 row gap-2" style={{ marginBottom: 8 }}><Zap size={14} className="t-teal" /> Your GPS end address</div>
           <div className="tiny muted" style={{ lineHeight: 1.55 }}>
-            In GPS — the Global Prosperous Split — value routes to an identity, not a bank account.
-            Your share currently settles to the <strong>Solaris default end address</strong>.
+            In GPS — the Global Prosperous Split — value routes to your <strong>identity</strong>, not a bank account.
+            {identity?.gps && !identity.gps.usingSolarisDefault
+              ? <> Your share is configured to settle to <strong>your own Lightning address</strong>.</>
+              : <> Your share currently settles to the <strong>Solaris default end address</strong>.</>}
           </div>
-          <div className="between" style={{ marginTop: 8, gap: 8 }}>
-            <span className="tiny" style={{ fontFamily: 'monospace' }}>{STATIC_GPS_POLICY.identity.endAddress.current}</span>
-            <span className="tiny muted2">Set your own end address — coming soon</span>
+          <div style={{ marginTop: 8 }}>
+            <span className="tiny" style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
+              {identity?.gps?.endAddress || STATIC_GPS_POLICY.identity.endAddress.current}
+            </span>
           </div>
+          {identity ? (
+            <>
+              <form
+                onSubmit={(e) => { e.preventDefault(); if (endAddrDraft.trim()) saveEndAddress(endAddrDraft.trim()); }}
+                className="row gap-2"
+                style={{ marginTop: 10, flexWrap: 'wrap' }}
+              >
+                <input
+                  type="text"
+                  value={endAddrDraft}
+                  onChange={(e) => setEndAddrDraft(e.target.value)}
+                  placeholder="you@lightning.address"
+                  aria-label="Your Lightning address"
+                  className="tiny"
+                  style={{ flex: 1, minWidth: 140, padding: '7px 10px', borderRadius: 9, border: '1px solid var(--line, rgba(10,43,41,0.14))', background: '#fff', color: '#0A2B29', fontFamily: 'monospace' }}
+                />
+                <button
+                  type="submit"
+                  className="tiny f6"
+                  disabled={savingAddr || !endAddrDraft.trim()}
+                  style={{ padding: '7px 12px', borderRadius: 9, border: 'none', background: '#2DB584', color: '#fff', cursor: savingAddr || !endAddrDraft.trim() ? 'default' : 'pointer', opacity: savingAddr || !endAddrDraft.trim() ? 0.55 : 1 }}
+                >
+                  {savingAddr ? 'Saving…' : 'Save'}
+                </button>
+                {identity.gps && !identity.gps.usingSolarisDefault && (
+                  <button
+                    type="button"
+                    className="tiny"
+                    disabled={savingAddr}
+                    onClick={() => saveEndAddress('')}
+                    style={{ background: 'none', border: 'none', color: 'var(--muted, #6b807a)', cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    Use Solaris default
+                  </button>
+                )}
+              </form>
+              <div className="tiny muted2" style={{ marginTop: 6, lineHeight: 1.5 }}>
+                Configuration only — this showcase makes no real payments. Wallet connections (NWC, Spark) come later.
+              </div>
+            </>
+          ) : (
+            <div className="tiny muted2" style={{ marginTop: 8 }}>Set your own end address — coming soon</div>
+          )}
         </div>
       </div>
 
@@ -1497,7 +1618,8 @@ function SovereigntyCard({ onExport, exporting }) {
         <div className="card flat" style={{ marginTop: 10, padding: 14, background: 'var(--surface-2)' }}>
           <div className="tiny muted2" style={{ marginBottom: 6 }}>Technical identifiers — you never need these day to day.</div>
           <div className="tiny" style={{ fontFamily: 'monospace', wordBreak: 'break-all', lineHeight: 1.7 }}>
-            <div>Subject ID: {status.advanced.subjectId}</div>
+            {identity?.solarisId && <div>Solaris ID: {identity.solarisId}</div>}
+            <div>Account ID: {status.advanced.subjectId}</div>
             {status.advanced.did && <div>DID: {status.advanced.did}</div>}
             {status.advanced.nostrNpub && <div>Nostr: {status.advanced.nostrNpub}</div>}
             {status.ai.provider && <div>Last AI provider: {status.ai.provider} · compute: {status.ai.computeTarget}{status.ai.degraded ? ' · degraded fallback' : ''}</div>}

@@ -4,8 +4,8 @@
  * Nostr key (mock), contribution level, personas (Main + Anonymous), key custody,
  * and a one-click "Export My Data" action. The member owns their identity.
  */
-import React, { useState } from 'react';
-import { ShieldCheck, KeyRound, Fingerprint, Download, Loader2, User, VenetianMask } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ShieldCheck, KeyRound, Fingerprint, Download, Loader2, User, VenetianMask, Sun } from 'lucide-react';
 import { api } from '../../lib/api.js';
 import { levelFor } from './levels.js';
 
@@ -17,6 +17,14 @@ const truncMid = (s, head = 12, tail = 6) => {
 export default function IdentityCard({ user, compact = false }) {
   const [exporting, setExporting] = useState(false);
   const [copied, setCopied] = useState('');
+  const [solarisId, setSolarisId] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    api.getIdentityMe()
+      .then((i) => { if (alive) setSolarisId(i?.solarisId || null); })
+      .catch(() => { if (alive) setSolarisId(null); });
+    return () => { alive = false; };
+  }, []);
   if (!user) return null;
 
   const name = user.displayName || user.fullName || [user.firstName, user.lastName].filter(Boolean).join(' ') || 'Member';
@@ -71,6 +79,14 @@ export default function IdentityCard({ user, compact = false }) {
       </div>
 
       <div className="idc-rows">
+        {solarisId && (
+          <button className="idc-row" onClick={() => copy('sol', solarisId)} title="Copy your permanent Solaris ID">
+            <Sun size={14} className="idc-row-ico" />
+            <span className="idc-row-lbl">Solaris ID</span>
+            <span className="idc-row-val mono">{truncMid(solarisId, 12, 4)}</span>
+            <span className="idc-copy">{copied === 'sol' ? 'Copied' : ''}</span>
+          </button>
+        )}
         <button className="idc-row" onClick={() => copy('did', did)} title="Copy DID">
           <Fingerprint size={14} className="idc-row-ico" />
           <span className="idc-row-lbl">DID</span>
