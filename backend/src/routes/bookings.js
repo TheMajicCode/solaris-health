@@ -290,8 +290,13 @@ router.get('/mine', authMiddleware, async (req, res) => {
 });
 
 /* ---------------------------- GET :id ------------------------------- */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
+    // Non-UUID ids (e.g. a stray "/api/bookings/my") used to crash the PG cast
+    // and return 500 — answer 404 cleanly instead.
+    if (!UUID_RE.test(req.params.id)) return res.status(404).json({ error: 'Not found' });
     const booking = await loadBookingFull(req.params.id);
     if (!booking) return res.status(404).json({ error: 'Not found' });
     const isOwner = booking.patient_id === req.user.userId
