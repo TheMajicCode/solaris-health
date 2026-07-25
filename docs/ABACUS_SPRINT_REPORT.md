@@ -404,3 +404,79 @@ Sprint start: 2026-07-23 (UTC)
 - **DID/npub/wallet verification flows**: bindings are backfilled from existing
   profile fields; challenge-response verification (sign-to-bind) is future work.
 - Everything remains **simulated / shadow mode** — no real money moves.
+
+
+
+---
+
+# Sprint — Quality + Notifications (2026-07-25)
+
+Branch: `agent/abacus-sovereign-sprint-v4` (continued).
+
+## Item 1 — Login rate-limit bug (P0) · `fc3f761`
+Root causes (all verified against live traffic/logs):
+1. **Global limiter too low** — 500 req/15 min/IP while the SPA legitimately
+   issues ~1 req/s (polling); the "too many attempts" message users saw was the
+   GLOBAL limiter's, not the login limiter's. Raised to 2000.
+2. **Broken key generator** — raw `X-Forwarded-For` used as the limit key threw
+   `ERR_ERL_KEY_GEN_IPV6` (seen 3× in live logs). Now uses express-rate-limit's
+   `ipKeyGenerator` (IPv6 /56 aware).
+3. **Wrong `trust proxy`** — set to 1 behind a 2-hop chain (cloud proxy +
+   nginx); now 2, with an explanatory comment.
+
+New `backend/src/lib/rate-limits.js`: login limiter counts **failed attempts
+only** (10/15 min, keyed IP+email, `skipSuccessfulRequests`), register limiter
+20/15 min, friendly 429 body + `Retry-After`. Login/register limiters mount
+AFTER `express.json` (they key on `req.body.email`). LUCA TTS limiter keys on
+userId. 7 new jest tests.
+
+**Live verification:** 15 consecutive successful logins → all 200; 10 failed
+logins → 429 with `Retry-After: 900`; a different account on the same IP still
+logs in while another is blocked; zero ERR_ERL errors after deploy.
+
+## Item 2 — Button/flow sweep + fixes · `33f2b66`
+- New `backend/scripts/api-sweep.js`: 61 live checks across member,
+  practitioner and anonymous roles → 60/61 pre-deploy (the 1 failure was the
+  not-yet-deployed bookings fix below), plus existing smoke test 18/18.
+- **Fix:** `GET /api/bookings/:id` with a malformed id returned a PG-cast 500;
+  now a clean 404 (UUID guard).
+- **Data fix:** `elena@solaris.health` linked to her seeded provider profile
+  (was `user_id NULL` → empty practice pages).
+- Findings (no code bug): sarah has an `assessment_complete` reward but no
+  assessment answers (seed gap, UI degrades gracefully); alejandro has no
+  provider profile; all "coming soon" labels are honest, no dead buttons found.
+
+## Item 3 — Notifications: web push + triggers · `1aeeafa`
+- `backend/src/lib/push.js`: VAPID web-push, **PHI-safe by construction** —
+  payloads are fixed generic templates ("You have a new secure message"),
+  never in-app title/message content; dead endpoints (404/410) auto-revoked;
+  no-op when keys absent. Keys live only in `backend/.env` (gitignored);
+  rotation documented in the file header.
+- Migration `024_push_subscriptions.sql` (additive).
+- Endpoints: `GET /api/notifications/vapid-public-key`, `POST /subscribe`
+  (endpoint upsert), `POST /unsubscribe` (revoke).
+- Fan-out wired at the single `createNotification` choke point → all existing
+  triggers (bookings, provider bookings, consent, admin, gps-engine) now push.
+- **New triggers:** secure message received (send + attachment upload → the
+  recipient; generic copy only) and LUCA pause/re-enable (system note).
+- Vault export: `notifications/log.jsonl` + manifest counts + lossless
+  roundtrip tests.
+- `public/sw.js`: cache `solaris-v6`→`solaris-v7`; `push` +
+  `notificationclick` handlers (focus/navigate existing tab or open one).
+- NotificationCenter: quiet opt-in footer inside the bell panel — never
+  auto-prompts on load; iOS Safari (not installed) gets an honest "Add to
+  Home Screen" hint; blocked permission shows "you'll still see everything
+  here"; toggle does subscribe/unsubscribe.
+- Tests: `push-notifications.test.js` (9 — lifecycle, upsert, revoke, PHI
+  safety) + 2 export roundtrip tests.
+
+## Item 4 — Product audit · `docs/PRODUCT_AUDIT.md`
+Plain-language audit: what works (each claim names its verification), what's
+still to build (one-line next step each), improvements ranked by impact with
+this sprint's quick wins marked done.
+
+## Validation
+- Backend: `npx jest` **137/137** (17 suites; was 126 — +11 new).
+- Frontend: `npx vitest run` **32/32**; `npm run build` clean;
+  `npm run lint` at baseline **15 errors / 137 warnings** (no new).
+- Migration 024 applied; api-sweep re-run against live post-deploy (see below).
