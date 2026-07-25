@@ -222,6 +222,20 @@ Added by the sovereign sprint (migrations `019`–`021`, all additive):
 | **GPS evidence before payment** | `lib/gps-receipts.js` + `gps_allocation_receipts` / `gps_allocation_disputes` (migration `021`) — every value split records a shadow allocation receipt: canonical PHI-free evidence JSON, sha256 evidence hash, policy version (`gps-split-v1`), state machine `proposed → disputed → corrected`. `GET /api/gps/allocations/:id/explain` explains the allocation from evidence anyone with access can verify; a participant can flag a receipt that looks off and the flag (and any correction) is logged on the record. GPS is a standalone, self-configured open protocol — no central authority adjudicates it; Solaris is only the default recipient configuration until the receiving identity sets its own end address (Lightning address today, more rails possible later). `shadow = TRUE` always — no real settlement exists. |
 | **Read-only mode** | `READ_ONLY_MODE=true` env flag — server-wide middleware rejects mutations with `503 { readOnly: true }` while reads, login and logout keep working (incident response write-freeze). |
 
+## Solaris identity layer (ADR 001)
+
+Migration `023` (additive) introduces the permanent, portable **Solaris ID** above all
+replaceable endpoints (GPS Constitution §6: "Identity is stable above replaceable payment
+endpoints"):
+
+| Concern | Implementation |
+|---------|----------------|
+| **Subject** | `solaris_subjects` — exactly one `sol_` + 32-hex subject id per user (random, non-PII, never rotated). 1:1 with `users` (which stays the auth record); the subject id is the canonical join key for protocol-facing records. Carries the per-user GPS end-address config (`solaris_default` or a Lightning-address-shaped value; simulated — no real payments). |
+| **Bindings** | `solaris_identity_bindings` — email / DID / nostr / wallet / clinic as replaceable bindings with `active｜pending｜revoked` states. Email is stored **hash-only** (sha256 of the lowercased address); public identifiers (DID, npub, wallet) keep their value. |
+| **Service layer** | `lib/identity/` (hexagonal seam): `ensureSubjectForUser` (lazy, idempotent — covers post-migration users), `getSubjectByUser`, `listBindings`, `setGpsEndAddress`, `getIdentitySummary`, `exportIdentity`. Routes: `GET /api/identity/me`, `PUT /api/identity/me/end-address`. |
+| **Stamping** | New `ai_execution_receipts` and `gps_allocation_receipts` rows carry `subject_id`; `agent_capability_grants` carry `owner_subject_id` — best-effort join columns, backfilled by 023; signed evidence blobs are untouched (hash-stable). |
+| **Vault export** | `identity/solaris-id.md` (subject + bindings, PII-safe) with roundtrip test coverage (`tests/identity.test.js`). |
+
 ## Deployment topology
 
 ```mermaid

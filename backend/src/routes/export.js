@@ -71,6 +71,9 @@ async function gatherRecord(userId) {
   const { exportAgentAuthority } = require('../lib/agent-authority');
   const agentAuthority = await exportAgentAuthority(userId).catch(() => ({ agents: [], grants: [] }));
 
+  // Solaris ID — permanent subject + bindings (ADR 001; PHI-safe: email is hash-only)
+  const solarisIdentity = await require('../lib/identity').exportIdentity(userId).catch(() => null);
+
   // Unlocked audio practices
   const audioUnlocks = await db.query(
     `SELECT al.title, al.description, al.tags_json, ua.unlocked_at
@@ -94,6 +97,7 @@ async function gatherRecord(userId) {
     audioUnlocks: audioUnlocks.rows,
     aiReceipts: aiReceipts.rows,
     agentAuthority,
+    solarisIdentity,
   };
 }
 

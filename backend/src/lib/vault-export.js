@@ -43,6 +43,7 @@ function buildVaultExport(record) {
     journal = [], healthDocs = [], habitTicks = [], audioUnlocks = [],
     aiReceipts = [],
     agentAuthority = null,
+    solarisIdentity = null,
   } = record;
   const exportedAt = new Date().toISOString();
   const files = [];
@@ -219,6 +220,35 @@ function buildVaultExport(record) {
   }
 
   // AGENTS — the user's LUCA agent identity + scoped capability grants (no PHI)
+  // SOLARIS ID — the permanent subject + its bindings (ADR 001).
+  // PHI-safe by construction: the email binding carries only a SHA-256 hash.
+  if (solarisIdentity && solarisIdentity.solarisId) {
+    const bindingLines = (solarisIdentity.bindings || []).map((b) =>
+      `| ${b.type} | ${b.value || '(hash only — stored privately)'} | ${b.status} | ${b.hash ? b.hash.slice(0, 12) + '…' : ''} |`
+    );
+    files.push({
+      path: 'identity/solaris-id.md',
+      contents:
+        fm({
+          solaris_id: solarisIdentity.solarisId,
+          status: solarisIdentity.status,
+          created_at: solarisIdentity.createdAt ? new Date(solarisIdentity.createdAt).toISOString() : null,
+          gps_end_address: solarisIdentity.gpsEndAddress,
+          gps_end_address_type: solarisIdentity.gpsEndAddressType,
+          bindings_count: (solarisIdentity.bindings || []).length,
+          exported_at: exportedAt,
+        }) +
+        `# Your Solaris ID\n\n` +
+        `\`${solarisIdentity.solarisId}\` is your permanent identity — random, never derived from ` +
+        `your email or any personal detail. Emails, DIDs, nostr keys and wallets are replaceable ` +
+        `bindings attached to it; replacing them never erases your history.\n\n` +
+        `## Bindings\n\n| type | value | status | hash |\n|---|---|---|---|\n` +
+        (bindingLines.length ? bindingLines.join('\n') + '\n' : '_(none)_\n') +
+        `\nYour GPS end address (\`${solarisIdentity.gpsEndAddress}\`) is configuration only in this ` +
+        `showcase — no real payments are made.\n`,
+    });
+  }
+
   if (agentAuthority && (agentAuthority.agents?.length || agentAuthority.grants?.length)) {
     files.push({
       path: 'agents/authority.json',
@@ -268,6 +298,7 @@ function buildVaultExport(record) {
       contributions: contributions.length, messages: messages.length, credentials: credentials.length,
       journal: journal.length, health_documents: healthDocs.length, audio_unlocks: audioUnlocks.length,
       ai_execution_receipts: aiReceipts.length,
+      identity_bindings: solarisIdentity ? (solarisIdentity.bindings || []).length : 0,
     },
     human_approval: 'self',
     timestamp: exportedAt,

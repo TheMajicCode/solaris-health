@@ -112,6 +112,22 @@ never be needed for coaching.
 
 ---
 
+## Solaris identity (ADR 001)
+
+- **Non-PII permanent subject id** — `sol_` + 32 random hex per user
+  (`solaris_subjects`, migration 023); never derived from email, name or the user
+  UUID, never rotated. The `users` table remains the only place login PII lives.
+- **Bindings, not identities** — email/DID/nostr/wallet/clinic are replaceable
+  bindings (`solaris_identity_bindings`) with created/verified/revoked states.
+  Email bindings are stored **hash-only** (sha256 of the lowercased address) — no
+  PII is duplicated outside `users`, and no PII appears in the vault identity file.
+- **LUCA never holds root identity keys** — the agent cannot create, rotate or
+  revoke subjects or bindings; it acts only under scoped, revocable capability
+  grants tied to the owner's subject (`owner_subject_id`).
+- **GPS end address is configuration, not custody** — a Lightning-address-shaped
+  text value on the subject, validated server-side; this showcase makes no real
+  payments and stores no keys.
+
 ## Agent authority & economic transparency (sprint v4)
 
 - **Agent capability grants** — the LUCA agent acts only under explicit grants
