@@ -16,6 +16,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
+const { clientIpKey } = require('../lib/rate-limits');
 const db = require('../db');
 const { authMiddleware } = require('../middleware/auth');
 const { getAIProvider } = require('../lib/ai');
@@ -513,7 +514,8 @@ const ttsLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => (req.user && req.user.userId) || req.ip,
+  // Per-user; unauthenticated falls back to IPv6-safe client IP key.
+  keyGenerator: (req) => (req.user && String(req.user.userId)) || clientIpKey(req),
   handler: (req, res) => res.status(200).json({ error: 'Too many voice requests, please pause a moment.', fallback: true }),
 });
 

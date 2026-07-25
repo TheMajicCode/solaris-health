@@ -58,8 +58,14 @@ const PORT = process.env.PORT || 5000;
 const START_TIME = Date.now();
 
 // ---- Security middleware (Tier 1 hardening) ----
-// Trust the reverse proxy (nginx/envoy) so rate-limit sees the real client IP.
-app.set('trust proxy', 1);
+// Trust the reverse proxy chain so req.ip is the REAL client IP.
+// Requests arrive as: client → cloud proxy (adds X-Forwarded-For: <client>)
+//                            → host nginx  (appends its upstream addr)
+//                            → this app    (socket peer = docker bridge).
+// That is 2 proxy hops recorded in X-Forwarded-For, so trust exactly 2.
+// (Verified empirically: XFF at nginx = "<real client ip>"; nginx appends one hop.)
+// With fewer hops (local curl to :5000) Express falls back to the socket address.
+app.set('trust proxy', 2);
 
 // Security headers first.
 app.use(helmet({
@@ -81,39 +87,28 @@ app.use(cors({
   credentials: true,
 }));
 
-// Global rate limit: 500 requests / 15 min per IP.
-const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  // Per-IP request cap. Defaults to 500 (production DoS protection); overridable
-  // via RATE_LIMIT_MAX for load testing or higher-traffic deployments.
-  max: parseInt(process.env.RATE_LIMIT_MAX || '500', 10),
-  standardHeaders: true,
-  legacyHeaders: false,
-  // Use real client IP from X-Forwarded-For (set by nginx), fall back to socket IP
-  keyGenerator: (req) => req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip,
-  message: { error: 'Too many requests — please slow down.' },
-});
-app.use(globalLimiter);
-
-// Auth endpoints: 60 attempts / 15 min per IP (enough for normal use, blocks brute force)
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  // Defaults to 60 login attempts / 15 min per IP (brute-force protection);
-  // overridable via AUTH_RATE_LIMIT_MAX for load testing.
-  max: parseInt(process.env.AUTH_RATE_LIMIT_MAX || '60', 10),
-  standardHeaders: true,
-  legacyHeaders: false,
-  keyGenerator: (req) => req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip,
-  message: { error: 'Too many login attempts — please wait 15 minutes.' },
-  skip: (req) => {
-    // Never rate-limit health checks or OPTIONS preflight
-    return req.method === 'OPTIONS';
-  },
-});
-app.use('/api/auth/login', authLimiter);
-app.use('/api/auth/register', authLimiter);
+// ---- Rate limiting (see backend/src/lib/rate-limits.js) ----
+// Root-cause fix for the "Too many requests — please slow down." login bug:
+//   1. trust proxy is now 2 (above) so req.ip is the REAL client IP — the old
+//      custom keyGenerator read raw X-Forwarded-For and tripped IPv6 validation
+//      (ERR_ERL_KEY_GEN_IPV6 in container logs), and the old trust level meant
+//      shared buckets behind the proxy chain.
+//   2. The global cap was 500 req/15 min — too low for the SPA (polling +
+//      navigation is ~1 req/s), so a single active session could exhaust it and
+//      then see the global limiter's message on login. Raised to 2000/15 min.
+//   3. Login is now keyed per IP+email with 10 failed attempts / 15 min;
+//      SUCCESSFUL logins never count, so normal use can never trigger it.
+//   4. All limiter state is in-memory (MemoryStore) — it resets automatically
+//      on every deploy/container restart; nothing is persisted.
+const { makeGlobalLimiter, makeLoginLimiter, makeRegisterLimiter } = require('./lib/rate-limits');
+app.use(makeGlobalLimiter());
 
 app.use(express.json({ limit: '2mb' })); // base64 doc uploads (reduced from 15mb)
+
+// Login/register limiters need the parsed body (login keys on IP+email), so
+// they mount AFTER express.json.
+app.use('/api/auth/login', makeLoginLimiter());
+app.use('/api/auth/register', makeRegisterLimiter());
 
 // ---- Incident write-freeze (READ_ONLY_MODE) ----
 // When READ_ONLY_MODE=true (checked per-request so a container env change +
