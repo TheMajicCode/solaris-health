@@ -20,6 +20,7 @@
 const crypto = require('crypto');
 const db = require('../db');
 const { GPS_SPLIT } = require('./gps-engine');
+const { subjectIdForUser } = require('./identity');
 const { POLICY, POLICY_HASH, PROTOCOL } = require('./gps/protocol-config');
 
 /**
@@ -86,12 +87,15 @@ async function recordAllocationReceipt(tx) {
 
   const evidence = buildEvidence(tx);
   const hash = sha256(canonicalJSON(evidence));
+  // Stamp the patient's permanent Solaris subject id (ADR 001). Join-key
+  // column only — the signed evidence document is untouched (hash-stable).
+  const subjectId = tx.patient_id ? await subjectIdForUser(tx.patient_id) : null;
   const ins = await db.query(
-    `INSERT INTO gps_allocation_receipts (transaction_id, policy_version, evidence, evidence_hash)
-     VALUES ($1,$2,$3,$4)
+    `INSERT INTO gps_allocation_receipts (transaction_id, policy_version, evidence, evidence_hash, subject_id)
+     VALUES ($1,$2,$3,$4,$5)
      ON CONFLICT (transaction_id) DO NOTHING
      RETURNING *`,
-    [tx.id, GPS_POLICY_VERSION, JSON.stringify(evidence), hash]
+    [tx.id, GPS_POLICY_VERSION, JSON.stringify(evidence), hash, subjectId]
   );
   if (ins.rows.length) return ins.rows[0];
   const again = await db.query(

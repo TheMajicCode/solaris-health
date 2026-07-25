@@ -12,6 +12,7 @@
  */
 const crypto = require('crypto');
 const db = require('../../db');
+const { subjectIdForUser } = require('../identity');
 
 const POLICY_VERSION = 'v0';
 const AGENT_ID = 'sol_agent_luca';
@@ -51,12 +52,14 @@ async function recordAIReceipt({
 }) {
   try {
     const { provider, actualModel, computeTarget } = describeProvider(ai);
+    // Stamp the permanent Solaris subject id (ADR 001) — best-effort join key.
+    const subjectId = await subjectIdForUser(userId);
     const r = await db.query(
       `INSERT INTO ai_execution_receipts
          (user_id, event_type, agent_id, provider, requested_model, actual_model,
           compute_target, data_class, consent_basis, latency_ms, input_hash,
-          result_hash, degraded, error_class, policy_version)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+          result_hash, degraded, error_class, policy_version, subject_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
        RETURNING id`,
       [
         userId,
@@ -74,6 +77,7 @@ async function recordAIReceipt({
         Boolean(degraded),
         errorClass,
         POLICY_VERSION,
+        subjectId,
       ]
     );
     return r.rows[0] ? r.rows[0].id : null;
