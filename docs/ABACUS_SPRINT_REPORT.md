@@ -347,3 +347,60 @@ Sprint start: 2026-07-23 (UTC)
 - **User-editable receive policies / auto-configuration** (suite doc 04) and
   recursion-aware routing beyond the single-hop simulation.
 - Everything remains **simulated / shadow mode** — no real money moves.
+
+---
+
+# Sprint — Solaris ID System + Network Map (2026-07-24)
+
+## What shipped
+1. **STEP A1 — ADR + schema** (`f48e427`): `docs/adr/001-solaris-identity.md`
+   (permanent non-PII `sol_`+32-hex Subject ID; email/DID/nostr/wallet/clinic as
+   BINDINGS with active/pending/revoked states; GPS end address on the subject;
+   LUCA never holds root identity keys). Migration `023_solaris_identity.sql`
+   (additive only): `solaris_subjects` + `solaris_identity_bindings`, backfill
+   1:1 for all 62 existing users (verified: 62/62, no dupes, valid format),
+   email bindings hash-only, nullable `subject_id` join columns backfilled on
+   `ai_execution_receipts` (7/7), `agent_capability_grants` (24/24),
+   `gps_allocation_receipts`.
+2. **STEP A2 — service layer** (`56790a2`): `backend/src/lib/identity/`
+   (ensureSubjectForUser — lazy/idempotent for new users, getSubjectByUser,
+   listBindings, setGpsEndAddress with `name@domain` validation,
+   getIdentitySummary, exportIdentity). Routes `GET /api/identity/me` and
+   `PUT /api/identity/me/end-address`. New AI + GPS receipts stamp the
+   subject id best-effort (signed evidence blobs untouched — hash-stable).
+3. **STEP A3 — UI** (`13db369`): SovereigntyCard gets a dark-gradient Solaris ID
+   anchor strip (shortened id + copy button, full id under Advanced details),
+   binding chips with honest "coming soon" states (no dead buttons), and a
+   working GPS end-address text-field setter (Lightning-address shape,
+   clearly labeled simulated — no real payments; reset to Solaris default).
+   IdentityCard (Identity & Data area) gets a Solaris ID copy row.
+   Health-outcomes-first ordering untouched.
+4. **STEP A4 — alignment** (`fb5583f`): vault export gains
+   `identity/solaris-id.md` (subject + bindings, PII-safe — email hash-only)
+   plus `identity_bindings` count in the event log; `tests/identity.test.js`
+   (10 tests: backfill 1:1, non-PII id shape, hash-only email binding, receipt
+   stamping, end-address lifecycle, HTTP endpoints, export roundtrip);
+   ARCHITECTURE.md + SECURITY.md identity sections.
+5. **STEP B — network map** (`768c2c0`): all react-leaflet TileLayers switched
+   to CARTO Voyager rastertiles (`basemaps.cartocdn.com/rastertiles/voyager`,
+   attribution "© OpenStreetMap contributors © CARTO"). This also FIXES two
+   broken tile URLs (GPSMapView pointed at a static carto-website PNG,
+   ProviderOnboarding at a static wikimedia PNG). Tile endpoint verified 200.
+   No dark mode exists in the app, so no dark tile variant was wired.
+6. **Deploy**: sw cache `solaris-v5`→`solaris-v6`, docker rebuild + verify.
+
+## Validation
+- Frontend: `npm test -- --run` **32/32**, `npm run build` clean,
+  `npm run lint` at baseline **15 errors / 137 warnings** (no new).
+- Backend: `npx jest` **119/119** (15 suites — 10 new identity tests).
+- Migration **023** applied locally and verified; auto-applies on container boot.
+
+## Deferred (exact next tasks)
+- **Real payment rails for the end address**: the Lightning-address setter is
+  configuration only (simulated); NWC/Spark wallet connections and any real
+  settlement remain future adapters.
+- **Clinic ID binding**: schema-ready (`binding_type='clinic'`), surfaced as
+  "coming soon" — needs a clinic-verification flow to mint real bindings.
+- **DID/npub/wallet verification flows**: bindings are backfilled from existing
+  profile fields; challenge-response verification (sign-to-bind) is future work.
+- Everything remains **simulated / shadow mode** — no real money moves.
