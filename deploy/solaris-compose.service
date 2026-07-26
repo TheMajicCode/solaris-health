@@ -1,0 +1,18 @@
+[Unit]
+Description=Solaris Health docker compose stack (safety net — ensures containers are up after boot)
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+# /home/ubuntu mounts late at boot (nofail) — never start before the project files exist.
+RequiresMountsFor=/home/ubuntu
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=ubuntu
+WorkingDirectory=/home/ubuntu/luca-passport
+ExecStart=/usr/bin/docker compose up -d postgres backend frontend
+ExecStop=/usr/bin/docker compose stop
+
+[Install]
+WantedBy=multi-user.target
