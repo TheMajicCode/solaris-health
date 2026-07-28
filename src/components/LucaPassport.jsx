@@ -3876,10 +3876,38 @@ function fileMeta(file) {
   return { filename: file?.name || null, fileSize: file?.size || null, mimeType: file?.type || null };
 }
 
+/* A3 provenance ladder (L0–L5) badge — shows how trustworthy a stored fact is. */
+const PROVENANCE_META = {
+  0: { label: 'L0 · Self-declared', bg: '#F6E9DC', ink: '#7A4A1E' },
+  1: { label: 'L1 · Observed', bg: '#EDEFF2', ink: '#59636E' },
+  2: { label: 'L2 · Peer-attested', bg: '#FBEFD3', ink: '#8A5F13' },
+  3: { label: 'L3 · Institution-verified', bg: '#E4EEFB', ink: '#2C568F' },
+  4: { label: 'L4 · Lab-verified*', bg: '#E6F7F0', ink: '#0A5C46' },
+  5: { label: 'L5 · Governed', bg: '#EDE6FA', ink: '#4E3785' },
+};
+function ProvenanceBadge({ level }) {
+  const m = PROVENANCE_META[level] ?? PROVENANCE_META[0];
+  const pending = level === 4; // member-marked lab result, verification pending
+  return (
+    <span title={pending ? 'Recorded at L4 — pending verification by an accredited source' : m.label}
+      style={{ display: 'inline-flex', alignItems: 'center', fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: m.bg, color: m.ink, whiteSpace: 'nowrap' }}>
+      {m.label}
+    </span>
+  );
+}
+
 /* "Share something with LUCA" — description + optional file → LUCA educational summary. */
+// Two entry points on the A3 provenance ladder that a member can self-submit.
+const HD_KINDS = [
+  { id: 'note', label: 'Personal note', level: 0, source: 'self', hint: 'Something you noticed — a symptom, feeling or observation. Stored as your own words (L0).' },
+  { id: 'result', label: 'Lab / test result', level: 4, source: 'self', hint: 'A lab or test result you\'re sharing. Recorded at L4, pending verification by an accredited source.' },
+];
+
 function HealthDataUpload({ onSaved }) {
   const [description, setDescription] = useState('');
   const [file, setFile] = useState(null);
+  const [kind, setKind] = useState('note');
+  const [observedAt, setObservedAt] = useState('');
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
@@ -3890,9 +3918,17 @@ function HealthDataUpload({ onSaved }) {
     setSaving(true); setError(''); setResult(null);
     try {
       const meta = file ? fileMeta(file) : {};
-      const { document } = await api.createHealthDocument({ description: text, docType: file ? 'upload' : 'note', ...meta });
+      const k = HD_KINDS.find((x) => x.id === kind) || HD_KINDS[0];
+      const { document } = await api.createHealthDocument({
+        description: text,
+        docType: file ? 'upload' : 'note',
+        level: k.level,
+        source: k.source,
+        observedAt: observedAt || null,
+        ...meta,
+      });
       setResult(document);
-      setDescription(''); setFile(null);
+      setDescription(''); setFile(null); setObservedAt('');
       onSaved?.(document);
     } catch (e) {
       setError(e?.message || 'Could not save. Please try again.');
@@ -3918,6 +3954,31 @@ function HealthDataUpload({ onSaved }) {
           padding: '11px 13px', fontFamily: 'inherit', fontSize: 13.5, color: 'var(--ink)', background: 'var(--surface,#fff)',
         }}
       />
+      <div>
+        <div className="tiny f6" style={{ color: 'var(--muted,#6b807a)', marginBottom: 6 }}>What kind of data is this?</div>
+        <div className="row gap-2" style={{ flexWrap: 'wrap' }}>
+          {HD_KINDS.map((k) => (
+            <button key={k.id} type="button" onClick={() => setKind(k.id)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 10, cursor: 'pointer',
+                fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit',
+                border: kind === k.id ? '2px solid #2DB584' : '1px solid var(--line,#dde7e2)',
+                background: kind === k.id ? '#e6f7f0' : 'var(--surface,#fff)',
+                color: kind === k.id ? '#0A2B29' : '#6b807a',
+              }}>
+              {k.id === 'result' ? <Stethoscope size={13} /> : <Activity size={13} />}{k.label}
+              <span style={{ fontSize: 10, fontWeight: 700, opacity: .8 }}>· L{k.level}</span>
+            </button>
+          ))}
+        </div>
+        <div className="tiny muted" style={{ marginTop: 6, lineHeight: 1.5 }}>{(HD_KINDS.find((x) => x.id === kind) || HD_KINDS[0]).hint}</div>
+      </div>
+      <div className="row gap-2" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
+        <span className="tiny f6" style={{ color: 'var(--muted,#6b807a)' }}>When observed (optional)</span>
+        <input type="date" value={observedAt} max={new Date().toISOString().slice(0, 10)}
+          onChange={(e) => setObservedAt(e.target.value)}
+          style={{ padding: '7px 10px', borderRadius: 9, border: '1px solid var(--line,#dde7e2)', fontFamily: 'inherit', fontSize: 12.5, color: 'var(--ink)' }} />
+      </div>
       <div className="row gap-3" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
         <label className="btn" style={{ cursor: 'pointer' }}>
           <FileText size={15} strokeWidth={2.2} />{file ? 'Change file' : 'Attach file (optional)'}
@@ -4057,7 +4118,8 @@ function PassportActions({ go }) {
                     <div className="row gap-2" style={{ marginBottom: 4 }}>
                       <FileText size={14} className="t-teal" />
                       <span className="small f6" style={{ color: 'var(--ink)' }}>{d.filename || (d.doc_type === 'note' ? 'Shared note' : 'Health data')}</span>
-                      <span className="tiny muted2">· {fmtShort(d.created_at)}</span>
+                      {d.provenance_level != null && <ProvenanceBadge level={d.provenance_level} />}
+                      <span className="tiny muted2">· {fmtShort(d.observed_at || d.created_at)}</span>
                     </div>
                     {d.description && <div className="tiny muted" style={{ marginBottom: 6 }}>{d.description}</div>}
                     {d.luca_summary && <div className="small" style={{ color: 'var(--ink)', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{d.luca_summary}</div>}

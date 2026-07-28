@@ -45,7 +45,7 @@ async function gatherRecord(userId) {
 
   // Health documents (LUCA summaries + metadata; never the raw bytes)
   const healthDocs = await db.query(
-    'SELECT doc_type, filename, description, luca_summary, created_at FROM health_documents WHERE user_id=$1 ORDER BY created_at DESC',
+    'SELECT doc_type, filename, description, luca_summary, provenance_level, source, observed_at, consent_scope, created_at FROM health_documents WHERE user_id=$1 ORDER BY created_at DESC',
     [userId]
   ).catch(() => ({ rows: [] }));
 

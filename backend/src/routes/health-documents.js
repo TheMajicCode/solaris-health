@@ -17,6 +17,34 @@ const { getAIProvider } = require('../lib/ai');
 
 const router = express.Router();
 
+/**
+ * De-identify free text before it ever leaves for a (possibly cloud) model.
+ * Cross-cutting invariant: de-identify before cloud models. This is a
+ * best-effort PII scrub — emails, phone numbers, long ID/MRN/SSN-style digit
+ * runs, and the member's own name/email — replaced with neutral placeholders.
+ * LUCA's educational summary never needs the member's identity.
+ */
+function deidentify(text, member = {}) {
+  let t = String(text || '');
+  // Emails
+  t = t.replace(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi, '[email]');
+  // Phone numbers (loose international/US shapes)
+  t = t.replace(/\+?\d[\d\s().-]{7,}\d/g, '[phone]');
+  // Long digit runs (MRN / SSN / policy numbers) — 6+ consecutive digits
+  t = t.replace(/\b\d{6,}\b/g, '[id]');
+  // The member's own name + email, if we know them
+  const scrubToken = (v, label) => {
+    const s = String(v || '').trim();
+    if (s.length < 2) return;
+    const esc = s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    t = t.replace(new RegExp(esc, 'gi'), label);
+  };
+  scrubToken(member.email, '[email]');
+  scrubToken(member.first_name, '[name]');
+  scrubToken(member.last_name, '[name]');
+  return t;
+}
+
 const SUMMARY_SYSTEM_PROMPT = `You are LUCA, a warm, heart-centered holistic health concierge for the Solaris ecosystem.
 A member has shared some health data with you (a description, and possibly a document like lab results, a symptom note, or a test result).
 
@@ -60,7 +88,8 @@ async function loadContextString(userId) {
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const r = await db.query(
-      `SELECT id, doc_type, filename, file_size_bytes, mime_type, description, luca_summary, created_at
+      `SELECT id, doc_type, filename, file_size_bytes, mime_type, description, luca_summary,
+              provenance_level, source, observed_at, consent_scope, created_at
        FROM health_documents WHERE user_id=$1 ORDER BY created_at DESC`,
       [req.user.userId]
     );
@@ -74,18 +103,39 @@ router.get('/', authMiddleware, async (req, res) => {
 // POST — store shared data + generate a LUCA educational summary
 router.post('/', authMiddleware, async (req, res) => {
   const userId = req.user.userId;
-  const { description = '', filename = null, fileSize = null, mimeType = null, docType = 'upload' } = req.body || {};
+  const {
+    description = '', filename = null, fileSize = null, mimeType = null, docType = 'upload',
+    level = null, source = 'self', observedAt = null, consentScope = 'private',
+  } = req.body || {};
 
   if (!description || !String(description).trim()) {
     return res.status(400).json({ error: 'A description of what you are sharing is required.' });
   }
 
-  // Generate the educational summary (graceful fallback if AI unavailable)
+  // Provenance (A3 ladder): default L0/self; a member-marked lab/test result is L4
+  // (still self-sourced, pending accredited verification). Clamp to 0..5.
+  const provLevel = Math.max(0, Math.min(5, Number.isFinite(Number(level)) ? Math.round(Number(level)) : 0));
+  const provSource = String(source || 'self').slice(0, 40);
+  const provScope = String(consentScope || 'private').slice(0, 40);
+  let provObserved = null;
+  if (observedAt) { const d = new Date(observedAt); if (!isNaN(d.getTime())) provObserved = d.toISOString(); }
+
+  // Look up the member's identity so we can scrub it out before calling the model.
+  let member = {};
+  try {
+    const u = await db.query('SELECT email, first_name, last_name FROM users WHERE id=$1', [userId]);
+    member = u.rows[0] || {};
+  } catch { /* noop */ }
+
+  // Generate the educational summary (graceful fallback if AI unavailable).
+  // De-identify the free text BEFORE it reaches the (possibly cloud) model.
   let summary = '';
   try {
     const ai = getAIProvider();
     const context = await loadContextString(userId);
-    const prompt = `The member shared this with you:\n"${String(description).trim()}"${filename ? `\n(Attached file: ${filename}${mimeType ? ', ' + mimeType : ''})` : ''}\n\nWrite the warm, educational Passport summary now.`;
+    const safeDescription = deidentify(String(description).trim(), member);
+    const safeFilename = filename ? deidentify(filename, member) : null;
+    const prompt = `The member shared this with you:\n"${safeDescription}"${safeFilename ? `\n(Attached file: ${safeFilename}${mimeType ? ', ' + mimeType : ''})` : ''}\n\nWrite the warm, educational Passport summary now.`;
     const raw = await ai.complete({ system: SUMMARY_SYSTEM_PROMPT, prompt, context });
     summary = String(raw || '').trim();
   } catch (e) {
@@ -97,9 +147,16 @@ router.post('/', authMiddleware, async (req, res) => {
 
   try {
     const r = await db.query(
-      `INSERT INTO health_documents (user_id, doc_type, filename, file_size_bytes, mime_type, description, luca_summary)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, doc_type, filename, file_size_bytes, mime_type, description, luca_summary, created_at`,
-      [userId, docType || 'upload', filename, fileSize, mimeType, String(description).trim(), summary]
+      `INSERT INTO health_documents
+         (user_id, doc_type, filename, file_size_bytes, mime_type, description, luca_summary,
+          subject_id, provenance_level, source, observed_at, consent_scope)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,
+          (SELECT subject_id FROM solaris_subjects WHERE user_id=$1),
+          $8,$9,COALESCE($10::timestamptz, now()),$11)
+       RETURNING id, doc_type, filename, file_size_bytes, mime_type, description, luca_summary,
+                 provenance_level, source, observed_at, consent_scope, created_at`,
+      [userId, docType || 'upload', filename, fileSize, mimeType, String(description).trim(), summary,
+       provLevel, provSource, provObserved, provScope]
     );
     res.json({ document: r.rows[0] });
   } catch (err) {
@@ -124,3 +181,4 @@ router.delete('/:id', authMiddleware, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.deidentify = deidentify; // exported for unit testing
