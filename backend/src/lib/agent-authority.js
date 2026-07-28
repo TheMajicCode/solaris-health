@@ -79,8 +79,8 @@ async function recordGrantUse(grant, { result = 'success', reason = null } = {})
   if (!grant) return;
   try {
     await db.query(
-      `INSERT INTO audit_logs (actor_id, action, resource_type, resource_id, result, result_reason, new_values)
-       VALUES ($1, 'agent.grant.used', 'agent_capability_grant', $2, $3, $4, $5)`,
+      `INSERT INTO audit_logs (actor_id, action, resource_type, resource_id, result, result_reason, new_values, purpose, consent_scope)
+       VALUES ($1, 'agent.grant.used', 'agent_capability_grant', $2, $3, $4, $5, 'agent_capability_audit', 'private')`,
       [grant.owner_id, grant.id, result, reason, JSON.stringify({ capability: grant.capability, agent_id: grant.agent_id })]
     );
   } catch (err) {

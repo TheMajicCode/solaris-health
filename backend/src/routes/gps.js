@@ -390,8 +390,8 @@ router.post('/allocations/:transactionId/dispute', authMiddleware, async (req, r
       [rec.id]
     );
     await db.query(
-      `INSERT INTO audit_logs (actor_id, action, resource_type, resource_id, result, new_values)
-       VALUES ($1,'gps.allocation.disputed','gps_allocation_receipt',$2,'success',$3)`,
+      `INSERT INTO audit_logs (actor_id, action, resource_type, resource_id, result, new_values, purpose, consent_scope)
+       VALUES ($1,'gps.allocation.disputed','gps_allocation_receipt',$2,'success',$3,'gps_dispute_resolution','private')`,
       [req.user.userId, rec.id, JSON.stringify({ transactionId: tx.id, disputeId: dispute.rows[0].id })]
     );
     res.status(201).json({
@@ -432,8 +432,8 @@ router.post('/allocations/:transactionId/resolve', authMiddleware, adminOnly, as
       [rec.id]
     );
     await db.query(
-      `INSERT INTO audit_logs (actor_id, action, resource_type, resource_id, result, new_values)
-       VALUES ($1,'gps.allocation.resolved','gps_allocation_receipt',$2,'success',$3)`,
+      `INSERT INTO audit_logs (actor_id, action, resource_type, resource_id, result, new_values, purpose, consent_scope)
+       VALUES ($1,'gps.allocation.resolved','gps_allocation_receipt',$2,'success',$3,'gps_dispute_resolution','private')`,
       [req.user.userId, rec.id, JSON.stringify({ transactionId: req.params.transactionId })]
     );
     res.json({ ok: true, state: 'corrected' });

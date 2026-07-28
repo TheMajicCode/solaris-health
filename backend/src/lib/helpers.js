@@ -40,18 +40,28 @@ function shapeUser(u) {
  * Write an audit log entry. Best-effort: never throws (failures are logged only),
  * so audit logging can never break a request flow.
  */
-async function audit({ actorId, action, resourceType, resourceId, newValues, oldValues, result = 'success', reason, ip }) {
+async function audit({ actorId, action, resourceType, resourceId, newValues, oldValues, result = 'success', reason, ip, purpose = 'operations', consentScope = 'private' }) {
   try {
+    // Four-W check (A1 §7): every audit event carries a declared purpose and
+    // a consent scope, plus the actor's permanent Solaris subject id.
+    let actorSubjectId = null;
+    if (actorId) {
+      try {
+        const s = await db.query('SELECT subject_id FROM solaris_subjects WHERE user_id=$1', [actorId]);
+        actorSubjectId = s.rows[0] ? s.rows[0].subject_id : null;
+      } catch (_) { /* pre-migration: column lookup is best-effort */ }
+    }
     await db.query(
       `INSERT INTO audit_logs
-        (actor_id, action, resource_type, resource_id, old_values, new_values, result, result_reason, ip_address)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        (actor_id, action, resource_type, resource_id, old_values, new_values, result, result_reason, ip_address, purpose, consent_scope, actor_subject_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
       [
         actorId || null, action, resourceType || null, resourceId || null,
         oldValues ? JSON.stringify(oldValues) : null,
         newValues ? JSON.stringify(newValues) : null,
         result, reason || null,
         ip && /^[0-9a-fA-F:.]+$/.test(ip) ? ip : null,
+        purpose, consentScope, actorSubjectId,
       ]
     );
   } catch (err) {

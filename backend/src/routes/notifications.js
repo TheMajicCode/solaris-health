@@ -117,7 +117,7 @@ router.put('/:id/read', async (req, res) => {
 /* POST /test — create a test notification for the current user (dev helper) */
 router.post('/test', async (req, res) => {
   try {
-    const { type = 'system', title = 'Test notification', message = 'This is a test notification from LUCA Passport.', data = {} } = req.body || {};
+    const { type = 'system', title = 'Test notification', message = 'This is a test notification from your Digital Sovereign Passport.', data = {} } = req.body || {};
     const n = await createNotification(req.user.userId, type, title, message, data);
     res.json({ ok: true, notification: n });
   } catch (err) {

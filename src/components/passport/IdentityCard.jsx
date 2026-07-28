@@ -1,5 +1,5 @@
 /**
- * IdentityCard — the sovereign identity panel of the LUCA Passport.
+ * IdentityCard — the sovereign identity panel of the Digital Sovereign Passport.
  * Shows the member's name/avatar, decentralized identifier (DID), sovereign
  * Nostr key (mock), contribution level, personas (Main + Anonymous), key custody,
  * and a one-click "Export My Data" action. The member owns their identity.

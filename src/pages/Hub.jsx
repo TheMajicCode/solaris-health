@@ -38,7 +38,7 @@ export default function Hub() {
         <h1 className="display" style={{ fontSize: '1.7rem', marginTop: 4 }}>
           Good {greeting()}, {user?.firstName || 'friend'}
         </h1>
-        <p className="muted" style={{ fontSize: '0.85rem', marginTop: 2 }}>aka your LUCA Passport · {user?.lovePoints ?? 0} LOVE points</p>
+        <p className="muted" style={{ fontSize: '0.85rem', marginTop: 2 }}>aka your Digital Sovereign Passport · {user?.lovePoints ?? 0} LOVE points</p>
       </div>
 
       {/* Vitality ring */}

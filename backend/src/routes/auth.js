@@ -2,6 +2,14 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { generateToken, authMiddleware } = require('../middleware/auth');
+const { ensureSubjectForUser } = require('../lib/identity');
+
+// Resolve the permanent Solaris subject id for the JWT `sub` claim.
+// Best-effort: token issuance must never fail on identity-spine hiccups.
+async function subjectRef(userId) {
+  try { const s = await ensureSubjectForUser(userId); return s ? s.subject_id : null; }
+  catch (_) { return null; }
+}
 const { ensureReferralCode } = require('../lib/gps-engine');
 const notificationProvider = require('../lib/notification-provider');
 
@@ -109,7 +117,7 @@ router.post('/register', async (req, res) => {
       });
     } catch (e) { console.warn('[notifications] welcome failed:', e.message); }
 
-    const token = generateToken(user.id, user.email, user.role);
+    const token = generateToken(user.id, user.email, user.role, await subjectRef(user.id));
     res.status(201).json({ user: shapeUser({ ...user, love_points: 10 }), token });
   } catch (err) {
     console.error('Register error:', err);
@@ -131,7 +139,7 @@ router.post('/login', async (req, res) => {
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) return res.status(401).json({ error: 'Invalid email or password.' });
 
-    const token = generateToken(user.id, user.email, user.role);
+    const token = generateToken(user.id, user.email, user.role, await subjectRef(user.id));
     res.json({ user: shapeUser(user), token });
   } catch (err) {
     console.error('Login error:', err);
@@ -188,7 +196,7 @@ router.post('/nostr-mock', async (req, res) => {
       try { await ensureReferralCode(user.id, displayName); } catch (e) {}
     }
 
-    const token = generateToken(user.id, user.email, user.role);
+    const token = generateToken(user.id, user.email, user.role, await subjectRef(user.id));
     res.json({ user: shapeUser(user), token, isNew });
   } catch (err) {
     console.error('nostr-mock error:', err);
@@ -241,7 +249,7 @@ router.post('/google-mock', async (req, res) => {
       try { await ensureReferralCode(user.id, name); } catch (e) {}
     }
 
-    const token = generateToken(user.id, user.email, user.role);
+    const token = generateToken(user.id, user.email, user.role, await subjectRef(user.id));
     res.json({
       user: shapeUser(user),
       token,

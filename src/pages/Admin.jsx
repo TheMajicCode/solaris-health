@@ -57,7 +57,7 @@ export default function Admin() {
           </div>
 
           <div className="row gap-2 fade-up delay-1" style={{ overflowX: 'auto' }}>
-            {[['overview', 'Overview'], ['users', 'Users'], ['listings', 'Listings'], ['bookings', 'Bookings']].map(([k, label]) => (
+            {[['overview', 'Overview'], ['users', 'Members'], ['listings', 'Listings'], ['bookings', 'Bookings']].map(([k, label]) => (
               <button key={k} onClick={() => setTab(k)} className={`chip ${tab === k ? 'chip-active' : ''}`} style={{ flex: '0 0 auto' }}>{label}</button>
             ))}
           </div>

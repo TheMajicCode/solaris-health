@@ -306,7 +306,7 @@ if (require.main === module) {
     .catch((err) => console.warn('Token cleanup warning:', err.message));
 
   const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`✓ LUCA Passport Backend running on port ${PORT}`);
+    console.log(`✓ Digital Sovereign Passport Backend running on port ${PORT}`);
     console.log(`✓ Environment: ${process.env.NODE_ENV}`);
   });
 

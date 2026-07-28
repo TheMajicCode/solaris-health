@@ -39,7 +39,7 @@ export function buildICS({ title, description, location, start, end, uid, url })
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Solaris Health//LUCA Passport//EN',
+    'PRODID:-//Solaris Health//Digital Sovereign Passport//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',

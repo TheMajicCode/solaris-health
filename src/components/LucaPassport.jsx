@@ -588,7 +588,7 @@ function navForRole(role, isProvider) {
         { id: 'provider-approvals', label: 'Provider Approvals', icon: FileCheck, badgeKey: 'approvals' },
         { id: 'booking-oversight', label: 'Booking Oversight', icon: CalendarCheck },
         { id: 'systimeline', label: 'System Timeline', icon: Clock },
-        { id: 'users', label: 'User Management', icon: UserCog },
+        { id: 'users', label: 'Member Management', icon: UserCog },
         { id: 'settings', label: 'System Settings', icon: Settings },
       ],
     });
@@ -3499,7 +3499,7 @@ function AnalyticsPage() {
   if (!stats) return <Empty icon={Activity} title="No analytics available" />;
 
   const cards = [
-    { label: 'Total users', value: stats.users, icon: Users, tone: 'teal' },
+    { label: 'Total members', value: stats.users, icon: Users, tone: 'teal' },
     { label: 'Patients', value: stats.patients, icon: HeartPulse, tone: 'mint' },
     { label: 'Practitioners', value: stats.practitioners, icon: Stethoscope, tone: 'gold' },
     { label: 'Listings', value: stats.listings, icon: Building2, tone: 'teal' },
@@ -3634,7 +3634,7 @@ function UserManagementPage() {
                 <td className="ar small f6 t-gold">{u.love_points ?? 0}</td>
                 <td className="tiny muted">{fmtShort(u.created_at)}</td>
               </tr>
-            )) : <tr><td colSpan={6}><Empty icon={Users} title="No users match your filters" /></td></tr>}
+            )) : <tr><td colSpan={6}><Empty icon={Users} title="No members match your filters" /></td></tr>}
           </tbody>
         </table>
       </div>
@@ -4539,7 +4539,7 @@ export default function LucaPassport() {
       if (!sessionStorage.getItem('luca_welcomed')) {
         sessionStorage.setItem('luca_welcomed', '1');
         const first = user.firstName || (user.fullName || '').split(' ')[0] || '';
-        toast(`Welcome to LUCA Passport${first ? `, ${first}` : ''}! 🌿`, { icon: '🌿', duration: 4000 });
+        toast(`Welcome to your Digital Sovereign Passport${first ? `, ${first}` : ''}! 🌿`, { icon: '🌿', duration: 4000 });
       }
     } catch { /* ignore */ }
   }, [user]);
@@ -4554,7 +4554,7 @@ export default function LucaPassport() {
     else if (n.data?.tab) go(n.data.tab);
   }, [go, isProvider]);
 
-  const meta = TAB_META[tab] || { title: 'LUCA Passport', sub: '' };
+  const meta = TAB_META[tab] || { title: 'Digital Sovereign Passport', sub: '' };
   const displayName = user?.fullName || [user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.email || 'Member';
 
   return (

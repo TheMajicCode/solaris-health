@@ -267,7 +267,7 @@ function buildSiweMessage({ address, nonce, domain = 'solaris-health.abacusai.cl
   const issuedAt = new Date().toISOString();
   return (
     `${domain} wants you to sign in with your Ethereum account:\n${address}\n\n` +
-    `Sign in to verify wallet ownership for your LUCA Passport. This request will not trigger a transaction or cost gas.\n\n` +
+    `Sign in to verify wallet ownership for your Digital Sovereign Passport. This request will not trigger a transaction or cost gas.\n\n` +
     `URI: https://${domain}\nVersion: 1\nNonce: ${nonce}\nIssued At: ${issuedAt}`
   );
 }

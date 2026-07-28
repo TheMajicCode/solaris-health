@@ -9,10 +9,14 @@ if (!JWT_SECRET) {
   process.exit(1);
 }
 
-function generateToken(userId, email, role) {
+function generateToken(userId, email, role, subjectId = null) {
   // jti = unique per token, lets us revoke individual sessions (Gate 6).
+  // sub = the permanent Solaris subject id (public_ref) per A2 §1.2 step 5;
+  // the internal user id stays in the claim set for compatibility.
   const jti = crypto.randomUUID();
-  return jwt.sign({ userId, email, role, jti }, JWT_SECRET, { expiresIn: '7d' });
+  const claims = { userId, email, role, jti };
+  if (subjectId) claims.sub = subjectId;
+  return jwt.sign(claims, JWT_SECRET, { expiresIn: '7d' });
 }
 
 function verifyToken(token) {

@@ -1,4 +1,4 @@
-// Vitest global setup for the LUCA Passport frontend.
+// Vitest global setup for the Digital Sovereign Passport frontend.
 // Adds jest-dom matchers and a couple of jsdom polyfills the app relies on.
 import '@testing-library/jest-dom';
 import { vi, afterEach } from 'vitest';

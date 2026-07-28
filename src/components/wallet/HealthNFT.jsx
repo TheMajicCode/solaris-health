@@ -57,7 +57,7 @@ const CATALOG = [
   { id: 'vitality-100', name: 'Vitality Centurion', emoji: '🌿', icon: HeartPulse, grad: 'linear-gradient(150deg,#0E5C57,#2FBE9F)', desc: '100 days of logged vitality check-ins.' },
   { id: 'steps-million', name: 'Million Steps', emoji: '👟', icon: Footprints, grad: 'linear-gradient(150deg,#B5713C,#E3AC46)', desc: 'Walked a cumulative 1,000,000 steps.' },
   { id: 'mind-master', name: 'Mindful Master', emoji: '🧠', icon: Brain, grad: 'linear-gradient(150deg,#6D28D9,#A78BFA)', desc: '50 completed mindfulness sessions.' },
-  { id: 'first-passport', name: 'Genesis Passport', emoji: '🪪', icon: ShieldCheck, grad: 'linear-gradient(150deg,#0A2B29,#0E5C57)', desc: 'Your founding LUCA Passport credential.' },
+  { id: 'first-passport', name: 'Genesis Passport', emoji: '🪪', icon: ShieldCheck, grad: 'linear-gradient(150deg,#0A2B29,#0E5C57)', desc: 'Your founding Digital Sovereign Passport credential.' },
   { id: 'data-sovereign', name: 'Data Sovereign', emoji: '🔐', icon: Lock, grad: 'linear-gradient(150deg,#0E5C57,#0A2B29)', desc: 'Exported & self-custodied your full health vault.' },
   { id: 'community-100', name: 'Community Pillar', emoji: '🤝', icon: Award, grad: 'linear-gradient(150deg,#D69B33,#B5713C)', desc: '100 verified community contributions.' },
 ];

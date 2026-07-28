@@ -98,8 +98,9 @@ router.post('/checkins', authMiddleware, async (req, res) => {
     const r = await db.query(
       `INSERT INTO daily_checkins
          (user_id,energy_score,mood_score,sleep_hours,hydration_glasses,movement_minutes,
-          mind_score,body_score,heart_score,spirit_score,notes,nutrition_score,meal_notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+          mind_score,body_score,heart_score,spirit_score,notes,nutrition_score,meal_notes,subject_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,
+               (SELECT subject_id FROM solaris_subjects WHERE user_id=$1))
        ON CONFLICT (user_id, checkin_date) DO UPDATE SET
          energy_score=COALESCE(EXCLUDED.energy_score, daily_checkins.energy_score),
          mood_score=COALESCE(EXCLUDED.mood_score, daily_checkins.mood_score),
