@@ -547,3 +547,93 @@ intentionally left for later subtasks.
 - Live https://solaris-health.abacusai.cloud → 200; login/session OK; zero
   console errors; trigger-driven cards + Curate-for-me render; provenance
   verified end-to-end via live API (L4 stamped, PII scrubbed from summary).
+
+
+
+---
+
+# Sprint C — Track B (M4–M5) · branch `agent/abacus-sovereign-sprint-v4`
+
+Continuation of Track B. M4 (A5 intake engine + messages inbox) and M5 (A3
+Intelligence section, beta) built end-to-end, verified, committed and pushed.
+
+## M4 — Messages inbox + intake engine · commit `c6e3efa`
+- **Part A — foundational intake @ L2:** structured foundational health profile
+  captured through the intake engine and stamped at provenance **L2**
+  (peer-attested) with subject_id; summarized into LUCA's context.
+- **Part B — intake variants:** multiple intake templates/variants supported;
+  prefill collapse so previously answered fields fold into a compact recap.
+- **Bilingual EN/ES** intake copy (UI chrome stays English; intake questions
+  render in the member's language).
+- **48h reminders** for incomplete intake.
+- **Messages inbox** surface for LUCA-initiated intake prompts and nudges.
+
+## M5 — Intelligence section (beta) · commit `bfdf4cd`
+Implements the A3 Intelligence spec (beta scope): a three-pane view of what the
+system knows and can see about the member.
+
+- **Migration 029** (additive, applied to live DB): `intelligence_exclusions`
+  (`id` PK, `subject_id`, `excluded_source`, `toggled_at`); UNIQUE
+  (subject_id, excluded_source) + subject index. Idempotent.
+- **`backend/src/lib/intelligence.js`** (new): `EXCLUDABLE_SOURCES` (8 —
+  foundational, assessment, checkins, bookings, rewards, journal, habits,
+  journeys), `NEVER_LIST` (5 honest static boundaries — other members' data,
+  data outside consent scope, private keys/passwords/tokens, the open internet,
+  raw card/bank/gov-id numbers), `getExclusions()` / `setExclusion()` keyed by
+  subject_id.
+- **`buildContext` refactor** (`routes/luca.js`): every excludable source is now
+  emitted through a single `emit(key,label,count,included)` helper that (a)
+  always records the source + record count for the Intelligence view and (b)
+  only injects the text into the LUCA prompt when the member has NOT excluded it.
+  Chat handler loads the member's exclusions before building context, so
+  excluded sources are genuinely dropped from the prompt. `buildContext` is
+  exposed on the router for reuse by the Intelligence route.
+- **`backend/src/routes/intelligence.js`** (new), mounted at `/api/intelligence`:
+  - `GET /context` → three panes: **Natural** (7 human-legible shelves — Canon,
+    Principles, Log, Decisions, Evolution, Inventory, Open questions, each with
+    ProvenanceBadge + source/date), **Artificial** (what LUCA can see now:
+    sources with live record counts + excludable flag, the NEVER list, last AI
+    call metadata, fired trigger rules with "because", and the last 8 AI actions
+    — provider/target/degraded/time only, **no PHI**), **Enhanced** (4 card
+    types — timeline, 7-day pattern averages (hedged, needs ≥3 check-ins),
+    open questions, and rule-matched suggestions with typed actions).
+  - `GET /exclusions` / `PUT /exclusions` → per-source opt-out toggles (validates
+    the source against `EXCLUDABLE_SOURCES`, else 400; writes an audit log).
+- **Frontend** (`LucaPassport.jsx`): new **Intelligence** tab (Salud group,
+  Brain icon). `IntelligencePage` renders Natural + Artificial as two equal
+  panes and Enhanced as a wide card; `SourceRow` toggles call
+  `api.setIntelligenceExclusion` and reload; warm empty states; reuses
+  Card/SectionHead/Pill/Btn/ProvenanceBadge/Empty. `api.js` gains
+  `getIntelligenceContext` / `getIntelligenceExclusions` /
+  `setIntelligenceExclusion`.
+- Tests: `intelligence.test.js` (+4) — context returns 3 panes with warm empty
+  states; **never leaks raw PHI** into the Artificial pane; exclusion toggle
+  persists (keyed by subject_id) AND drops the source from the LUCA prompt;
+  rejects a non-excludable source with 400.
+
+## Validation
+- Backend `npx jest --silent` **161/161** (was 157 pre-M5; +4 intelligence).
+- Frontend `npx vitest run` **32/32**; `npx vite build` clean (chunk warning
+  benign).
+- Vault roundtrip `node tests/roundtrip.cjs` — **9/9**.
+- Migrations current through **029** (live/docker DB).
+- `public/sw.js` cache **solaris-v9 → solaris-v10**.
+- `docker compose build frontend backend && docker compose up -d` — containers
+  healthy; `/api/health` → ok.
+- Live https://solaris-health.abacusai.cloud → 200. E2E via live API (login
+  sarah@solaris.health): `/api/intelligence/context` returns all three panes
+  with real per-source counts; `PUT /exclusions` on `checkins` flips its
+  `included` flag to false and adds it to `exclusions`; toggled back on.
+  Intelligence tab renders the three panes correctly in-browser.
+
+## Beta scoping / deferred (A3)
+- **Mandatory four provenance columns (A3 §4.1) full rollout is DEFERRED.** The
+  four columns (provenance_level/source/observed_at/consent_scope) are present on
+  `health_documents` (M3) and the foundational/intake tables (M4); extending them
+  to `daily_checkins` and `journal_entries` is a follow-up. The Intelligence view
+  displays the best available provenance per shelf in the interim.
+- Enhanced **patterns are simple 7-day averages** with hedged language (not
+  clinical trend analysis); require ≥3 check-ins to render.
+- Artificial **recentActions capped at the last 8** AI receipts (metadata only).
+- LUCA never diagnoses or prescribes; Intelligence surfaces provenance and
+  boundaries rather than conclusions.

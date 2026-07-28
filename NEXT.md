@@ -78,3 +78,57 @@ section, A4 Wompi/GPS, A2 §3 Nostr binding).
 - Provenance UI currently exposes L0 (note) and L4 (lab) self-submissions;
   L1–L3/L5 upgrade paths (observed/peer/institution/governed) arrive with the
   A3 Intelligence section (M5) and practitioner attestations.
+
+
+
+---
+
+## Sprint C — Track B (M4–M5) · branch `agent/abacus-sovereign-sprint-v4`
+
+M4 (A5 intake engine + messages inbox) and M5 (A3 Intelligence section, beta)
+built, verified, committed and pushed.
+
+### M4 — Messages inbox + intake engine · commit `c6e3efa`
+- Part A: foundational intake captured through the engine, stamped at **L2**
+  (peer-attested) + subject_id, summarized into LUCA context.
+- Part B: intake variants/templates + prefill collapse (answered fields fold
+  into a compact recap).
+- Bilingual EN/ES intake copy; 48h reminders for incomplete intake; messages
+  inbox surface for LUCA-initiated prompts/nudges.
+
+### M5 — Intelligence section (beta) · commit `bfdf4cd`
+- Migration **029** (additive, applied live): `intelligence_exclusions`
+  (subject_id, excluded_source, toggled_at; UNIQUE subject+source).
+- `backend/src/lib/intelligence.js`: `EXCLUDABLE_SOURCES` (8), `NEVER_LIST` (5
+  honest boundaries), `getExclusions`/`setExclusion` keyed by subject_id.
+- `buildContext` refactor (`luca.js`): all 8 excludable sources emitted through
+  one `emit()` helper — always records source + count for the view, injects text
+  into the prompt only when NOT excluded. Chat handler loads exclusions first;
+  `buildContext` exposed on the router.
+- `backend/src/routes/intelligence.js` mounted at `/api/intelligence`:
+  `GET /context` (Natural 7 shelves + Artificial "what LUCA can see now" with
+  live counts/NEVER list/last AI call/fired rules/last 8 actions — no PHI +
+  Enhanced 4 card types), `GET|PUT /exclusions` (per-source opt-out, validated,
+  audited).
+- Frontend: **Intelligence** tab (Salud, Brain icon); `IntelligencePage` +
+  `SourceRow` toggles; `api.js` +3 methods.
+- Tests: `intelligence.test.js` (+4) — 3 panes/warm empty states; no raw PHI in
+  Artificial; exclusion persists + drops source from prompt; non-excludable
+  source → 400.
+
+### Final verification (Sprint C)
+- Backend `npx jest --silent` **161/161** (+4); frontend `npx vitest run`
+  **32/32**; `npx vite build` clean; roundtrip 9/9. Migrations current through
+  **029**. `public/sw.js` **solaris-v9 → solaris-v10**. Docker rebuilt + up;
+  `/api/health` ok. Live site 200; `/api/intelligence/context` returns 3 panes
+  with real counts; exclusion toggle verified via live API + in-browser.
+
+### Follow-ups / deferred
+- **A3 §4.1 mandatory four provenance columns — full rollout DEFERRED.** Present
+  on `health_documents` (M3) + foundational/intake tables (M4); NOT yet on
+  `daily_checkins` / `journal_entries` — documented as beta scoping. Intelligence
+  view shows best-available provenance per shelf meanwhile.
+- Enhanced patterns are simple 7-day averages (hedged; need ≥3 check-ins).
+- Artificial recentActions capped at last 8 receipts (metadata only, no PHI).
+- Remaining Track B milestones (A4 Wompi/GPS, A2 §3 Nostr binding) not started
+  — separate later subtasks.
