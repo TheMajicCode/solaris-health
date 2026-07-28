@@ -110,6 +110,7 @@ class ApiClient {
   createBooking(data) { return this.request('/journey/bookings', { method: 'POST', body: JSON.stringify(data) }); }
   getCheckins() { return this.request('/journey/checkins'); }
   createCheckin(data) { return this.request('/journey/checkins', { method: 'POST', body: JSON.stringify(data) }); }
+  getJourneyTasks() { return this.request('/journey/tasks'); }
   getRewards() { return this.request('/journey/rewards'); }
   // ---- Habits, streaks & weekly strip ----
   getHabits() { return this.request('/journey/habits'); }

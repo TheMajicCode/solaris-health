@@ -58,6 +58,15 @@ async function gatherRecord(userId) {
     [userId]
   ).catch(() => ({ rows: [] }));
 
+  // Daily check-ins (member-logged vitals incl. sleep, water, nutrition)
+  const checkins = await db.query(
+    `SELECT checkin_date, mind_score, body_score, heart_score, spirit_score,
+            sleep_hours, hydration_glasses, movement_minutes, nutrition_score,
+            meal_notes, notes, created_at
+     FROM daily_checkins WHERE user_id=$1 ORDER BY checkin_date DESC LIMIT 90`,
+    [userId]
+  ).catch(() => ({ rows: [] }));
+
   // AI execution receipts (provenance metadata + hashes only — no raw prompts/PHI by construction)
   const aiReceipts = await db.query(
     `SELECT event_type, agent_id, provider, requested_model, actual_model, compute_target,
@@ -100,6 +109,7 @@ async function gatherRecord(userId) {
     journal: journal.rows,
     healthDocs: healthDocs.rows,
     habitTicks: habitTicks.rows,
+    checkins: checkins.rows,
     audioUnlocks: audioUnlocks.rows,
     aiReceipts: aiReceipts.rows,
     agentAuthority,

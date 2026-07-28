@@ -117,7 +117,7 @@ async function gatherUserTimeline(userId, filters) {
   if (want('vitals')) {
     const r = await db.query(
       `SELECT id, checkin_date, energy_score, mood_score, sleep_hours,
-              hydration_glasses, movement_minutes, notes, created_at
+              hydration_glasses, movement_minutes, nutrition_score, notes, created_at
          FROM daily_checkins
         WHERE user_id = $1
         ORDER BY checkin_date DESC`,
@@ -130,6 +130,7 @@ async function gatherUserTimeline(userId, filters) {
       if (row.sleep_hours != null) bits.push(`Sleep ${row.sleep_hours}h`);
       if (row.hydration_glasses != null) bits.push(`Water ${row.hydration_glasses}`);
       if (row.movement_minutes != null) bits.push(`Move ${row.movement_minutes}m`);
+      if (row.nutrition_score != null) bits.push(`Nutrition ${row.nutrition_score}`);
       events.push({
         id: `vitals:${row.id}`,
         type: 'vitals',
@@ -139,7 +140,8 @@ async function gatherUserTimeline(userId, filters) {
         source: { table: 'daily_checkins', id: row.id },
         meta: {
           energy: row.energy_score, mood: row.mood_score, sleep: row.sleep_hours,
-          hydration: row.hydration_glasses, movement: row.movement_minutes, notes: row.notes,
+          hydration: row.hydration_glasses, movement: row.movement_minutes,
+          nutrition: row.nutrition_score, notes: row.notes,
         },
       });
     }

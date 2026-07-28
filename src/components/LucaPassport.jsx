@@ -757,6 +757,9 @@ function DailyCheckinModal({ user, open, onClose, onSaved }) {
   const [scores, setScores] = useState({ mind: 5, body: 5, heart: 5, spirit: 5 });
   const [answer, setAnswer] = useState('');
   const [sleep, setSleep] = useState('');
+  const [water, setWater] = useState(null);      // glasses of water today (0-12)
+  const [meal, setMeal] = useState(null);        // meal quality 1-10
+  const [mealNotes, setMealNotes] = useState('');
   const [habits, setHabits] = useState([]);
   const [ticked, setTicked] = useState({});
   const [saving, setSaving] = useState(false);
@@ -769,7 +772,7 @@ function DailyCheckinModal({ user, open, onClose, onSaved }) {
     if (!open) return;
     // reset each open
     setScores({ mind: 5, body: 5, heart: 5, spirit: 5 });
-    setAnswer(''); setSleep(''); setTicked({}); setCelebrate(null);
+    setAnswer(''); setSleep(''); setWater(null); setMeal(null); setMealNotes(''); setTicked({}); setCelebrate(null);
     const today = new Date().toISOString().slice(0, 10);
     (async () => {
       try {
@@ -799,6 +802,9 @@ function DailyCheckinModal({ user, open, onClose, onSaved }) {
         // keep energy/mood in sync so existing widgets stay populated (0–100 scale)
         energyScore: scores.body * 10, moodScore: scores.heart * 10,
         sleepHours: sleep === '' ? null : Number(sleep),
+        hydrationGlasses: water == null ? null : Number(water),
+        nutritionScore: meal == null ? null : Number(meal),
+        mealNotes: mealNotes.trim() || null,
         lucaQuestionAnswer: answer.trim() || null,
         habitIds,
       });
@@ -879,6 +885,47 @@ function DailyCheckinModal({ user, open, onClose, onSaved }) {
                     onChange={(e) => setSleep(e.target.value)} placeholder="7.5" />
                   <span className="small muted">hours</span>
                 </div>
+              </div>
+
+              <div>
+                <div className="ci-eyebrow">Water today</div>
+                <div className="small muted" style={{ marginTop: 4 }}>Glasses so far — your daily goal is 8.</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                  {[0,1,2,3,4,5,6,7,8,9,10,11,12].map((n) => (
+                    <button key={n} type="button" aria-label={`${n} glasses of water`}
+                      onClick={() => setWater(water === n ? null : n)}
+                      style={{
+                        width: 34, height: 34, borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                        border: water === n ? '2px solid #2DB584' : '1px solid #dde7e2',
+                        background: water === n ? '#e6f7f0' : '#fff',
+                        color: water === n ? '#0A2B29' : '#6b807a',
+                      }}>{n}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="ci-eyebrow">Meal quality today</div>
+                <div className="small muted" style={{ marginTop: 4 }}>How nourishing were your meals? (1 = processed, 10 = whole & fresh)</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                  {[1,2,3,4,5,6,7,8,9,10].map((n) => (
+                    <button key={n} type="button" aria-label={`Meal quality ${n} of 10`}
+                      onClick={() => setMeal(meal === n ? null : n)}
+                      style={{
+                        width: 34, height: 34, borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                        border: meal === n ? '2px solid #C58A53' : '1px solid #dde7e2',
+                        background: meal === n ? '#faf1e8' : '#fff',
+                        color: meal === n ? '#0A2B29' : '#6b807a',
+                      }}>{n}</button>
+                  ))}
+                </div>
+                {meal != null && (
+                  <input type="text" maxLength={300} value={mealNotes}
+                    onChange={(e) => setMealNotes(e.target.value)}
+                    placeholder="What did you eat? (optional)"
+                    style={{ marginTop: 10, width: '100%', padding: '9px 12px', borderRadius: 10,
+                      border: '1px solid #dde7e2', fontSize: 13.5, fontFamily: 'inherit', color: '#0A2B29' }} />
+                )}
               </div>
 
               <Btn variant="primary block" icon={Check} onClick={submit} disabled={saving}>
@@ -1634,6 +1681,78 @@ function SovereigntyCard({ onExport, exporting }) {
 const SYS_SHORT = { bioelectrical: 'Bio', hydration: 'Hydr', circadian: 'Circ', microbiome: 'Micro', respiratory: 'Resp', neurological: 'Neuro', cardiovascular: 'Cardio', nutritional: 'Nutri' };
 const ASPECT_ICONS = { physical: Activity, mental: Brain, emotional: Heart, spiritual: Sparkles };
 
+/* Curated guided-journey tasks — derived server-side from the member's journey,
+   today's check-in, focus areas, audio library and bookings. */
+const TASK_ICONS = { start_checkin: Plus, play_audio: Headphones, open_listing: Stethoscope, navigate: Compass };
+function GuidedJourneyTasks({ go, onOpenCheckin }) {
+  const { setPendingProviderId } = useApp();
+  const [data, setData] = useState(null);
+
+  const load = useCallback(() => {
+    api.getJourneyTasks().then((d) => setData(d || null)).catch(() => setData(null));
+  }, []);
+
+  useEffect(() => {
+    load();
+    window.addEventListener('solaris:checkin', load);
+    return () => window.removeEventListener('solaris:checkin', load);
+  }, [load]);
+
+  if (!data || !data.tasks?.length) return null;
+  const done = data.tasks.filter((t) => t.done).length;
+
+  const runTask = (t) => {
+    const type = t.action?.type;
+    const target = t.action?.target;
+    switch (type) {
+      case 'start_checkin': onOpenCheckin(); break;
+      case 'play_audio': go && go('media'); break;
+      case 'open_listing':
+        if (target && setPendingProviderId) setPendingProviderId(String(target));
+        go && go('explore');
+        break;
+      case 'navigate': go && go(target || 'health'); break;
+      default: break;
+    }
+  };
+
+  const TASK_CTA = { start_checkin: 'Check in', play_audio: 'Play', open_listing: 'View', navigate: 'Go' };
+
+  return (
+    <Card className="tint" style={{ background: 'linear-gradient(180deg,#FBFEFC,#F3FAF6)' }}>
+      <SectionHead
+        eyebrow="Guided journey"
+        title="Today's guided tasks"
+        action={<Pill tone={done === data.tasks.length ? 'gold' : 'mint'} icon={Sparkles}>{done}/{data.tasks.length} done</Pill>}
+      />
+      {data.journeyType && (
+        <div className="tiny muted" style={{ marginTop: -6, marginBottom: 10 }}>
+          Curated for your {String(data.journeyType).replace(/_/g, ' ')} journey.
+        </div>
+      )}
+      {data.tasks.map((t) => {
+        const Icon = TASK_ICONS[t.action?.type] || Compass;
+        return (
+          <div key={t.id} className="list-row" style={{ padding: '10px 0', opacity: t.done ? 0.72 : 1 }}>
+            {t.done
+              ? <CheckCircle2 size={20} color="#2DB584" strokeWidth={2.2} style={{ flex: 'none' }} />
+              : <span style={{ width: 20, height: 20, borderRadius: 999, border: '2px solid #C9DAD4', flex: 'none' }} />}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="small f6" style={{ textDecoration: t.done ? 'line-through' : 'none' }}>{t.label}</div>
+              {t.detail && <div className="tiny muted">{t.detail}</div>}
+            </div>
+            {!t.done && (
+              <button className="checkin-cta" style={{ padding: '6px 12px', fontSize: 12 }} onClick={() => runTask(t)}>
+                <Icon size={13} strokeWidth={2.4} /> {TASK_CTA[t.action?.type] || 'Go'}
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </Card>
+  );
+}
+
 function HealthPage({ go }) {
   const { user, startRetake } = useApp();
   const [data, setData] = useState(null);
@@ -1657,7 +1776,16 @@ function HealthPage({ go }) {
   const reloadCheckins = async () => {
     const ci = await api.getCheckins().catch(() => ({ checkins: [] }));
     setCheckins(ci?.checkins || []);
+    // Let the guided-journey task list know a check-in happened.
+    window.dispatchEvent(new CustomEvent('solaris:checkin'));
   };
+
+  // Agentic entry point: LUCA chips (and journey CTAs) can open the check-in modal.
+  useEffect(() => {
+    const open = () => setCheckinOpen(true);
+    window.addEventListener('solaris:open-checkin', open);
+    return () => window.removeEventListener('solaris:open-checkin', open);
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -1762,6 +1890,8 @@ function HealthPage({ go }) {
 
       <SovereigntyCard onExport={exportVault} exporting={exporting} />
 
+      <GuidedJourneyTasks go={go} onOpenCheckin={() => setCheckinOpen(true)} />
+
       {!resp ? (
         <Card><Empty icon={HeartPulse} title="No assessment on file" sub="Complete the Solaris Method assessment to populate your 360° health passport." /></Card>
       ) : (
@@ -1840,7 +1970,7 @@ function HealthPage({ go }) {
           {checkins.length ? checkins.slice(0, 8).map((c) => (
             <div key={c.id} className="list-row" style={{ padding: '10px 0' }}>
               <Chip icon={Calendar} tone="mint" sm />
-              <div style={{ flex: 1 }}><div className="small f6">{fmtShort(c.checkin_date)}</div><div className="tiny muted">Energy {c.energy_score} · Mood {c.mood_score}</div></div>
+              <div style={{ flex: 1 }}><div className="small f6">{fmtShort(c.checkin_date)}</div><div className="tiny muted">Energy {c.energy_score} · Mood {c.mood_score}{c.hydration_glasses != null ? ` · Water ${c.hydration_glasses}` : ''}{c.nutrition_score != null ? ` · Meals ${c.nutrition_score}/10` : ''}</div></div>
               <span className="tiny muted2">{c.sleep_hours != null ? `${Number(c.sleep_hours).toFixed(1)}h` : '—'}</span>
             </div>
           )) : <Empty icon={Calendar} title="No check-ins yet" sub="Daily check-ins help LUCA track your vitality over time." />}
@@ -1894,16 +2024,32 @@ function LucaChips({ suggestions, onAction, disabled }) {
 }
 
 /* Map a typed LUCA suggestion to an in-app effect. */
-function executeChipAction(suggestion, { go, setInput, send, playAudio }) {
+function executeChipAction(suggestion, { go, setInput, send, playAudio, startRetake, setPendingProviderId, setPendingCurate }) {
   const s = typeof suggestion === 'string' ? { label: suggestion, action: 'prefill_chat', target: null } : (suggestion || {});
   const { action, target, label } = s;
   switch (action) {
     case 'navigate': go(target || 'dashboard'); break;
-    case 'start_checkin': go('health'); break;
-    case 'start_assessment': go('health'); break;
-    case 'open_listing': go('explore'); break;
+    case 'start_checkin':
+      // Land on the Health Passport and open the daily check-in modal.
+      go('health');
+      setTimeout(() => window.dispatchEvent(new CustomEvent('solaris:open-checkin')), 300);
+      break;
+    case 'start_assessment':
+    case 'open_intake':
+      // Launch the Solaris Method assessment directly when possible.
+      if (startRetake) startRetake(); else go('health');
+      break;
+    case 'open_listing':
+      // Deep-link to the exact practitioner profile in the marketplace.
+      if (target && setPendingProviderId) setPendingProviderId(String(target));
+      go('explore');
+      break;
     case 'play_audio': playAudio ? playAudio(go) : go('media'); break;
-    case 'curate': go('explore'); break;
+    case 'curate':
+      // Trigger "Curate for me" on the marketplace on arrival.
+      setPendingCurate && setPendingCurate(true);
+      go('explore');
+      break;
     case 'prefill_chat': setInput(label || ''); break;
     default: send(label || ''); break;
   }
@@ -1917,7 +2063,7 @@ const LucaAvatar = ({ size = 'md' }) => (
 );
 
 function CoachPage({ user, go }) {
-  const { lucaMessages: messages, setLucaMessages: setMessages, lucaLoaded, loadLucaHistory } = useApp();
+  const { lucaMessages: messages, setLucaMessages: setMessages, lucaLoaded, loadLucaHistory, startRetake, setPendingProviderId, setPendingCurate } = useApp();
   const { playFromLibrary } = useAudio();
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -2109,7 +2255,7 @@ function CoachPage({ user, go }) {
                     )}
                   </div>
                   {!isUser && i === messages.length - 1 && !sending && (
-                    <LucaChips suggestions={m.suggestions} onAction={(s) => executeChipAction(s, { go, setInput, send, playAudio: playFromLibrary })} disabled={sending} />
+                    <LucaChips suggestions={m.suggestions} onAction={(s) => executeChipAction(s, { go, setInput, send, playAudio: playFromLibrary, startRetake, setPendingProviderId, setPendingCurate })} disabled={sending} />
                   )}
                 </div>
               </div>
@@ -4036,7 +4182,7 @@ function BecomeAPractitionerModal({ user, onClose, onSubmitted }) {
 /* ============================== PAGE ROUTER ============================== */
 /* ============================== LUCA FLOATING WIDGET ============================== */
 function LucaWidget({ user, hidden, go }) {
-  const { lucaMessages: messages, setLucaMessages: setMessages, lucaLoaded, loadLucaHistory } = useApp();
+  const { lucaMessages: messages, setLucaMessages: setMessages, lucaLoaded, loadLucaHistory, startRetake, setPendingProviderId, setPendingCurate } = useApp();
   const { playFromLibrary } = useAudio();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState('');
@@ -4122,7 +4268,7 @@ function LucaWidget({ user, hidden, go }) {
                       </span>
                     )}
                     {!isUser && i === messages.length - 1 && !sending && (
-                      <LucaChips suggestions={m.suggestions} onAction={(s) => executeChipAction(s, { go, setInput, send, playAudio: playFromLibrary })} disabled={sending} />
+                      <LucaChips suggestions={m.suggestions} onAction={(s) => executeChipAction(s, { go, setInput, send, playAudio: playFromLibrary, startRetake, setPendingProviderId, setPendingCurate })} disabled={sending} />
                     )}
                   </div>
                 </div>
@@ -4284,6 +4430,13 @@ export default function LucaPassport() {
 
   // close drawer on tab change
   const go = useCallback((id) => { setTab(id); setDrawer(false); }, []);
+
+  // Cross-component navigation (e.g. "Begin a guided journey" -> Health Passport).
+  useEffect(() => {
+    const onNav = (e) => { if (e?.detail?.tab) go(e.detail.tab); };
+    window.addEventListener('solaris:navigate', onNav);
+    return () => window.removeEventListener('solaris:navigate', onNav);
+  }, [go]);
 
   // If the active tab isn't available for the (demo-switched) role, fall back to Dashboard.
   const validTabIds = nav.flatMap((g) => g.items.map((i) => i.id));

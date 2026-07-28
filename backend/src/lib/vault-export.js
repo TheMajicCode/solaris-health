@@ -41,6 +41,7 @@ function buildVaultExport(record) {
   const {
     user, assessment, contributions = [], messages = [], credentials = [],
     journal = [], healthDocs = [], habitTicks = [], audioUnlocks = [],
+    checkins = [],
     aiReceipts = [],
     agentAuthority = null,
     solarisIdentity = null,
@@ -105,6 +106,29 @@ function buildVaultExport(record) {
       contents:
         fm({ id: 'luca-conversation', type: 'conversation', sensitivity: 'private', messages: String(messages.length), exported_at: exportedAt }) +
         `# Conversation with LUCA\n\n${body}\n`,
+    });
+  }
+
+  // 1 · HEALTH — daily check-ins (additive: vitals the member logged each day)
+  if (checkins && checkins.length) {
+    const rows = checkins.map((c) => {
+      const bits = [];
+      if (c.mind_score != null) bits.push(`Mind ${c.mind_score}`);
+      if (c.body_score != null) bits.push(`Body ${c.body_score}`);
+      if (c.heart_score != null) bits.push(`Heart ${c.heart_score}`);
+      if (c.spirit_score != null) bits.push(`Spirit ${c.spirit_score}`);
+      if (c.sleep_hours != null) bits.push(`Sleep ${c.sleep_hours}h`);
+      if (c.hydration_glasses != null) bits.push(`Water ${c.hydration_glasses} glasses`);
+      if (c.movement_minutes != null) bits.push(`Movement ${c.movement_minutes}m`);
+      if (c.nutrition_score != null) bits.push(`Nutrition ${c.nutrition_score}/10`);
+      return `### ${dateOf(c.checkin_date || c.created_at)}\n${bits.join(' · ') || '—'}` +
+        (c.meal_notes ? `\n\n**Meals:** ${c.meal_notes}` : '') +
+        (c.notes ? `\n\n${c.notes}` : '') + '\n';
+    }).join('\n');
+    files.push({
+      path: 'health/checkins.md',
+      contents: fm({ type: 'daily-checkins', sensitivity: 'private', entries: checkins.length, exported_at: exportedAt }) +
+        `# Daily Check-ins\n\n${rows}`,
     });
   }
 

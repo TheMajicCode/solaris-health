@@ -116,18 +116,19 @@ OUTPUT FORMAT (STRICT): Respond with a SINGLE JSON object and nothing else — n
   ]
 }
 Provide 2-3 suggestions. Each suggestion's "action" MUST be exactly one of:
-  navigate | prefill_chat | start_checkin | start_assessment | open_listing | play_audio | curate
+  navigate | prefill_chat | start_checkin | start_assessment | open_listing | play_audio | curate | open_intake
 Meaning of each action:
   - navigate       → move the member to an app section; set "target" to the section id (e.g. "dashboard","explore","media","journal","health","timeline").
   - prefill_chat   → put the label text into their chat box so they can ask you next; "target": null.
   - start_checkin  → open the daily check-in; "target": null.
   - start_assessment → open the Solaris intake/assessment; "target": null.
-  - open_listing   → open a practitioner/listing in the marketplace; "target": null (or a listing id if known).
+  - open_listing   → open a specific practitioner's profile in the marketplace; "target" MUST be one of the exact practitioner ids from the [PASSPORT CONTEXT — SOLARIS PRACTITIONER DIRECTORY] block (never invent an id; use null if unsure).
   - play_audio     → open the audio library / a Dr. Maya Solis practice; "target": null.
-  - curate         → open a curated journey in the marketplace; "target": null.
+  - curate         → ask Solaris to curate the best-matched practitioner for the member in the marketplace; "target": null.
+  - open_intake    → open the member's intake / health questionnaire flow; "target": null.
 Write labels from the USER's point of view (what they'd tap). The "reply" value is plain text (no JSON, no fences). Return ONLY the JSON object.`;
 
-async function buildContext(userId) {
+async function buildContext(userId, collector = {}) {
   const parts = [];
 
   // User basics
@@ -165,7 +166,7 @@ Last assessed: ${a.completed_at ? new Date(a.completed_at).toLocaleDateString('e
 
   // Last 7 daily check-ins
   const checkins = await db.query(
-    `SELECT checkin_date, energy_score, mood_score, sleep_hours, hydration_glasses, movement_minutes
+    `SELECT checkin_date, energy_score, mood_score, sleep_hours, hydration_glasses, movement_minutes, nutrition_score
      FROM daily_checkins WHERE user_id=$1 ORDER BY checkin_date DESC LIMIT 7`,
     [userId]
   );
@@ -176,7 +177,7 @@ Last assessed: ${a.completed_at ? new Date(a.completed_at).toLocaleDateString('e
     const avgSleep = (rows.reduce((s, r) => s + parseFloat(r.sleep_hours || 0), 0) / rows.length).toFixed(1);
     const latest = rows[0];
     parts.push(`\n[PASSPORT CONTEXT — DAILY CHECK-INS (last ${rows.length} days)]
-Latest (${new Date(latest.checkin_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}): Energy ${latest.energy_score}/100, Mood ${latest.mood_score}/100, Sleep ${parseFloat(latest.sleep_hours || 0).toFixed(1)}h, Hydration ${latest.hydration_glasses} glasses, Movement ${latest.movement_minutes}min
+Latest (${new Date(latest.checkin_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}): Energy ${latest.energy_score}/100, Mood ${latest.mood_score}/100, Sleep ${parseFloat(latest.sleep_hours || 0).toFixed(1)}h, Hydration ${latest.hydration_glasses} glasses, Movement ${latest.movement_minutes}min, Nutrition ${latest.nutrition_score != null ? `${latest.nutrition_score}/10` : '—'}
 7-day averages: Energy ${avgEnergy}/100, Mood ${avgMood}/100, Sleep ${avgSleep}h`);
   } else {
     parts.push('\n[PASSPORT CONTEXT — DAILY CHECK-INS]\nNo check-ins logged yet. Encourage them to start their first check-in from the Health Passport.');
@@ -323,6 +324,28 @@ Latest (${new Date(latest.checkin_date).toLocaleDateString('en-US', { weekday: '
     );
   }
 
+  // Practitioner directory — real bookable practitioners LUCA may deep-link to.
+  const providers = await db
+    .query(
+      `SELECT id, business_name, provider_type, city, specialties
+       FROM provider_profiles
+       WHERE status='active' AND approval_status='approved' AND hidden=false
+       ORDER BY rating DESC NULLS LAST LIMIT 20`
+    )
+    .catch(() => ({ rows: [] }));
+  if (providers.rows.length) {
+    collector.providerIds = new Set(providers.rows.map((p) => String(p.id)));
+    const plist = providers.rows
+      .map((p) => {
+        const specs = (Array.isArray(p.specialties) ? p.specialties : []).slice(0, 3).join(', ');
+        return `  • id=${p.id} | ${p.business_name} (${p.provider_type}${p.city ? `, ${p.city}` : ''})${specs ? ` — ${specs}` : ''}`;
+      })
+      .join('\n');
+    parts.push(
+      `\n[PASSPORT CONTEXT — SOLARIS PRACTITIONER DIRECTORY]\nWhen suggesting a practitioner (action "open_listing"), set "target" to one of these EXACT ids:\n${plist}`
+    );
+  }
+
   return parts.join('\n');
 }
 
@@ -343,6 +366,7 @@ const ACTION_ENUM = [
   'open_listing',
   'play_audio',
   'curate',
+  'open_intake',
 ];
 
 // Default typed follow-up chips shown when the model doesn't return usable ones
@@ -431,7 +455,8 @@ router.post('/messages', authMiddleware, async (req, res) => {
     await db.query('INSERT INTO luca_messages (user_id, role, content) VALUES ($1,$2,$3)', [userId, 'user', content]);
 
     // 2. Build rich health context + per-call rule-engine triggers
-    const passportContext = await buildContext(userId);
+    const ctxCollector = {};
+    const passportContext = await buildContext(userId, ctxCollector);
     const triggers = await computeTriggers(userId, content);
     console.log('[LUCA triggers]', userId, Object.keys(triggers)); // keys only — never trigger values (health-derived)
     const triggerHints = buildTriggerInstructions(triggers);
@@ -460,7 +485,20 @@ router.post('/messages', authMiddleware, async (req, res) => {
     // 3b. Parse the typed JSON envelope (reply + typed suggestions)
     const { reply: parsedReply, suggestions: parsedSuggestions } = parseLucaResponse(reply);
     const cleanReply = parsedReply || 'I had trouble responding just now. Please try again in a moment.';
-    const suggestions = parsedSuggestions.length ? parsedSuggestions : DEFAULT_SUGGESTIONS;
+    // Server-side guard: open_listing targets must be real practitioner ids.
+    const validProviderIds = ctxCollector.providerIds || new Set();
+    let suggestions = parsedSuggestions.map((sug) => {
+      if (sug.action === 'open_listing' && sug.target && !validProviderIds.has(sug.target)) {
+        return { ...sug, target: null };
+      }
+      return sug;
+    });
+    // Always surface exactly 3 agentic chips: pad with defaults the member hasn't seen.
+    for (const d of DEFAULT_SUGGESTIONS) {
+      if (suggestions.length >= 3) break;
+      if (!suggestions.some((sug) => sug.action === d.action && sug.label === d.label)) suggestions.push(d);
+    }
+    suggestions = suggestions.slice(0, 3);
 
     // 4. Persist assistant reply (cleaned, with provenance + AI audit trail).
     //    inputs_hash = non-reversible SHA-256 of the system-prompt prefix + user

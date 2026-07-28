@@ -14,6 +14,8 @@ export function AppProvider({ children }) {
   const [nostrBanner, setNostrBanner] = useState({ show: false, npub: '' });
   const [retaking, setRetaking] = useState(false); // re-launch Solaris Method intake (local state only)
   const [exploreFilter, setExploreFilter] = useState(null); // pre-select a listing type in Explore (e.g. 'diagnostic')
+  const [pendingProviderId, setPendingProviderId] = useState(null); // deep-link: open this practitioner profile in Explore
+  const [pendingCurate, setPendingCurate] = useState(false); // deep-link: run "Curate for me" on Explore mount
 
   // ── Shared LUCA conversation (CoachPage + floating LucaWidget are two views of it) ──
   const [lucaMessages, setLucaMessages] = useState(() => {
@@ -107,6 +109,8 @@ export function AppProvider({ children }) {
       currentTrack, setCurrentTrack, isPlaying, setIsPlaying, audioQueue, setAudioQueue,
       retaking, startRetake, stopRetake,
       exploreFilter, setExploreFilter,
+      pendingProviderId, setPendingProviderId,
+      pendingCurate, setPendingCurate,
     }}>
       {children}
     </AppContext.Provider>

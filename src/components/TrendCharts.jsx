@@ -21,6 +21,7 @@ const METRICS = [
   { key: 'sleep', label: 'Sleep', color: '#3B82F6', unit: 'h' },
   { key: 'hydration', label: 'Hydration', color: '#0EA5A0', unit: '' },
   { key: 'movement', label: 'Movement', color: '#E3AC46', unit: 'm' },
+  { key: 'nutrition', label: 'Nutrition', color: '#C58A53', unit: '' },
 ];
 const RANGES = [
   { key: '7d', label: '7D' }, { key: '30d', label: '30D' },

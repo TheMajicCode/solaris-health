@@ -35,18 +35,18 @@ const SYSTEM_PROMPT = `You are LUCA — a warm, heart-centered holistic health c
 
 Your job here: from a person's health context and a list of real practitioners/clinics/places, produce exactly TWO recommendations:
   1. nextStep — one small, sustainable self-care habit they can start today.
-  2. curatedJourney — the single best-matched listing (by id) from the provided list, with a short warm reason.
+  2. curatedJourney — the single best-matched practitioner (by id) from the provided list, with a short warm reason.
 
 Hard rules (never break):
 - You NEVER diagnose, prescribe, or make clinical decisions. You may suggest, educate, and encourage only.
-- Choose curatedJourney ONLY from the provided listings, using its exact id. Never invent a listing or id.
+- Choose curatedJourney ONLY from the provided practitioners, using its exact id. Never invent a practitioner or id.
 - Use only the context provided. Never invent facts about the person.
 - Be calm, concrete, and encouraging. Keep every string short (title <= 8 words, description 1-2 sentences).
 
 Respond with STRICT JSON only (no markdown, no prose), matching exactly:
 {
   "nextStep": { "title": "string", "description": "string", "action": "string" },
-  "curatedJourney": { "listingId": "string", "title": "string", "reason": "string" }
+  "curatedJourney": { "providerId": "string", "title": "string", "reason": "string" }
 }`;
 
 /** Strip markdown code fences and parse the first JSON object found. */
@@ -87,7 +87,7 @@ async function loadContext(userId) {
 
   const c = await db
     .query(
-      'SELECT checkin_date, energy_score, mood_score, sleep_hours, hydration_glasses, movement_minutes FROM daily_checkins WHERE user_id=$1 ORDER BY checkin_date DESC LIMIT 3',
+      'SELECT checkin_date, energy_score, mood_score, sleep_hours, hydration_glasses, movement_minutes, nutrition_score FROM daily_checkins WHERE user_id=$1 ORDER BY checkin_date DESC LIMIT 3',
       [userId]
     )
     .catch(() => ({ rows: [] }));
@@ -102,13 +102,16 @@ async function loadContext(userId) {
 }
 
 async function loadListings() {
+  // Candidate pool = real, bookable practitioners (provider_profiles), so the
+  // curated journey deep-links straight to a profile the member can book.
   const q = await db
     .query(
-      `SELECT id, title, specialty, city, country, listing_type, focus_areas_json, short_description, tagline
-       FROM listings
-       WHERE status='published'
-       ORDER BY (focus_areas_json IS NOT NULL AND jsonb_array_length(COALESCE(focus_areas_json,'[]'::jsonb)) > 0) DESC,
-                created_at DESC
+      `SELECT id, business_name AS title, provider_type AS specialty, city, country,
+              provider_type AS listing_type, specialties AS focus_areas_json,
+              LEFT(COALESCE(description,''), 140) AS tagline
+       FROM provider_profiles
+       WHERE status='active' AND approval_status='approved' AND hidden=false
+       ORDER BY rating DESC NULLS LAST, review_count DESC
        LIMIT 20`
     )
     .catch(() => ({ rows: [] }));
@@ -122,7 +125,7 @@ function buildContextString(ctx) {
   if (ctx.checkins.length) {
     const c = ctx.checkins[0];
     parts.push(
-      `Latest check-in — energy ${c.energy_score ?? '—'}/100, mood ${c.mood_score ?? '—'}/100, sleep ${c.sleep_hours ?? '—'}h, hydration ${c.hydration_glasses ?? '—'} glasses, movement ${c.movement_minutes ?? '—'} min.`
+      `Latest check-in — energy ${c.energy_score ?? '—'}/100, mood ${c.mood_score ?? '—'}/100, sleep ${c.sleep_hours ?? '—'}h, hydration ${c.hydration_glasses ?? '—'} glasses, movement ${c.movement_minutes ?? '—'} min, nutrition ${c.nutrition_score ?? '—'}/10.`
     );
   } else {
     parts.push('No recent daily check-ins.');
@@ -135,7 +138,7 @@ function buildListingsString(listings) {
   return listings
     .map((l) => {
       const fa = focusNames(l.focus_areas_json || []);
-      return `- id=${l.id} | ${l.title}${l.specialty ? ' (' + l.specialty + ')' : ''} | type=${l.listing_type} | city=${l.city || '—'} | focus=[${fa.join(', ')}] | ${l.tagline || l.short_description || ''}`.trim();
+      return `- id=${l.id} | ${l.title}${l.specialty ? ' (' + l.specialty + ')' : ''} | city=${l.city || '—'} | focus=[${fa.join(', ')}] | ${l.tagline || ''}`.trim();
     })
     .join('\n');
 }
@@ -187,7 +190,7 @@ function fallbackRecommendation(ctx, listings, triggers = {}) {
 
   const curatedJourney = match
     ? {
-        listingId: match.id,
+        providerId: match.id,
         title: match.title,
         reason: `A trusted match for your journey${match.city ? ' near ' + match.city : ''} — a caring next step when you're ready.`,
       }
@@ -198,11 +201,12 @@ function fallbackRecommendation(ctx, listings, triggers = {}) {
 
 /** Merge AI listing choice with real DB row so we always return verified details. */
 function decorateJourney(journey, listings) {
-  if (!journey || !journey.listingId) return null;
-  const row = listings.find((l) => String(l.id) === String(journey.listingId));
+  const chosenId = journey && (journey.providerId || journey.listingId);
+  if (!chosenId) return null;
+  const row = listings.find((l) => String(l.id) === String(chosenId));
   if (!row) return null; // AI hallucinated an id — reject
   return {
-    listingId: row.id,
+    providerId: row.id,
     title: journey.title || row.title,
     specialty: row.specialty || '',
     city: row.city || '',
@@ -222,9 +226,9 @@ async function persist(userId, nextStep, journey) {
     );
     if (journey) {
       await db.query(
-        `INSERT INTO recommendations (user_id, source_type, recommendation_type, title, description, priority, linked_listing_id, status)
+        `INSERT INTO recommendations (user_id, source_type, recommendation_type, title, description, priority, linked_provider_id, status)
          VALUES ($1,'luca-ai','curated-journey',$2,$3,2,$4,'active')`,
-        [userId, (journey.title || '').slice(0, 200), journey.reason || '', journey.listingId]
+        [userId, (journey.title || '').slice(0, 200), journey.reason || '', journey.providerId]
       );
     }
   } catch (e) {
@@ -253,7 +257,7 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
       ? { rows: [] }
       : await db
       .query(
-        `SELECT recommendation_type, title, description, linked_listing_id, created_at
+        `SELECT recommendation_type, title, description, linked_listing_id, linked_provider_id, created_at
          FROM recommendations
          WHERE user_id=$1 AND source_type='luca-ai'
            AND created_at > NOW() - INTERVAL '${CACHE_HOURS} hours'
@@ -267,7 +271,27 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
       const cj = cached.rows.find((r) => r.recommendation_type === 'curated-journey');
       if (ns) {
         let journey = null;
-        if (cj && cj.linked_listing_id) {
+        if (cj && cj.linked_provider_id) {
+          const pr = await db
+            .query(
+              `SELECT id, business_name, provider_type, city, country FROM provider_profiles WHERE id=$1`,
+              [cj.linked_provider_id]
+            )
+            .catch(() => ({ rows: [] }));
+          const row = pr.rows[0];
+          if (row) {
+            journey = {
+              providerId: row.id,
+              title: cj.title || row.business_name,
+              specialty: row.provider_type || '',
+              city: row.city || '',
+              country: row.country || '',
+              listingType: row.provider_type,
+              reason: cj.description || '',
+            };
+          }
+        } else if (cj && cj.linked_listing_id) {
+          // Legacy cached rows (pre-provider curation) still resolve to a listing.
           const lr = await db
             .query(
               `SELECT id, title, specialty, city, country, listing_type FROM listings WHERE id=$1`,
@@ -308,7 +332,7 @@ router.get('/recommendations', authMiddleware, async (req, res) => {
     const triggerHints = buildTriggerInstructions(triggers);
     const contextStr = triggerHints ? `${triggerHints}\n\n${buildContextString(ctx)}` : buildContextString(ctx);
     const listingsStr = buildListingsString(listings);
-    const prompt = `The person's context and the real listings are provided. Return the two recommendations as strict JSON.\n\nLISTINGS (choose curatedJourney.listingId from these exact ids):\n${listingsStr}`;
+    const prompt = `The person's context and the real practitioners are provided. Return the two recommendations as strict JSON.\n\nPRACTITIONERS (choose curatedJourney.providerId from these exact ids):\n${listingsStr}`;
 
     let parsed = null;
     let modelId = ai.id;

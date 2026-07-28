@@ -98,8 +98,8 @@ router.post('/checkins', authMiddleware, async (req, res) => {
     const r = await db.query(
       `INSERT INTO daily_checkins
          (user_id,energy_score,mood_score,sleep_hours,hydration_glasses,movement_minutes,
-          mind_score,body_score,heart_score,spirit_score,notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+          mind_score,body_score,heart_score,spirit_score,notes,nutrition_score,meal_notes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        ON CONFLICT (user_id, checkin_date) DO UPDATE SET
          energy_score=COALESCE(EXCLUDED.energy_score, daily_checkins.energy_score),
          mood_score=COALESCE(EXCLUDED.mood_score, daily_checkins.mood_score),
@@ -110,10 +110,13 @@ router.post('/checkins', authMiddleware, async (req, res) => {
          body_score=COALESCE(EXCLUDED.body_score, daily_checkins.body_score),
          heart_score=COALESCE(EXCLUDED.heart_score, daily_checkins.heart_score),
          spirit_score=COALESCE(EXCLUDED.spirit_score, daily_checkins.spirit_score),
-         notes=COALESCE(EXCLUDED.notes, daily_checkins.notes)
+         notes=COALESCE(EXCLUDED.notes, daily_checkins.notes),
+         nutrition_score=COALESCE(EXCLUDED.nutrition_score, daily_checkins.nutrition_score),
+         meal_notes=COALESCE(EXCLUDED.meal_notes, daily_checkins.meal_notes)
        RETURNING *`,
       [userId, num(b.energyScore), num(b.moodScore), num(b.sleepHours), num(b.hydrationGlasses),
-       num(b.movementMinutes), num(b.mindScore), num(b.bodyScore), num(b.heartScore), num(b.spiritScore), notes]
+       num(b.movementMinutes), num(b.mindScore), num(b.bodyScore), num(b.heartScore), num(b.spiritScore), notes,
+       num(b.nutritionScore), b.mealNotes ? String(b.mealNotes).slice(0, 300) : null]
     );
 
     // Tick any habits the member marked done today
@@ -149,6 +152,115 @@ router.post('/checkins', authMiddleware, async (req, res) => {
 
     const bonusPoints = awards.reduce((s, a) => s + a.points, 0);
     res.status(201).json({ checkin: r.rows[0], currentStreak, longestStreak, awards, pointsAwarded: bonusPoints, wasNew });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
+});
+
+// ---------- GUIDED JOURNEY TASKS ----------
+// Curates today's task list from the member's real health data: daily check-in,
+// hydration/sleep/movement/nutrition signals, active journeys, assessment focus
+// areas, the audio library and bookable practitioners. First task is always the
+// daily check-in; the rest are next-step actions the frontend can execute.
+const JOURNEY_FOCUS = {
+  detox: { type: 'nutritionist', label: 'a nutrition specialist' },
+  heavy_metal: { type: 'doctor', label: 'a functional medicine doctor' },
+  menopause: { type: 'doctor', label: 'a doctor who supports hormonal health' },
+  optimal_health: { type: 'wellness', label: 'a wellness practitioner' },
+  smile: { type: 'doctor', label: 'a holistic dentist or doctor' },
+  thyroid: { type: 'doctor', label: 'a functional medicine doctor' },
+  sugar: { type: 'nutritionist', label: 'a nutrition specialist' },
+  nurture_mama: { type: 'doctor', label: 'a supportive doctor' },
+  your_path: { type: 'wellness', label: 'a wellness practitioner' },
+};
+
+router.get('/tasks', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const [today, journeys, assessment, audio, bookings] = await Promise.all([
+      db.query(`SELECT * FROM daily_checkins WHERE user_id=$1 AND checkin_date=CURRENT_DATE`, [userId]),
+      db.query(`SELECT journey_type FROM member_journeys WHERE user_id=$1 AND status='active' ORDER BY started_at DESC`, [userId]),
+      db.query(`SELECT top_focus_areas_json FROM assessment_responses WHERE user_id=$1 AND completed_at IS NOT NULL ORDER BY completed_at DESC LIMIT 1`, [userId]),
+      db.query(`SELECT id, title, duration_seconds FROM audio_library ORDER BY duration_seconds ASC`),
+      db.query(`SELECT COUNT(*)::int AS n FROM bookings WHERE patient_id=$1 AND status IN ('pending','confirmed') AND booking_date >= CURRENT_DATE`, [userId]).catch(() => ({ rows: [{ n: 0 }] })),
+    ]);
+
+    const c = today.rows[0] || null;
+    const tasks = [];
+
+    // 1. Daily check-in — always first
+    tasks.push({
+      id: 'daily-checkin',
+      label: 'Complete your daily check-in',
+      detail: c ? 'Logged today — update it any time.' : 'Log how your Mind, Body, Heart and Spirit feel today.',
+      done: !!c,
+      action: { type: 'start_checkin', target: null },
+    });
+
+    // 2. Hydration goal (8 glasses)
+    const glasses = c && c.hydration_glasses != null ? Number(c.hydration_glasses) : null;
+    tasks.push({
+      id: 'water-goal',
+      label: 'Drink water to satisfy your daily water goal',
+      detail: glasses != null ? `${glasses} of 8 glasses logged so far.` : 'Aim for 8 glasses — log them in your check-in.',
+      done: glasses != null && glasses >= 8,
+      action: { type: 'start_checkin', target: null },
+    });
+
+    // 3. Breathwork / audio session (shortest track = the breath reset)
+    const breath = audio.rows.find((a) => /breath/i.test(a.title)) || audio.rows[0];
+    if (breath) {
+      tasks.push({
+        id: 'breathwork',
+        label: 'Take a guided breathwork session',
+        detail: `${breath.title} · ${Math.round(breath.duration_seconds / 60)} min`,
+        done: false,
+        action: { type: 'play_audio', target: breath.id },
+      });
+    }
+
+    // 4. Movement — a walk or gentle run
+    const moved = c && c.movement_minutes != null ? Number(c.movement_minutes) : null;
+    tasks.push({
+      id: 'movement',
+      label: 'Move for 20 minutes — a walk or gentle run',
+      detail: moved != null ? `${moved} minutes logged today.` : 'Log your movement minutes in your check-in.',
+      done: moved != null && moved >= 20,
+      action: { type: 'start_checkin', target: null },
+    });
+
+    // 5. Sleep wind-down when last night was short
+    const slept = c && c.sleep_hours != null ? Number(c.sleep_hours) : null;
+    if (slept != null && slept < 7) {
+      const wind = audio.rows.find((a) => /wind-down|evening/i.test(a.title));
+      tasks.push({
+        id: 'wind-down',
+        label: 'Wind down earlier tonight',
+        detail: `You logged ${slept}h of sleep — an evening session can help.`,
+        done: false,
+        action: wind ? { type: 'play_audio', target: wind.id } : { type: 'navigate', target: 'media' },
+      });
+    }
+
+    // 6. Connect with a practitioner matched to journey / assessment focus
+    const journeyType = journeys.rows[0] ? journeys.rows[0].journey_type : null;
+    const focus = JOURNEY_FOCUS[journeyType] || { type: 'wellness', label: 'a wellness practitioner' };
+    const provider = await db.query(
+      `SELECT id, business_name FROM provider_profiles
+       WHERE status='active' AND approval_status='approved' AND hidden=false AND provider_type=$1
+       ORDER BY rating DESC NULLS LAST LIMIT 1`, [focus.type]);
+    const hasBooking = Number(bookings.rows[0] && bookings.rows[0].n) > 0;
+    if (provider.rows[0]) {
+      tasks.push({
+        id: 'book-specialist',
+        label: `Connect with ${focus.label}`,
+        detail: hasBooking ? 'You have an upcoming booking — see you there.' : `${provider.rows[0].business_name} is a great match for your journey.`,
+        done: hasBooking,
+        action: { type: 'open_listing', target: provider.rows[0].id },
+      });
+    }
+
+    let focusAreas = [];
+    try { focusAreas = assessment.rows[0] ? assessment.rows[0].top_focus_areas_json || [] : []; } catch (e) { /* noop */ }
+    res.json({ tasks, journeyType, focusAreas, checkedInToday: !!c });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 

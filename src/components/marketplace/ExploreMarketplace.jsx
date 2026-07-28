@@ -29,7 +29,7 @@ const JOURNEY_OFFERS = [
 ];
 
 export default function ExploreMarketplace({ user, onBecomeProvider }) {
-  const { exploreFilter, setExploreFilter, setTab } = useApp() || {};
+  const { exploreFilter, setExploreFilter, setTab, pendingProviderId, setPendingProviderId, pendingCurate, setPendingCurate } = useApp() || {};
 
   // ── Guided journeys ──
   const [startingJourney, setStartingJourney] = useState('');
@@ -38,8 +38,11 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
     setStartingJourney(journeyType);
     try {
       await api.startJourney(journeyType);
-      toast.success('Journey started! Find it on your dashboard.');
-      setTab?.('dashboard');
+      toast.success('Journey started! Your guided tasks are waiting in your Health Passport.');
+      // Navigate the whole app shell (its visible tab is local state, so we
+      // broadcast a navigation event the shell listens for).
+      window.dispatchEvent(new CustomEvent('solaris:navigate', { detail: { tab: 'health' } }));
+      setTab?.('health');
     } catch (e) {
       toast.error(e?.message || 'Could not start that journey — try again shortly.');
     } finally {
@@ -58,6 +61,15 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [exploreFilter]);
 
+  // Deep-link: another surface (LUCA chip, guided-journey task, recommendation)
+  // asked us to open a specific practitioner's profile.
+  useEffect(() => {
+    if (!pendingProviderId) return;
+    setOpenId(pendingProviderId);
+    setPendingProviderId?.(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingProviderId]);
+
   // ── LUCA "Curate for me" recommendations rail ──
   const [curated, setCurated] = useState(null);   // { nextStep, curatedJourney }
   const [curating, setCurating] = useState(false);
@@ -72,6 +84,14 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
       setCurated(null);
     } finally { setCurating(false); }
   }, []);
+
+  // Deep-link: a LUCA "curate" chip asked us to run Curate-for-me on arrival.
+  useEffect(() => {
+    if (!pendingCurate) return;
+    setPendingCurate?.(false);
+    curateForMe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingCurate]);
 
   const [query, setQuery] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
@@ -219,14 +239,19 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
                   <button
                     className="exm-cc-btn"
                     onClick={() => {
-                      // Surface related providers for this journey (the journey itself lives in
-                      // the listings catalogue; we search the marketplace for a matching provider).
-                      const q = curated.curatedJourney.specialty || curated.curatedJourney.title || '';
-                      setQuery(q);
+                      // Deep-link straight to the recommended practitioner's profile
+                      // (bookable), falling back to a marketplace search for legacy
+                      // listing-based recommendations.
+                      if (curated.curatedJourney.providerId) {
+                        setOpenId(curated.curatedJourney.providerId);
+                      } else {
+                        const q = curated.curatedJourney.specialty || curated.curatedJourney.title || '';
+                        setQuery(q);
+                      }
                       setCurateOpen(false);
                     }}
                   >
-                    {curated.curatedJourney.listingType === 'diagnostic' ? 'Find & book' : 'Explore related'} <ArrowRight size={14} />
+                    {curated.curatedJourney.providerId ? 'View & book' : 'Explore related'} <ArrowRight size={14} />
                   </button>
                 </div>
               )}

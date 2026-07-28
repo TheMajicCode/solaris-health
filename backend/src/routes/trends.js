@@ -46,7 +46,7 @@ async function gatherVitals(userId, range) {
 
   const r = await db.query(
     `SELECT checkin_date, energy_score, mood_score, sleep_hours,
-            hydration_glasses, movement_minutes
+            hydration_glasses, movement_minutes, nutrition_score
        FROM daily_checkins
       WHERE ${where}
       ORDER BY checkin_date ASC`,
@@ -60,6 +60,7 @@ async function gatherVitals(userId, range) {
     sleep: row.sleep_hours != null ? Number(row.sleep_hours) : null,
     hydration: row.hydration_glasses,
     movement: row.movement_minutes,
+    nutrition: row.nutrition_score,
   }));
 
   // Vitality score series from assessments
@@ -89,6 +90,7 @@ async function gatherVitals(userId, range) {
     sleep: statsFor(points.map((p) => p.sleep)),
     hydration: statsFor(points.map((p) => p.hydration)),
     movement: statsFor(points.map((p) => p.movement)),
+    nutrition: statsFor(points.map((p) => p.nutrition)),
     vitality: statsFor(vitality.map((p) => p.vitality)),
   };
 

@@ -63,6 +63,9 @@ const WORKSHOPS = [
 async function reset() {
   // Clear Solaris tables for idempotent re-seed (keep users we manage by email)
   await db.query('TRUNCATE assessment_answers, body_system_scores, aspect_scores, assessment_responses, assessment_questions, assessment_templates, recommendations, booking_requests, daily_checkins, documents, habit_plans, luca_messages RESTART IDENTITY CASCADE');
+  // practitioner_profiles.listing_id references listings — detach before clearing,
+  // otherwise the FK aborts the seed and leaves assessment templates empty.
+  await db.query("UPDATE practitioner_profiles SET listing_id = NULL WHERE listing_id IS NOT NULL");
   await db.query("DELETE FROM listings");
 }
 
