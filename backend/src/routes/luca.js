@@ -23,7 +23,7 @@ const { getAIProvider } = require('../lib/ai');
 const { recordAIReceipt } = require('../lib/ai/receipts');
 const { redactForExternalAI, isExternalProvider } = require('../lib/phi-boundary');
 const { checkCapability, recordGrantUse } = require('../lib/agent-authority');
-const { computeTriggers, buildTriggerInstructions } = require('../lib/luca-triggers');
+const { computeTriggers, buildTriggerInstructions, buildTriggerSuggestions } = require('../lib/luca-triggers');
 const { MILESTONE_DEFS_COUNT } = require('./journeys');
 
 // Warm labels for journey types (kept in sync with the frontend).
@@ -493,8 +493,12 @@ router.post('/messages', authMiddleware, async (req, res) => {
       }
       return sug;
     });
-    // Always surface exactly 3 agentic chips: pad with defaults the member hasn't seen.
-    for (const d of DEFAULT_SUGGESTIONS) {
+    // Always surface exactly 3 agentic chips. Pad first with RULE-DERIVED
+    // suggestions (A1 §6 — the same fired rules that drive the dashboard cards),
+    // then with static defaults, so fallback chips reflect what the member
+    // actually needs next rather than generic prompts.
+    const ruleFallbacks = buildTriggerSuggestions(triggers);
+    for (const d of [...ruleFallbacks, ...DEFAULT_SUGGESTIONS]) {
       if (suggestions.length >= 3) break;
       if (!suggestions.some((sug) => sug.action === d.action && sug.label === d.label)) suggestions.push(d);
     }

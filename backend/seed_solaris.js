@@ -201,8 +201,48 @@ async function seedSampleResult(userId, templateId) {
   }
 }
 
+// --- Scoped reset for a single member (M2: `seed:reset -- --email=<email>`) ---
+// Wipes ONLY that member's journey data (check-ins, chat, assessment result,
+// recommendations, pending bookings, habit plans, docs) and reseeds a fresh
+// sample result against the active template. Keeps the user row and every other
+// member's data intact — safe to run against the live demo without a full wipe.
+function parseEmailArg() {
+  const arg = process.argv.find((a) => a.startsWith('--email='));
+  return arg ? arg.split('=')[1].trim().toLowerCase() : null;
+}
+
+async function resetMember(email) {
+  const u = await db.query('SELECT id, first_name, last_name FROM users WHERE lower(email)=lower($1)', [email]);
+  if (!u.rows.length) throw new Error(`No member found with email: ${email}`);
+  const userId = u.rows[0].id;
+
+  // Ensure an active template exists to reseed against (bootstrap if the DB is empty).
+  let t = await db.query("SELECT id FROM assessment_templates WHERE status='active' ORDER BY id DESC LIMIT 1");
+  let tid = t.rows.length ? t.rows[0].id : await seedTemplate();
+
+  // Delete this member's derived/journey rows. Children of assessment_responses
+  // (body_system_scores, aspect_scores) also carry user_id, so clear them directly.
+  const perUser = [
+    'body_system_scores', 'aspect_scores', 'recommendations', 'assessment_responses',
+    'daily_checkins', 'luca_messages', 'booking_requests', 'habit_plans', 'documents',
+  ];
+  for (const tbl of perUser) {
+    await db.query(`DELETE FROM ${tbl} WHERE user_id=$1`, [userId]).catch((e) => {
+      console.warn(`  (skip ${tbl}: ${e.message})`);
+    });
+  }
+  await seedSampleResult(userId, tid);
+  console.log(`✓ Reset member ${email} (id=${userId}) — fresh assessment + 7-day check-ins seeded.`);
+}
+
 (async () => {
   try {
+    const email = parseEmailArg();
+    if (email) {
+      console.log(`Scoped reset for single member: ${email}`);
+      await resetMember(email);
+      process.exit(0);
+    }
     console.log('Resetting Solaris tables...');
     await reset();
     console.log('Seeding users...');

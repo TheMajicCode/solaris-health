@@ -160,4 +160,41 @@ function buildTriggerInstructions(t) {
   );
 }
 
-module.exports = { computeTriggers, buildTriggerInstructions };
+/**
+ * Deterministic typed suggestions derived from the SAME fired rules (A1 §6).
+ * Used as the fallback chips when the model returns no suggestions, and by the
+ * recommendations endpoint for the dashboard cards — so rules, not prose, decide
+ * WHAT to surface. Ordered by priority; caller slices to the 3 it needs.
+ * Every action value is from the typed enum in A1 §5.
+ */
+function buildTriggerSuggestions(t) {
+  const out = [];
+  if (t.onboardingIncomplete) {
+    out.push({ label: 'Complete my Solaris intake', action: 'start_assessment', target: null });
+  }
+  if (t.daysSinceCheckin == null || t.daysSinceCheckin >= 3) {
+    out.push({ label: "Log how you're feeling today", action: 'start_checkin', target: null });
+  }
+  if (t.vitality > 0 && t.vitality < 60) {
+    out.push({ label: 'Show me a curated journey', action: 'curate', target: null });
+  }
+  if (t.noAudioUnlocked && t.hasMentionedStress) {
+    out.push({ label: 'Play a calming practice', action: 'play_audio', target: null });
+  }
+  if (t.daysSinceBooking == null || (t.daysSinceBooking != null && t.daysSinceBooking >= 30)) {
+    out.push({ label: 'Talk to a practitioner', action: 'curate', target: null });
+  }
+  if (t.streakDays >= 3) {
+    out.push({ label: `Keep my ${t.streakDays}-day streak alive`, action: 'start_checkin', target: null });
+  }
+  // De-dupe by action+label, preserve priority order.
+  const seen = new Set();
+  return out.filter((s) => {
+    const k = s.action + '|' + s.label;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+module.exports = { computeTriggers, buildTriggerInstructions, buildTriggerSuggestions };
