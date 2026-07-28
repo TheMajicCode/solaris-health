@@ -40,6 +40,7 @@ const organizationsRoutes = require('./routes/organizations');
 const paymentsSimRoutes = require('./routes/payments-sim');
 const lucaContextRoutes = require('./routes/luca-context');
 const lucaRecommendationsRoutes = require('./routes/luca-recommendations');
+const intelligenceRoutes = require('./routes/intelligence');
 const leaderboardRoutes = require('./routes/leaderboard');
 const contributionEventsRoutes = require('./routes/contribution-events');
 const appointmentsRoutes = require('./routes/appointments');
@@ -257,6 +258,7 @@ app.use('/api/audio', audioRoutes);
 app.use('/api/health-documents', healthDocumentsRoutes);
 app.use('/api/public', publicRoutes); // public practitioner directory (no auth)
 app.use('/api/intake', intakeRoutes); // new-patient intake forms + patient inbox
+app.use('/api/intelligence', intelligenceRoutes); // Intelligence section (spec A3): natural/artificial/enhanced + source exclusions
 
 // Structured error handler (must be the last middleware). Emits a single JSON
 // log line per error so it can be parsed by log aggregators, and returns a safe

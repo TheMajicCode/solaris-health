@@ -474,6 +474,13 @@ class ApiClient {
   getInbox() { return this.request('/intake/inbox'); }
   getInboxUnreadCount() { return this.request('/intake/inbox/unread-count'); }
   markInboxRead(id) { return this.request(`/intake/inbox/${id}/read`, { method: 'PUT', body: JSON.stringify({}) }); }
+
+  // ---- Intelligence section (spec A3): natural/artificial/enhanced + source toggles ----
+  getIntelligenceContext() { return this.request('/intelligence/context'); }
+  getIntelligenceExclusions() { return this.request('/intelligence/exclusions'); }
+  setIntelligenceExclusion(source, excluded) {
+    return this.request('/intelligence/exclusions', { method: 'PUT', body: JSON.stringify({ source, excluded }) });
+  }
 }
 
 export const api = new ApiClient();

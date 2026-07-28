@@ -24,6 +24,8 @@ const { recordAIReceipt } = require('../lib/ai/receipts');
 const { redactForExternalAI, isExternalProvider } = require('../lib/phi-boundary');
 const { checkCapability, recordGrantUse } = require('../lib/agent-authority');
 const { computeTriggers, buildTriggerInstructions, buildTriggerSuggestions } = require('../lib/luca-triggers');
+const { getFoundational } = require('../lib/foundational');
+const { getExclusions } = require('../lib/intelligence');
 const { MILESTONE_DEFS_COUNT } = require('./journeys');
 
 // Warm labels for journey types (kept in sync with the frontend).
@@ -131,7 +133,21 @@ Write labels from the USER's point of view (what they'd tap). The "reply" value 
 async function buildContext(userId, collector = {}) {
   const parts = [];
 
-  // User basics
+  // A member may switch off any context source (spec A3 — Artificial pane).
+  // `collector.excluded` is a Set of source keys; absence = included. We record
+  // every excludable source we consulted into `collector.sources` (key, label,
+  // count, included) so the Intelligence tab can show *exactly* what LUCA saw
+  // this turn — never hardcoded. `emit` pushes text to the prompt only when the
+  // source is included, but always records the source + its record count.
+  const excluded = collector.excluded instanceof Set ? collector.excluded : new Set();
+  collector.sources = [];
+  const emit = (key, label, count, text) => {
+    const included = !excluded.has(key);
+    collector.sources.push({ key, label, count, included });
+    if (included && text) parts.push(text);
+  };
+
+  // User basics — always on (not PHI, needed to address the member at all).
   const user = await db.query(
     'SELECT first_name, full_name, email, love_points, current_phase FROM users WHERE id=$1',
     [userId]
@@ -140,6 +156,21 @@ async function buildContext(userId, collector = {}) {
     const u = user.rows[0];
     parts.push(`User: ${u.full_name || u.first_name || 'Member'} (${u.email})`);
     parts.push(`LOVE Points: ${u.love_points || 0} | Phase: ${u.current_phase || 'active'}`);
+  }
+
+  // Foundational health profile (spec A5 Part A @ L2) — self-reported baseline.
+  const foundational = await getFoundational(db, userId).catch(() => null);
+  if (foundational && foundational.data && Object.keys(foundational.data).length) {
+    const fd = foundational.data;
+    const keys = Object.keys(fd).filter((k) => fd[k] != null && fd[k] !== '');
+    const summary = keys.slice(0, 10).map((k) => {
+      const v = Array.isArray(fd[k]) ? fd[k].join(', ') : fd[k];
+      return `  • ${k}: ${v}`;
+    }).join('\n');
+    emit('foundational', 'Foundational health profile', keys.length,
+      `\n[PASSPORT CONTEXT — FOUNDATIONAL HEALTH PROFILE (self-reported, L${foundational.level ?? 2})]\nLast updated ${foundational.observedAt ? new Date(foundational.observedAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'unknown'}.\n${summary}`);
+  } else {
+    emit('foundational', 'Foundational health profile', 0, null);
   }
 
   // Latest assessment
@@ -155,13 +186,13 @@ async function buildContext(userId, collector = {}) {
       if (typeof f === 'string') return f;
       return `${f.name}${typeof f.score === 'number' ? ` (score: ${f.score})` : ''}`;
     }).join(', ');
-    parts.push(`\n[PASSPORT CONTEXT — VITALITY ASSESSMENT]
+    emit('assessment', 'Vitality assessment', 1, `\n[PASSPORT CONTEXT — VITALITY ASSESSMENT]
 Vitality Score: ${a.vitality_score}/100
 Mental: ${a.mental_score || '—'} | Physical: ${a.physical_score || '—'} | Emotional: ${a.emotional_score || '—'} | Spiritual: ${a.spiritual_score || '—'}
 Top Focus Areas: ${focus || 'not specified'}
 Last assessed: ${a.completed_at ? new Date(a.completed_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'unknown'}`);
   } else {
-    parts.push('\n[PASSPORT CONTEXT — VITALITY ASSESSMENT]\nNot completed yet. Encourage completing the Solaris Method assessment to unlock their vitality score and focus areas.');
+    emit('assessment', 'Vitality assessment', 0, '\n[PASSPORT CONTEXT — VITALITY ASSESSMENT]\nNot completed yet. Encourage completing the Solaris Method assessment to unlock their vitality score and focus areas.');
   }
 
   // Last 7 daily check-ins
@@ -176,11 +207,11 @@ Last assessed: ${a.completed_at ? new Date(a.completed_at).toLocaleDateString('e
     const avgMood = Math.round(rows.reduce((s, r) => s + (r.mood_score || 0), 0) / rows.length);
     const avgSleep = (rows.reduce((s, r) => s + parseFloat(r.sleep_hours || 0), 0) / rows.length).toFixed(1);
     const latest = rows[0];
-    parts.push(`\n[PASSPORT CONTEXT — DAILY CHECK-INS (last ${rows.length} days)]
+    emit('checkins', 'Daily check-ins', rows.length, `\n[PASSPORT CONTEXT — DAILY CHECK-INS (last ${rows.length} days)]
 Latest (${new Date(latest.checkin_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}): Energy ${latest.energy_score}/100, Mood ${latest.mood_score}/100, Sleep ${parseFloat(latest.sleep_hours || 0).toFixed(1)}h, Hydration ${latest.hydration_glasses} glasses, Movement ${latest.movement_minutes}min, Nutrition ${latest.nutrition_score != null ? `${latest.nutrition_score}/10` : '—'}
 7-day averages: Energy ${avgEnergy}/100, Mood ${avgMood}/100, Sleep ${avgSleep}h`);
   } else {
-    parts.push('\n[PASSPORT CONTEXT — DAILY CHECK-INS]\nNo check-ins logged yet. Encourage them to start their first check-in from the Health Passport.');
+    emit('checkins', 'Daily check-ins', 0, '\n[PASSPORT CONTEXT — DAILY CHECK-INS]\nNo check-ins logged yet. Encourage them to start their first check-in from the Health Passport.');
   }
 
   // Recent bookings (last 3) — booking_requests.user_id is the patient; date col is preferred_date
@@ -195,7 +226,9 @@ Latest (${new Date(latest.checkin_date).toLocaleDateString('en-US', { weekday: '
     const blist = bookings.rows.map((b) =>
       `  • ${b.service_title} — ${b.preferred_date ? new Date(b.preferred_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'TBD'} (${b.status})`
     ).join('\n');
-    parts.push(`\n[PASSPORT CONTEXT — RECENT BOOKINGS]\n${blist}`);
+    emit('bookings', 'Recent bookings', bookings.rows.length, `\n[PASSPORT CONTEXT — RECENT BOOKINGS]\n${blist}`);
+  } else {
+    emit('bookings', 'Recent bookings', 0, null);
   }
 
   // Reward events (last 5)
@@ -205,7 +238,9 @@ Latest (${new Date(latest.checkin_date).toLocaleDateString('en-US', { weekday: '
   );
   if (rewards.rows.length) {
     const rlist = rewards.rows.map((r) => `  • ${r.note || r.event_type}: +${r.points} LOVE`).join('\n');
-    parts.push(`\n[PASSPORT CONTEXT — RECENT REWARDS]\n${rlist}`);
+    emit('rewards', 'LOVE rewards', rewards.rows.length, `\n[PASSPORT CONTEXT — RECENT REWARDS]\n${rlist}`);
+  } else {
+    emit('rewards', 'LOVE rewards', 0, null);
   }
 
   // Recent journal entries (last 3) — journal_entries has mood, content, created_at
@@ -226,9 +261,11 @@ Latest (${new Date(latest.checkin_date).toLocaleDateString('en-US', { weekday: '
         return `  • ${when}${e.mood ? ` (feeling ${e.mood})` : ''}: ${snippet}`;
       })
       .join('\n');
-    parts.push(
+    emit('journal', 'Journal entries', journal.rows.length,
       `\n[PASSPORT CONTEXT — RECENT JOURNAL ENTRIES]\nUse these gently for emotional attunement; do not quote them back verbatim unless the member raises them.\n${jlist}`
     );
+  } else {
+    emit('journal', 'Journal entries', 0, null);
   }
 
   // Check-in streak (consecutive days ending today or yesterday)
@@ -294,7 +331,9 @@ Latest (${new Date(latest.checkin_date).toLocaleDateString('en-US', { weekday: '
         .join('\n');
       lines.push(`Active habits (last 7 days):\n${hlist}`);
     }
-    parts.push(`\n[PASSPORT CONTEXT — HABITS & STREAK]\n${lines.join('\n')}`);
+    emit('habits', 'Habits & streak', habits.rows.length, `\n[PASSPORT CONTEXT — HABITS & STREAK]\n${lines.join('\n')}`);
+  } else {
+    emit('habits', 'Habits & streak', 0, null);
   }
 
   // Active journeys — the guided program(s) the member is walking.
@@ -317,11 +356,13 @@ Latest (${new Date(latest.checkin_date).toLocaleDateString('en-US', { weekday: '
         j.started_at
       ).toLocaleDateString()})`;
     });
-    parts.push(
+    emit('journeys', 'Active journeys', journeyRes.rows.length,
       `\n[PASSPORT CONTEXT — ACTIVE JOURNEY]\n${jlines.join(
         '\n'
       )}\nGently encourage progress toward the next milestone when it feels natural.`
     );
+  } else {
+    emit('journeys', 'Active journeys', 0, null);
   }
 
   // Practitioner directory — real bookable practitioners LUCA may deep-link to.
@@ -454,8 +495,10 @@ router.post('/messages', authMiddleware, async (req, res) => {
     // 1. Persist user message
     await db.query('INSERT INTO luca_messages (user_id, role, content) VALUES ($1,$2,$3)', [userId, 'user', content]);
 
-    // 2. Build rich health context + per-call rule-engine triggers
-    const ctxCollector = {};
+    // 2. Build rich health context + per-call rule-engine triggers.
+    //    Honor the member's source-exclusion toggles (spec A3): any source they
+    //    switched off is dropped from the context LUCA sees this turn.
+    const ctxCollector = { excluded: await getExclusions(db, userId).catch(() => new Set()) };
     const passportContext = await buildContext(userId, ctxCollector);
     const triggers = await computeTriggers(userId, content);
     console.log('[LUCA triggers]', userId, Object.keys(triggers)); // keys only — never trigger values (health-derived)
@@ -627,4 +670,8 @@ router.post('/tts', authMiddleware, ttsLimiter, async (req, res) => {
   }
 });
 
+// Expose buildContext so the Intelligence section (spec A3, Artificial pane)
+// can compute *exactly* what LUCA would see this turn — same code path, no
+// hardcoding. Attached to the router export to keep a single import site.
+router.buildContext = buildContext;
 module.exports = router;

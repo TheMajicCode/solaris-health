@@ -551,6 +551,7 @@ function navForRole(role, isProvider) {
       group: 'Salud', color: '#36C9A9', items: [
         { id: 'health', label: 'Health Passport', icon: HeartPulse },
         { id: 'coach', label: 'LUCA Coach', icon: Bot },
+        { id: 'intelligence', label: 'Intelligence', icon: Brain },
         { id: 'journal', label: 'Journal', icon: BookOpen },
         { id: 'media', label: 'Media', icon: Headphones },
         { id: 'inbox', label: 'Inbox', icon: Inbox, badgeKey: 'inbox' },
@@ -667,6 +668,7 @@ const TAB_META = {
   timeline: { title: 'Health Timeline', sub: 'Your complete health journey and trends — chronological and exportable.' },
   systimeline: { title: 'System Timeline', sub: 'Platform-wide activity, sign-ups, and usage patterns over time.' },
   coach: { title: 'LUCA Coach', sub: 'Heart-Centered Intelligence — a guide, never a diagnosis.' },
+  intelligence: { title: 'Intelligence', sub: 'The mind working for you — what you know, what LUCA can see, and the insight it draws. Fully in your control.' },
   journal: { title: 'Journal', sub: 'A private space to reflect. Capture how you feel, notice patterns, own your story.' },
   media: { title: 'Media Library', sub: 'Guided audio practices from Solaris practitioners — yours to keep and revisit.' },
   appointments: { title: 'Appointments', sub: 'Book care and track your visits across the Solaris network.' },
@@ -2061,6 +2063,271 @@ const LucaAvatar = ({ size = 'md' }) => (
     <Bot size={size === 'lg' ? 34 : size === 'sm' ? 16 : 22} color="#DAF3EC" strokeWidth={2} />
   </div>
 );
+
+/* ============================ INTELLIGENCE (spec A3) ============================
+ * The honest window onto the mind working for the member. Three panes:
+ *   Natural    — what the member knows / is, on shelves (source·level·date).
+ *   Artificial — what LUCA can actually see now (real sources + counts), the
+ *                never-list, the model + compute of the last call, the rules
+ *                firing this turn, recent actions, and source toggles the member
+ *                controls. No raw PHI ever — counts / labels / names only.
+ *   Enhanced   — hedged, sourced insight cards. Every card shows source·date·level.
+ */
+const SHELF_ORDER = ['Principles', 'Canon', 'Log', 'Decisions', 'Evolution', 'Inventory', 'Open questions'];
+const SHELF_HINT = {
+  Principles: 'What matters most to you right now',
+  Canon: 'Your foundational, carried across every practitioner',
+  Log: 'What you’ve recorded over time',
+  Decisions: 'The care choices you’ve made',
+  Evolution: 'How you’re growing',
+  Inventory: 'Documents & evidence you hold',
+  'Open questions': 'What would deepen the picture',
+};
+
+function SourceRow({ s, onToggle, busy }) {
+  const on = s.included;
+  return (
+    <div className="between" style={{ gap: 10, padding: '7px 0', borderBottom: '1px solid var(--line,#eef3f1)' }}>
+      <div style={{ minWidth: 0 }}>
+        <div className="small" style={{ color: 'var(--ink)', fontWeight: 600 }}>{s.label}</div>
+        <div className="tiny muted">{s.count} record{s.count === 1 ? '' : 's'}{s.included ? '' : ' · switched off'}</div>
+      </div>
+      {s.excludable ? (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => onToggle(s.key, on)}
+          aria-pressed={on}
+          title={on ? 'LUCA can read this — tap to switch off' : 'Switched off — tap to let LUCA read it again'}
+          style={{
+            flex: 'none', width: 42, height: 24, borderRadius: 999, border: 'none', cursor: busy ? 'default' : 'pointer',
+            background: on ? '#2DB584' : '#CBD5D1', position: 'relative', transition: 'background .18s ease', opacity: busy ? 0.6 : 1,
+          }}>
+          <span style={{
+            position: 'absolute', top: 2, left: on ? 20 : 2, width: 20, height: 20, borderRadius: '50%',
+            background: '#fff', transition: 'left .18s ease', boxShadow: '0 1px 2px rgba(0,0,0,.2)',
+          }} />
+        </button>
+      ) : (
+        <span className="tiny" style={{ flex: 'none', color: '#6b807a', background: '#EDEFF2', padding: '2px 8px', borderRadius: 999 }}>always on</span>
+      )}
+    </div>
+  );
+}
+
+function IntelligencePage({ user, go }) {
+  const [data, setData] = useState(undefined);
+  const [busyKey, setBusyKey] = useState('');
+  const [err, setErr] = useState('');
+
+  const load = useCallback(() => {
+    api.getIntelligenceContext()
+      .then((r) => setData(r))
+      .catch(() => { setErr('Could not load your Intelligence view just now.'); setData(null); });
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const toggle = async (key, currentlyIncluded) => {
+    setBusyKey(key);
+    try {
+      // currentlyIncluded=true means the member is switching it OFF (excluded=true).
+      await api.setIntelligenceExclusion(key, currentlyIncluded);
+      // Optimistic refresh so the Artificial pane reflects the new reality.
+      await new Promise((res) => setTimeout(res, 120));
+      load();
+    } catch {
+      setErr('Could not update that setting. Please try again.');
+    } finally {
+      setBusyKey('');
+    }
+  };
+
+  if (data === undefined) return <div style={{ maxWidth: 1080, margin: '0 auto' }}><CardSkeleton rows={5} /></div>;
+  if (data === null) return (
+    <div style={{ maxWidth: 1080, margin: '0 auto' }}>
+      <Card><Empty icon={Brain} title="Intelligence" sub={err || 'Nothing to show yet — as you use your Passport, this view fills in.'} /></Card>
+    </div>
+  );
+
+  const { natural = [], artificial = {}, enhanced = [] } = data;
+  const shelves = SHELF_ORDER
+    .map((name) => ({ name, items: natural.filter((n) => n.shelf === name) }))
+    .filter((g) => g.items.length);
+
+  return (
+    <div style={{ maxWidth: 1080, margin: '0 auto' }}>
+      {err && <div className="small" style={{ color: '#B4462E', marginBottom: 10 }}>{err}</div>}
+
+      {/* Two equal panes: Natural + Artificial */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16, alignItems: 'start' }}>
+
+        {/* ---------------- NATURAL ---------------- */}
+        <Card>
+          <SectionHead eyebrow="Natural" title="What you know & are"
+            action={<Pill tone="mint" icon={Leaf}>Yours</Pill>} />
+          {!shelves.length ? (
+            <Empty icon={Leaf} title="Your shelves are waiting"
+              sub="Complete your intake, log a check-in, or add a note — everything you record appears here, on your own shelves." />
+          ) : (
+            <div className="col" style={{ gap: 16 }}>
+              {shelves.map((g) => (
+                <div key={g.name}>
+                  <div className="tiny f6" style={{ letterSpacing: '.08em', textTransform: 'uppercase', color: '#0A2B29', marginBottom: 2 }}>{g.name}</div>
+                  <div className="tiny muted" style={{ marginBottom: 6 }}>{SHELF_HINT[g.name]}</div>
+                  {g.items.map((it, i) => (
+                    <div key={i} style={{ padding: '7px 0', borderBottom: '1px solid var(--line,#eef3f1)' }}>
+                      <div className="between" style={{ gap: 8 }}>
+                        <span className="small" style={{ color: 'var(--ink)', fontWeight: 600 }}>{it.title}</span>
+                        {it.level != null && <ProvenanceBadge level={it.level} />}
+                      </div>
+                      <div className="tiny muted" style={{ marginTop: 2 }}>{it.detail}</div>
+                      <div className="tiny" style={{ marginTop: 3, color: '#8AA09C' }}>
+                        {it.source ? `source: ${it.source}` : ''}{it.observedAt ? ` · ${fmtShort(it.observedAt)}` : ''}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        {/* ---------------- ARTIFICIAL ---------------- */}
+        <Card>
+          <SectionHead eyebrow="Artificial" title="What LUCA can see now"
+            action={<Pill tone="gray" icon={Eye}>Live</Pill>} />
+          <div className="tiny muted" style={{ marginBottom: 10 }}>
+            Exactly the sources LUCA reads on your behalf this moment — counts only, never the contents. Switch any off and LUCA stops reading it on your next message.
+          </div>
+
+          <div className="col" style={{ gap: 0 }}>
+            {(artificial.sources || []).map((s) => (
+              <SourceRow key={s.key} s={s} onToggle={toggle} busy={busyKey === s.key} />
+            ))}
+          </div>
+
+          {/* Last real AI call */}
+          {artificial.lastCall && (
+            <div style={{ marginTop: 14, padding: 11, borderRadius: 10, background: '#F4F8F6' }}>
+              <div className="tiny f6" style={{ letterSpacing: '.08em', textTransform: 'uppercase', color: '#0A2B29', marginBottom: 4 }}>Last request</div>
+              <div className="tiny" style={{ color: '#59636E' }}>
+                model <b style={{ color: '#0A2B29' }}>{artificial.lastCall.model}</b> · {artificial.lastCall.computeTarget}
+                {artificial.lastCall.latencyMs != null ? ` · ${artificial.lastCall.latencyMs}ms` : ''}
+                {artificial.lastCall.degraded ? ' · degraded' : ''}
+                {artificial.lastCall.at ? ` · ${fmtShort(artificial.lastCall.at)}` : ''}
+              </div>
+            </div>
+          )}
+
+          {/* Firing rules this turn */}
+          {(artificial.firingRules || []).length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <div className="tiny f6" style={{ letterSpacing: '.08em', textTransform: 'uppercase', color: '#0A2B29', marginBottom: 6 }}>Rules firing now</div>
+              {artificial.firingRules.map((r) => (
+                <div key={r.id} className="tiny" style={{ padding: '4px 0', color: '#59636E' }}>
+                  <b style={{ color: '#0A2B29' }}>{r.label}</b> — {r.because}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Recent actions */}
+          {(artificial.recentActions || []).length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <div className="tiny f6" style={{ letterSpacing: '.08em', textTransform: 'uppercase', color: '#0A2B29', marginBottom: 6 }}>Recent actions</div>
+              {artificial.recentActions.slice(0, 5).map((a, i) => (
+                <div key={i} className="tiny muted" style={{ padding: '3px 0' }}>
+                  {a.event} · {a.computeTarget}{a.degraded ? ' · degraded' : ''} · {fmtShort(a.at)}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Never-list */}
+          <div style={{ marginTop: 14, padding: 11, borderRadius: 10, border: '1px solid #F0DAD2', background: '#FBF3F0' }}>
+            <div className="tiny f6" style={{ letterSpacing: '.08em', textTransform: 'uppercase', color: '#8A3E28', marginBottom: 6 }}>LUCA can never see</div>
+            {(artificial.neverList || []).map((n, i) => (
+              <div key={i} className="tiny" style={{ padding: '3px 0', color: '#8A5347' }}>• {n}</div>
+            ))}
+          </div>
+        </Card>
+      </div>
+
+      {/* ---------------- ENHANCED (wide) ---------------- */}
+      <div style={{ marginTop: 16 }}>
+        <Card>
+          <SectionHead eyebrow="Enhanced" title="Insight LUCA draws"
+            action={<Pill tone="gold" icon={Sparkles}>Hedged & sourced</Pill>} />
+          <div className="tiny muted" style={{ marginBottom: 12 }}>
+            Observations, never diagnoses. Every card shows where it came from — source, date, and provenance level.
+          </div>
+          {!enhanced.length ? (
+            <Empty icon={Sparkles} title="Insight grows with you"
+              sub="As you log check-ins and add data, LUCA surfaces timelines, gentle patterns, open questions, and suggested next steps here." />
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+              {enhanced.map((card, ci) => (
+                <div key={ci} style={{ padding: 13, borderRadius: 12, border: '1px solid var(--line,#eef3f1)', background: '#fff' }}>
+                  <div className="tiny f6" style={{ letterSpacing: '.08em', textTransform: 'uppercase', color: '#6B7FD7', marginBottom: 8 }}>
+                    {card.type === 'timeline' ? 'Timeline' : card.type === 'pattern' ? 'Pattern' : card.type === 'open_question' ? 'Open questions' : 'Suggestions'}
+                  </div>
+                  <div className="small" style={{ color: '#0A2B29', fontWeight: 700, marginBottom: 8 }}>{card.title}</div>
+
+                  {card.type === 'timeline' && (card.items || []).map((it, i) => (
+                    <div key={i} className="between" style={{ gap: 8, padding: '5px 0', borderBottom: '1px solid var(--line,#eef3f1)' }}>
+                      <span className="tiny" style={{ color: 'var(--ink)' }}>{it.label}</span>
+                      <span className="tiny muted" style={{ flex: 'none' }}>{fmtShort(it.at)}{it.level != null ? ` · L${it.level}` : ''}</span>
+                    </div>
+                  ))}
+
+                  {card.type === 'pattern' && (
+                    <>
+                      <div className="small" style={{ color: '#59636E', lineHeight: 1.5 }}>{card.body}</div>
+                      <div className="tiny" style={{ marginTop: 8, color: '#8AA09C' }}>
+                        source: {card.source}{card.observedAt ? ` · ${fmtShort(card.observedAt)}` : ''}{card.level != null ? ` · L${card.level}` : ''}
+                      </div>
+                    </>
+                  )}
+
+                  {card.type === 'open_question' && (card.items || []).map((it, i) => (
+                    <div key={i} style={{ padding: '5px 0' }}>
+                      <div className="tiny" style={{ color: '#59636E' }}>• {it.text}</div>
+                      <div className="tiny" style={{ color: '#8AA09C', marginTop: 1 }}>source: {it.source}{it.level != null ? ` · L${it.level}` : ''}</div>
+                    </div>
+                  ))}
+
+                  {card.type === 'suggestion' && (card.items || []).map((it, i) => (
+                    <div key={i} style={{ padding: '6px 0', borderBottom: '1px solid var(--line,#eef3f1)' }}>
+                      <div className="between" style={{ gap: 8 }}>
+                        <span className="small" style={{ color: 'var(--ink)', fontWeight: 600 }}>{it.label}</span>
+                        <Btn variant="ghost sm" onClick={() => runSuggestionAction(it, go)}>Go</Btn>
+                      </div>
+                      <div className="tiny muted" style={{ marginTop: 2 }}>{it.because}</div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+/* Map an Enhanced suggestion's typed action (A1 §5) to a navigation. */
+function runSuggestionAction(sug, go) {
+  if (!go) return;
+  switch (sug.action) {
+    case 'start_checkin': go('health'); break;
+    case 'start_assessment': go('health'); break;
+    case 'play_audio': go('media'); break;
+    case 'open_listing': go('explore'); break;
+    case 'curate': go('explore'); break;
+    case 'navigate': go(sug.target || 'dashboard'); break;
+    default: go('coach');
+  }
+}
 
 function CoachPage({ user, go }) {
   const { lucaMessages: messages, setLucaMessages: setMessages, lucaLoaded, loadLucaHistory, startRetake, setPendingProviderId, setPendingCurate } = useApp();
@@ -4498,6 +4765,7 @@ function TabPage({ tab, user, go, effectiveRole, onUnread, onInboxUnread, onBeco
     case 'health': return <HealthPassportPage user={user} go={go} />;
     case 'timeline': return <TimelinePage user={user} />;
     case 'coach': return <CoachPage user={user} go={go} />;
+    case 'intelligence': return <ErrorBoundary><IntelligencePage user={user} go={go} /></ErrorBoundary>;
     case 'journal': return <ErrorBoundary><JournalPage user={user} /></ErrorBoundary>;
     case 'media': return <ErrorBoundary><MediaPage user={user} go={go} /></ErrorBoundary>;
     case 'appointments': return <AppointmentsPage user={user} />;
