@@ -480,3 +480,70 @@ this sprint's quick wins marked done.
 - Frontend: `npx vitest run` **32/32**; `npm run build` clean;
   `npm run lint` at baseline **15 errors / 137 warnings** (no new).
 - Migration 024 applied; api-sweep re-run against live post-deploy (see below).
+
+
+
+---
+
+# Sprint B — Track B (M1–M3) · branch `agent/abacus-sovereign-sprint-v4`
+
+Sovereign identity spine, platform reliability, and the member journey.
+Each milestone built end-to-end, verified, committed and pushed. M4–M8 were
+intentionally left for later subtasks.
+
+## M1 — Identity spine + rename · commit `a5f808f`
+- **Migration 026** (additive, applied to live DB): `subject_id VARCHAR(40)
+  REFERENCES solaris_subjects` added to 26 domain tables + `users`, backfilled
+  and indexed; `solaris_subjects.entity_type (human|organization|agent|
+  treasury)`; `solaris_identity_bindings.binding_type` CHECK widened to the full
+  A2 set (email/did/nostr/wallet/clinic/passkey/lightning_address/oauth/
+  external_id); `audit_logs.actor_subject_id + purpose (default 'operations') +
+  consent_scope (default 'private')`; subjects/email-bindings re-backfilled for
+  users created since migration 023.
+- `audit()` records the four-W (who/what/purpose/consent_scope + actor subject).
+- JWT now carries `sub` = permanent Solaris public_ref (`sol_…`); userId kept.
+- Domain writes stamp subject_id (check-in verified).
+- Rename sweep: **"LUCA Passport" → "Digital Sovereign Passport"** across all
+  user-facing copy; admin labels "users" → "members".
+- Tests: `identity-spine.test.js` (+3).
+
+## M2 — Platform reliability · commit `a3ffff0`
+- Structured LUCA output `{reply, suggestions:[{label,action,target}]}` with
+  JSON.parse + fallback and the typed A1 §5 action enum (pre-existing from
+  Sprint A). **Added:** `buildTriggerSuggestions()` so fallback chips are
+  derived from fired A1 §6 rules first, then static defaults.
+- Trigger engine (buildContext) drives dashboard cards — verified.
+- Widget + Coach share one sessionStorage-persisted thread — verified.
+- Orientation grounding in SYSTEM_PROMPT — verified.
+- **Scoped seed reset:** `npm run seed:reset -- --email=<email>` wipes only that
+  member's journey rows and reseeds them, leaving all other members intact; the
+  `seed`/`seed:reset` scripts now target the canonical `seed_solaris.js`.
+
+## M3 — Member journey · commit `767d6f9`
+- Role model, Passport hub actions, check-in v2, Curate-for-me, media player v2
+  (queue/seek/±15s/speed/mini-player/local import) and bottom-left sign-out —
+  all verified in place from Sprint A scaffolding.
+- **New — "Add health data" provenance + de-identification** (closes the
+  cross-cutting invariant that every derived fact carries level/source/
+  observed_at/consent_scope, and that text is de-identified before cloud models):
+  - **Migration 027** (additive): `provenance_level SMALLINT (0–5 CHECK)`,
+    `source`, `observed_at`, `consent_scope` on `health_documents`; backfill +
+    index.
+  - Backend de-identifies the shared text before the AI summary; stamps
+    subject_id + provenance; a self-note is L0/self, a member-marked lab result
+    is L4/self (pending accredited verification).
+  - `export.js` serializes provenance (vault roundtrip stays green).
+  - Frontend: data-type selector (L0 note / L4 lab), observed date, and an
+    L0–L5 `ProvenanceBadge` on every shared document.
+  - Tests: `health-data-provenance.test.js` (+4).
+
+## Validation
+- Backend `npm test` **151/151** (20 suites; was 144 pre-sprint — +7 new).
+- Frontend `npx vitest run` **32/32**; `npm run build` clean.
+- Vault roundtrip `node tests/roundtrip.cjs` — **9/9** structural assertions.
+- `public/sw.js` cache **solaris-v8 → solaris-v9**.
+- `docker compose build frontend backend && docker compose up -d` — containers
+  healthy; startup migrations current; seed restored demo data.
+- Live https://solaris-health.abacusai.cloud → 200; login/session OK; zero
+  console errors; trigger-driven cards + Curate-for-me render; provenance
+  verified end-to-end via live API (L4 stamped, PII scrubbed from summary).
