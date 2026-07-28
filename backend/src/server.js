@@ -305,6 +305,16 @@ if (require.main === module) {
     .then((r) => { if (r.rowCount > 0) console.log(`Cleaned ${r.rowCount} expired revoked tokens`); })
     .catch((err) => console.warn('Token cleanup warning:', err.message));
 
+  // ---- Intake 48h reminders (spec A5) ----
+  // Idempotent pass: gentle reminder for pending intakes whose booking is <48h
+  // away and hasn't been reminded yet. Runs shortly after boot, then every 6h.
+  const { sendIntakeReminders } = require('./lib/intake-messages');
+  const runReminders = () => sendIntakeReminders()
+    .then((n) => { if (n > 0) console.log(`[intake] sent ${n} intake reminder(s)`); })
+    .catch((err) => console.warn('[intake] reminder pass warning:', err.message));
+  setTimeout(runReminders, 30 * 1000).unref();
+  setInterval(runReminders, 6 * 60 * 60 * 1000).unref();
+
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`✓ Digital Sovereign Passport Backend running on port ${PORT}`);
     console.log(`✓ Environment: ${process.env.NODE_ENV}`);

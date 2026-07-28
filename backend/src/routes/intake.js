@@ -20,6 +20,8 @@
 const express = require('express');
 const db = require('../db');
 const { authMiddleware } = require('../middleware/auth');
+const { saveFoundational, getFoundational } = require('../lib/foundational');
+const { subjectIdForUser } = require('../lib/identity');
 
 const router = express.Router();
 
@@ -39,8 +41,32 @@ router.get('/templates/:id', authMiddleware, async (req, res) => {
   try {
     const r = await db.query('SELECT * FROM intake_form_templates WHERE id=$1', [req.params.id]);
     if (!r.rows[0]) return res.status(404).json({ error: 'Template not found' });
-    res.json({ template: r.rows[0] });
+    const template = r.rows[0];
+    // A5: every intake carries Part A (Foundational Health Data) first, then the
+    // practitioner's Part B specialty section. For non-foundational templates we
+    // attach the shared Part A fields so a single submission captures both.
+    if (template.part !== 'A') {
+      const fr = await db.query(
+        "SELECT fields_json, consent_json FROM intake_form_templates WHERE clinic_type='foundational' AND is_system=TRUE LIMIT 1"
+      );
+      if (fr.rows[0]) {
+        template.foundational_fields = fr.rows[0].fields_json;
+        if (!template.consent_json) template.consent_json = fr.rows[0].consent_json;
+      }
+    }
+    res.json({ template });
   } catch (err) { console.error('intake/templates/:id', err); res.status(500).json({ error: 'Server error' }); }
+});
+
+/* ------------------------- foundational (Passport) ---------------------- */
+
+// The member's Foundational Health Data snapshot + a prefill flag.
+// A5 §2: updated < 12 months ago → the intake collapses to a single confirm step.
+router.get('/foundational', authMiddleware, async (req, res) => {
+  try {
+    const f = await getFoundational(db, req.user.userId);
+    res.json({ foundational: f });
+  } catch (err) { console.error('intake/foundational', err); res.status(500).json({ error: 'Server error' }); }
 });
 
 /* ---------------------------- submissions ------------------------------ */
@@ -100,27 +126,32 @@ router.post('/submit', authMiddleware, async (req, res) => {
       const sub = cur.rows[0];
       if (!sub) return res.status(404).json({ error: 'Submission not found' });
       if (sub.patient_id !== req.user.userId) return res.status(403).json({ error: 'Forbidden' });
+      const subjectId = await subjectIdForUser(req.user.userId);
       const upd = await db.query(
         `UPDATE patient_intake_submissions
-            SET responses_json=$2, status='submitted', submitted_at=now()
+            SET responses_json=$2, status='submitted', submitted_at=now(), subject_id=$3, observed_at=now()
           WHERE id=$1 RETURNING *`,
-        [submissionId, JSON.stringify(responses)]
+        [submissionId, JSON.stringify(responses), subjectId]
       );
+      // A5 §1: foundational fields flow into the member's Passport at L2.
+      const fnd = await saveFoundational(db, { userId: req.user.userId, responses, source: 'self', level: 2 }).catch(() => null);
       // Resolve any open intake-request message for this submission.
       await db.query(
         `UPDATE patient_messages SET is_read=TRUE WHERE related_intake_id=$1 AND recipient_id=$2`,
         [submissionId, req.user.userId]
       ).catch(() => {});
-      return res.json({ submission: upd.rows[0] });
+      return res.json({ submission: upd.rows[0], foundationalSaved: !!fnd });
     }
 
     if (!templateId) return res.status(400).json({ error: 'templateId is required for a new submission' });
+    const subjectId = await subjectIdForUser(req.user.userId);
     const ins = await db.query(
-      `INSERT INTO patient_intake_submissions (patient_id, provider_id, template_id, responses_json, status, submitted_at)
-       VALUES ($1,$2,$3,$4,'submitted',now()) RETURNING *`,
-      [req.user.userId, providerId || null, templateId, JSON.stringify(responses)]
+      `INSERT INTO patient_intake_submissions (patient_id, provider_id, template_id, responses_json, status, submitted_at, subject_id, observed_at)
+       VALUES ($1,$2,$3,$4,'submitted',now(),$5,now()) RETURNING *`,
+      [req.user.userId, providerId || null, templateId, JSON.stringify(responses), subjectId]
     );
-    res.json({ submission: ins.rows[0] });
+    const fnd = await saveFoundational(db, { userId: req.user.userId, responses, source: 'self', level: 2 }).catch(() => null);
+    res.json({ submission: ins.rows[0], foundationalSaved: !!fnd });
   } catch (err) { console.error('intake/submit', err); res.status(500).json({ error: 'Server error' }); }
 });
 

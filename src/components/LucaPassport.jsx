@@ -4001,6 +4001,50 @@ function HealthDataUpload({ onSaved }) {
 }
 
 /* "Actions" card + shared health data form + document list, always at the top of the Passport. */
+// Foundational Health Data — the member's self-reported baseline (spec A5),
+// carried across the care team at provenance L2. Only shown once collected.
+const FHD_LABELS = {
+  full_name: 'Full name', date_of_birth: 'Date of birth', email: 'Email', phone: 'Phone',
+  address: 'Address', systemic_conditions: 'Conditions', medications_supplements: 'Medications & supplements',
+  allergies: 'Allergies', smoking_status: 'Smoking', smoking_years: 'Years smoking',
+  substance_use: 'Substance use', substance_reason: 'Reason', substance_method: 'Method',
+  visit_reason: 'Reason for visit', referral_source: 'Heard about us via', communication_pref: 'Preferred contact',
+};
+function FoundationalHealthSection() {
+  const [f, setF] = useState(undefined);
+  useEffect(() => {
+    let on = true;
+    api.getIntakeFoundational()
+      .then((r) => { if (on) setF(r && r.foundational ? r.foundational : null); })
+      .catch(() => { if (on) setF(null); });
+    return () => { on = false; };
+  }, []);
+  if (f === undefined) return null;
+  if (!f || !f.data || !Object.keys(f.data).length) return null;
+  const d = f.data;
+  const rows = Object.keys(FHD_LABELS)
+    .filter((k) => d[k] !== undefined && d[k] !== null && d[k] !== '' && !(Array.isArray(d[k]) && !d[k].length))
+    .map((k) => ({ label: FHD_LABELS[k], value: Array.isArray(d[k]) ? d[k].join(', ') : String(d[k]) }));
+  if (!rows.length) return null;
+  return (
+    <Card>
+      <SectionHead eyebrow="Yours, carried across your care team" title="Foundational Health Data"
+        action={<ProvenanceBadge level={f.level ?? 2} />} />
+      <div className="tiny muted" style={{ marginBottom: 10 }}>
+        Self-reported {f.observedAt ? `· updated ${fmtShort(f.observedAt)}` : ''}{f.updatedWithin12Months ? ' · current' : ''}
+      </div>
+      <div className="col gap-2">
+        {rows.map((r) => (
+          <div key={r.label} className="between" style={{ gap: 12, padding: '8px 0', borderBottom: '1px solid var(--line,#eef3f1)' }}>
+            <span className="tiny f6" style={{ color: 'var(--muted)', flex: 'none', minWidth: 130 }}>{r.label}</span>
+            <span className="small" style={{ color: 'var(--ink)', textAlign: 'right' }}>{r.value}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 // Clinic intake forms shared through the Passport (only shown when ≥1 exists).
 function IntakeFormsSection() {
   const [subs, setSubs] = useState(null);
@@ -4100,6 +4144,8 @@ function PassportActions({ go }) {
           </div>
         )}
       </Card>
+
+      <FoundationalHealthSection />
 
       <IntakeFormsSection />
 

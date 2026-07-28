@@ -46,6 +46,7 @@ function buildVaultExport(record) {
     agentAuthority = null,
     solarisIdentity = null,
     notifications = [],
+    foundational = null,
   } = record;
   const exportedAt = new Date().toISOString();
   const files = [];
@@ -93,6 +94,36 @@ function buildVaultExport(record) {
         }) +
         `# Solaris Method Assessment\n\nVitality score: **${assessment.vitality_score ?? 'n/a'}/100**\n\n` +
         `Top focus areas: ${focus.join(', ') || 'balanced'}\n`,
+    });
+  }
+
+  // 1 · HEALTH — foundational health data (spec A5, provenance L2 by default)
+  if (foundational && foundational.data && Object.keys(foundational.data).length) {
+    const d = foundational.data;
+    const label = (k) => k.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    const rows = Object.keys(d)
+      .filter((k) => d[k] !== null && d[k] !== undefined && d[k] !== '')
+      .map((k) => {
+        const v = Array.isArray(d[k]) ? d[k].join(', ') : String(d[k]);
+        return `- **${label(k)}:** ${v}`;
+      })
+      .join('\n');
+    files.push({
+      path: 'health/foundational.md',
+      contents:
+        fm({
+          id: 'foundational-health-data',
+          type: 'foundational-health-data',
+          sensitivity: 'private',
+          level: foundational.level ?? 2,
+          source: foundational.source || 'self',
+          observed_at: foundational.observedAt || '',
+          consent_scope: foundational.consentScope || 'care_team',
+          exported_at: exportedAt,
+        }) +
+        `# Foundational Health Data\n\n` +
+        `_Self-reported baseline carried across your care team. Provenance level ${foundational.level ?? 2}._\n\n` +
+        (rows || '_No data recorded yet._') + '\n',
     });
   }
 

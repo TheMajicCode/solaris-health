@@ -466,6 +466,7 @@ class ApiClient {
   submitIntake(payload) { return this.request('/intake/submit', { method: 'POST', body: JSON.stringify(payload) }); }
   reviewIntake(id, notes) { return this.request(`/intake/submissions/${id}/review`, { method: 'PUT', body: JSON.stringify({ notes }) }); }
   getProviderPatientIntake(patientId) { return this.request(`/intake/provider/${patientId}`); }
+  getIntakeFoundational() { return this.request('/intake/foundational'); }
   getIntakeSettings() { return this.request('/intake/settings'); }
   saveIntakeSettings(payload) { return this.request('/intake/settings', { method: 'PUT', body: JSON.stringify(payload) }); }
 

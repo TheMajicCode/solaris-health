@@ -83,6 +83,9 @@ async function gatherRecord(userId) {
   // Solaris ID — permanent subject + bindings (ADR 001; PHI-safe: email is hash-only)
   const solarisIdentity = await require('../lib/identity').exportIdentity(userId).catch(() => null);
 
+  // Foundational health data (spec A5) — self-reported baseline at level L2
+  const foundational = await require('../lib/foundational').getFoundational(db, userId).catch(() => null);
+
   // Notifications — the user's in-app notification history
   const notifications = await db.query(
     'SELECT type, title, message, read, data, created_at FROM notifications WHERE user_id=$1 ORDER BY created_at ASC',
@@ -115,6 +118,7 @@ async function gatherRecord(userId) {
     agentAuthority,
     solarisIdentity,
     notifications: notifications.rows,
+    foundational,
   };
 }
 
