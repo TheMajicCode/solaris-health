@@ -211,6 +211,110 @@ function parseEmailArg() {
   return arg ? arg.split('=')[1].trim().toLowerCase() : null;
 }
 
+/**
+ * seedGpsReceipts — GPS shadow-receipt demo data (spec A4 §3).
+ *
+ * Seeds 5 `gps-receipt/1.0` receipts for the primary demo member so the
+ * Payments → "How your value flows" view is populated out of the box:
+ *   • 3 SETTLED   (completed consultations, value routed)
+ *   • 2 SCHEDULED (higher-value sessions, envelope held to completion)
+ *
+ * Money is SIMULATED (shadow mode) — allocations use the ratified v0.1 policy
+ * (90% earned value / 10% envelope). Subject ids are looked up from
+ * solaris_subjects at seed time (never hardcoded). Idempotent: prior demo rows
+ * (idempotency_key 'seed-gps-demo-%') are removed first, so it is safe to
+ * re-run. The payer is the demo member; the practitioner is the demo
+ * practitioner (alejandro@solaris.health, falling back to elena@).
+ */
+async function seedGpsReceipts() {
+  const { computeAllocations } = require('./src/lib/payments/allocation-policy');
+  const { buildReceipt } = require('./src/lib/gps-shadow');
+  const { POLICY_ID, POLICY_HASH } = require('./src/lib/payments/allocation-policy');
+
+  // Payer = primary demo member; look up subject_id at seed time.
+  const member = await db.query(
+    `SELECT u.id AS user_id, s.subject_id, u.email
+       FROM users u JOIN solaris_subjects s ON s.user_id = u.id
+      WHERE lower(u.email) = 'sarah@solaris.health' LIMIT 1`
+  );
+  if (!member.rows.length) {
+    console.warn('  (skip GPS seed: demo member sarah@solaris.health has no subject_id)');
+    return 0;
+  }
+  const { user_id: payerUserId, subject_id: payerSubjectId } = member.rows[0];
+
+  // Practitioner (for merchant labelling + provider_id) — alejandro, else elena.
+  const prac = await db.query(
+    `SELECT u.id AS user_id, pp.id AS profile_id, COALESCE(pp.business_name, u.full_name) AS label
+       FROM users u
+       LEFT JOIN provider_profiles pp ON pp.user_id = u.id
+      WHERE lower(u.email) IN ('alejandro@solaris.health','elena@solaris.health')
+      ORDER BY (lower(u.email) = 'alejandro@solaris.health') DESC LIMIT 1`
+  );
+  const providerProfileId = prac.rows[0]?.profile_id || null;
+  const merchantLabel = prac.rows[0]?.label || 'Aura clinic';
+
+  // Idempotent: clear prior demo receipts (cascades from payment_intents).
+  await db.query("DELETE FROM payment_intents WHERE idempotency_key LIKE 'seed-gps-demo-%'");
+
+  // 3 SETTLED (completed) + 2 SCHEDULED (envelope held). amount in cents.
+  const ROWS = [
+    { amount: 9000,  purpose: 'consultation', state: 'SETTLED',   daysAgo: 21 },
+    { amount: 14000, purpose: 'consultation', state: 'SETTLED',   daysAgo: 14 },
+    { amount: 7000,  purpose: 'consultation', state: 'SETTLED',   daysAgo: 7 },
+    { amount: 60000, purpose: 'treatment',    state: 'SCHEDULED', daysAgo: 3 },
+    { amount: 75000, purpose: 'membership',   state: 'SCHEDULED', daysAgo: 1 },
+  ];
+
+  let n = 0;
+  for (let i = 0; i < ROWS.length; i++) {
+    const r = ROWS[i];
+    const feeCents = Math.round(r.amount * 0.0265) + 30; // realistic Wompi-style fee
+    const idem = `seed-gps-demo-${i + 1}`;
+
+    const intentRes = await db.query(
+      `INSERT INTO payment_intents
+         (subject_id, user_id, provider_id, merchant_id, merchant_label,
+          amount_cents, currency, purpose, status, provider, provider_ref,
+          provider_fee_cents, idempotency_key, paid_at, created_at, observed_at)
+       VALUES ($1,$2,$3,'aura-clinic',$4,$5,'USD',$6,'paid','wompi',$7,$8,$9,
+               now() - ($10::int * interval '1 day'),
+               now() - ($10::int * interval '1 day'),
+               now() - ($10::int * interval '1 day'))
+       RETURNING id, subject_id, amount_cents, currency, purpose, user_id`,
+      [payerSubjectId, payerUserId, providerProfileId, merchantLabel, r.amount,
+       r.purpose, `seed-gps-demo-ref-${i + 1}`, feeCents, idem, r.daysAgo]
+    );
+    const intent = intentRes.rows[0];
+
+    const { legs, envelopeCents, earnedValueCents, envelopeBps } = computeAllocations(intent.amount_cents);
+    const receipt = buildReceipt(intent, legs, feeCents);
+    // Demo settlement realism: reflect the row's lifecycle state + confidence.
+    receipt._meta.confidence_level = 4;
+    receipt.settlement_summary = r.state === 'SETTLED'
+      ? { settled_cents: intent.amount_cents, pending_cents: 0, simulated_cents: 0 }
+      : { settled_cents: 0, pending_cents: intent.amount_cents, simulated_cents: 0 };
+
+    await db.query(
+      `INSERT INTO gps_shadow_receipts
+         (receipt_id, receipt_version, intent_id, subject_id, user_id,
+          policy_id, policy_hash, eligible_cents, earned_cents, envelope_cents,
+          envelope_bps, settlement_state, receipt, level, source, consent_scope,
+          created_at, observed_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'L3-financial',$14,'payments',
+               now() - ($15::int * interval '1 day'),
+               now() - ($15::int * interval '1 day'))
+       ON CONFLICT (receipt_id) DO NOTHING`,
+      [receipt.receipt_id, receipt.receipt_version, intent.id, intent.subject_id, intent.user_id,
+       POLICY_ID, POLICY_HASH, intent.amount_cents, earnedValueCents, envelopeCents,
+       envelopeBps, r.state, receipt, POLICY_ID, r.daysAgo]
+    );
+    n += 1;
+  }
+  console.log(`✓ Seeded ${n} GPS shadow receipts (3 SETTLED + 2 SCHEDULED) for ${member.rows[0].email}.`);
+  return n;
+}
+
 async function resetMember(email) {
   const u = await db.query('SELECT id, first_name, last_name FROM users WHERE lower(email)=lower($1)', [email]);
   if (!u.rows.length) throw new Error(`No member found with email: ${email}`);
@@ -243,6 +347,11 @@ async function resetMember(email) {
       await resetMember(email);
       process.exit(0);
     }
+    if (process.argv.includes('--gps')) {
+      console.log('Seeding GPS shadow receipts only...');
+      await seedGpsReceipts();
+      process.exit(0);
+    }
     console.log('Resetting Solaris tables...');
     await reset();
     console.log('Seeding users...');
@@ -254,6 +363,8 @@ async function resetMember(email) {
     console.log('Seeding sample results for Sarah & Majd...');
     await seedSampleResult(patient, tid);
     await seedSampleResult(majd, tid);
+    console.log('Seeding GPS shadow receipts...');
+    await seedGpsReceipts().catch((e) => console.warn('  (GPS seed skipped:', e.message, ')'));
     console.log('✓ Solaris seed complete.');
     console.log('  Patient:      sarah@solaris.health / demo123');
     console.log('  Patient:      majd@luca.health / demo123');
