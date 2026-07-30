@@ -38,6 +38,7 @@ const gpsRoutes = require('./routes/gps');
 // --- Solaris sprint routes ---
 const organizationsRoutes = require('./routes/organizations');
 const paymentsSimRoutes = require('./routes/payments-sim');
+const paymentsRoutes = require('./routes/payments');
 const lucaContextRoutes = require('./routes/luca-context');
 const lucaRecommendationsRoutes = require('./routes/luca-recommendations');
 const intelligenceRoutes = require('./routes/intelligence');
@@ -247,6 +248,7 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/gps', gpsRoutes);
 // --- Solaris sprint routes ---
 app.use('/api/organizations', organizationsRoutes);
+app.use('/api/payments', paymentsRoutes); // M6: checkout/webhook/intents (unmatched fall through)
 app.use('/api/payments', paymentsSimRoutes);
 app.use('/api/luca', lucaContextRoutes); // GET /api/luca/context (luca.js handles /messages)
 app.use('/api/luca', lucaRecommendationsRoutes); // GET /api/luca/recommendations
