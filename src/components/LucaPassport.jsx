@@ -408,6 +408,13 @@ textarea.input-line{resize:vertical;min-height:64px}
 .luca input[type=range].ci-range{-webkit-appearance:none;appearance:none;width:100%;height:8px;border-radius:999px;background:linear-gradient(90deg,var(--mint) 0%,var(--mint) var(--pct,50%),#E6EDEA var(--pct,50%),#E6EDEA 100%);outline:none;cursor:pointer}
 .luca input[type=range].ci-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:22px;height:22px;border-radius:50%;background:#fff;border:3px solid var(--mint);box-shadow:0 2px 8px rgba(10,60,55,.3);cursor:pointer}
 .luca input[type=range].ci-range::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#fff;border:3px solid var(--mint);box-shadow:0 2px 8px rgba(10,60,55,.3);cursor:pointer}
+/* Mobile: expand the slider hit area to a >=44px touch target while keeping the
+   visible track thin (8px, vertically centered) and enlarging the thumb. */
+@media(max-width:640px){
+  .luca input[type=range].ci-range{height:44px;background:linear-gradient(90deg,var(--mint) 0%,var(--mint) var(--pct,50%),#E6EDEA var(--pct,50%),#E6EDEA 100%) no-repeat center / 100% 8px}
+  .luca input[type=range].ci-range::-webkit-slider-thumb{width:28px;height:28px}
+  .luca input[type=range].ci-range::-moz-range-thumb{width:28px;height:28px}
+}
 .luca .ci-question{background:var(--mint-soft,#E9F7F2);border:1px solid var(--line,#E6EDEA);border-radius:14px;padding:14px}
 .luca .ci-question .ci-q{font-size:13.5px;color:var(--ink);font-weight:600;display:flex;gap:8px;align-items:flex-start;line-height:1.5}
 .luca .ci-question textarea{width:100%;margin-top:10px;border:1px solid var(--line,#E6EDEA);border-radius:10px;padding:10px;font-family:inherit;font-size:13px;resize:vertical;min-height:56px;background:var(--surface,#fff);color:var(--ink);outline:none}
@@ -2160,7 +2167,7 @@ function IntelligencePage({ user, go }) {
       {err && <div className="small" style={{ color: '#B4462E', marginBottom: 10 }}>{err}</div>}
 
       {/* Two equal panes: Natural + Artificial */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 16, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: 16, alignItems: 'start' }}>
 
         {/* ---------------- NATURAL ---------------- */}
         <Card>
@@ -2266,7 +2273,7 @@ function IntelligencePage({ user, go }) {
             <Empty icon={Sparkles} title="Insight grows with you"
               sub="As you log check-ins and add data, LUCA surfaces timelines, gentle patterns, open questions, and suggested next steps here." />
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))', gap: 14 }}>
               {enhanced.map((card, ci) => (
                 <div key={ci} style={{ padding: 13, borderRadius: 12, border: '1px solid var(--line,#eef3f1)', background: '#fff' }}>
                   <div className="tiny f6" style={{ letterSpacing: '.08em', textTransform: 'uppercase', color: '#6B7FD7', marginBottom: 8 }}>

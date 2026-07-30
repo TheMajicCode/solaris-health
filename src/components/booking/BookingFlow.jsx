@@ -342,6 +342,15 @@ const CSS = `
 @keyframes bkfIn{from{opacity:0}to{opacity:1}}
 .luca .bkf{position:relative;background:var(--canvas);border-radius:20px;width:100%;max-width:620px;max-height:92vh;
   display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.3);overflow:hidden}
+/* Mobile: reclaim horizontal space and vertical height so the flow doesn't cramp at 375px. */
+@media(max-width:520px){
+  .luca .bkf-scrim{padding:10px}
+  .luca .bkf{max-height:96vh;border-radius:16px}
+  .luca .bkf-steps{padding:16px 14px 10px}
+  .luca .bkf-body{padding:16px 14px}
+  .luca .bkf-foot{padding:12px 14px}
+  .luca .bkf-btn{padding:11px 14px}
+}
 .luca .bkf-x{position:absolute;top:14px;right:14px;z-index:2;border:none;background:var(--surface-2);border-radius:9px;
   width:32px;height:32px;display:grid;place-items:center;cursor:pointer;color:var(--ink)}
 .luca .bkf-x:hover{background:var(--mint-line)}
