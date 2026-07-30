@@ -71,4 +71,86 @@ router.get('/bookings', authMiddleware, requireAdmin, async (req, res) => {
   res.json({ bookings: r.rows });
 });
 
+// ---- Finance reconciliation (SIMULATED — Wompi sandbox + GPS shadow ledger) ----
+// Every payment intent observed on the platform, with the member + provider it
+// belongs to. This is a read-only reconciliation view for the admin demo.
+router.get('/finance', authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const r = await db.query(
+      `SELECT pi.id, pi.amount_cents, pi.currency, pi.purpose, pi.description,
+              pi.status, pi.provider, pi.merchant_label, pi.created_at, pi.paid_at,
+              u.full_name AS member_name, prov.full_name AS provider_name
+         FROM payment_intents pi
+         LEFT JOIN users u ON u.id = pi.user_id
+         LEFT JOIN users prov ON prov.id = pi.provider_id
+        ORDER BY pi.created_at DESC
+        LIMIT 200`);
+    const intents = r.rows.map((row) => ({
+      id: row.id,
+      amountUsd: (Number(row.amount_cents) || 0) / 100,
+      currency: row.currency,
+      purpose: row.purpose,
+      description: row.description,
+      status: row.status,
+      provider: row.provider,
+      merchantLabel: row.merchant_label,
+      memberName: row.member_name || 'A member',
+      providerName: row.provider_name || null,
+      createdAt: row.created_at,
+      paidAt: row.paid_at,
+    }));
+    const totalUsd = intents.reduce((s, i) => s + i.amountUsd, 0);
+    const paidUsd = intents.filter((i) => i.status === 'paid' || i.status === 'approved')
+      .reduce((s, i) => s + i.amountUsd, 0);
+    res.json({ intents, totalUsd, paidUsd, simulated: true });
+  } catch (err) { console.error('admin finance', err); res.status(500).json({ error: 'Server error' }); }
+});
+
+// GPS settlement queue — the shadow receipts awaiting settlement. The admin can
+// mark an entry SETTLED to demonstrate the settlement flow (nothing moves real money).
+router.get('/gps-settlements', authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const r = await db.query(
+      `SELECT g.id, g.receipt_id, g.subject_id, g.eligible_cents, g.earned_cents,
+              g.envelope_cents, g.envelope_bps, g.settlement_state, g.created_at,
+              u.full_name AS member_name, pi.merchant_label
+         FROM gps_shadow_receipts g
+         LEFT JOIN users u ON u.id = g.user_id
+         LEFT JOIN payment_intents pi ON pi.id = g.intent_id
+        ORDER BY g.created_at DESC
+        LIMIT 200`);
+    const receipts = r.rows.map((row) => ({
+      id: row.id,
+      receiptId: row.receipt_id,
+      subjectId: row.subject_id,
+      memberName: row.member_name || 'A member',
+      merchantLabel: row.merchant_label || 'Aura clinic',
+      eligibleUsd: (Number(row.eligible_cents) || 0) / 100,
+      earnedUsd: (Number(row.earned_cents) || 0) / 100,
+      envelopeUsd: (Number(row.envelope_cents) || 0) / 100,
+      envelopeBps: row.envelope_bps,
+      settlementState: row.settlement_state,
+      createdAt: row.created_at,
+    }));
+    const pending = receipts.filter((r2) => r2.settlementState !== 'SETTLED').length;
+    const envelopeUsd = receipts.reduce((s, r2) => s + r2.envelopeUsd, 0);
+    res.json({ receipts, pending, envelopeUsd, simulated: true });
+  } catch (err) { console.error('admin gps-settlements', err); res.status(500).json({ error: 'Server error' }); }
+});
+
+// Mark a GPS shadow receipt as settled (demo action — writes settlement_state only).
+router.patch('/gps-settlements/:id', authMiddleware, requireAdmin, async (req, res) => {
+  try {
+    const state = (req.body && req.body.settlementState) || 'SETTLED';
+    const ALLOWED = new Set(['PREPARED', 'SETTLED']);
+    if (!ALLOWED.has(state)) return res.status(400).json({ error: 'Unsupported settlement state' });
+    const r = await db.query(
+      `UPDATE gps_shadow_receipts SET settlement_state=$1 WHERE id=$2
+       RETURNING id, settlement_state`,
+      [state, req.params.id]);
+    if (!r.rows[0]) return res.status(404).json({ error: 'Receipt not found' });
+    res.json({ id: r.rows[0].id, settlementState: r.rows[0].settlement_state, simulated: true });
+  } catch (err) { console.error('admin gps-settle patch', err); res.status(500).json({ error: 'Server error' }); }
+});
+
 module.exports = router;

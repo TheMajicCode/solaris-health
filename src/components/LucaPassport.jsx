@@ -45,6 +45,11 @@ import PaymentReceipts from './gps/PaymentReceipts.jsx';
 import ReferralHub from './gps/ReferralHub.jsx';
 import RegenerativeTreasury from './gps/RegenerativeTreasury.jsx';
 import GPSStats from './admin/GPSStats.jsx';
+import AdminFinance from './admin/AdminFinance.jsx';
+import AdminSettings from './admin/AdminSettings.jsx';
+import AvailabilityManager from './practitioner/AvailabilityManager.jsx';
+import PractitionerFinance from './practitioner/PractitionerFinance.jsx';
+import PractitionerSettings from './practitioner/PractitionerSettings.jsx';
 import GPSMapView from './gps/GPSMapView.jsx';
 import PaymentModal from './gps/PaymentModal.jsx';
 import IdentityCard from './passport/IdentityCard.jsx';
@@ -648,6 +653,72 @@ function normalizeSolarisRole(r) {
   if (SOLARIS_ROLE_SET.has(r)) return r;
   return 'patient';
 }
+
+/* ---- Role-differentiated navigation (Sprint F) ----
+   Members keep the full sovereign patient experience (navForRole + solarisNav).
+   Practitioners and clinic admins get a focused portal: a single, purpose-built
+   set of tabs with no patient chrome, so a demo never lands on a dead end. */
+
+// Practitioner Portal — the working surface for an approved practitioner.
+function practitionerNav() {
+  return [
+    {
+      group: 'Practice', color: '#6B7FD7', items: [
+        { id: 'prac-clients', label: 'My Clients', icon: Users },
+        { id: 'prac-bookings', label: 'Bookings', icon: CalendarDays, badgeKey: 'drafts' },
+        { id: 'prac-availability', label: 'Availability', icon: CalendarCheck },
+        { id: 'prac-messages', label: 'Messages', icon: MessageSquare, badgeKey: 'messages' },
+      ],
+    },
+    {
+      group: 'Business', color: '#2DB584', items: [
+        { id: 'prac-finance', label: 'Finance', icon: Wallet },
+        { id: 'prac-settings', label: 'Settings', icon: Settings },
+      ],
+    },
+  ];
+}
+
+// Solaris Admin — the platform operator's console.
+function adminNav() {
+  return [
+    {
+      group: 'People', color: '#C58A53', items: [
+        { id: 'admin-members', label: 'Members', icon: Users },
+        { id: 'admin-practitioners', label: 'Practitioners', icon: Stethoscope, badgeKey: 'approvals' },
+      ],
+    },
+    {
+      group: 'Operations', color: '#C58A53', items: [
+        { id: 'admin-bookings', label: 'Bookings', icon: CalendarCheck },
+        { id: 'admin-finance', label: 'Finance', icon: Wallet },
+        { id: 'admin-system', label: 'System', icon: Activity },
+        { id: 'admin-settings', label: 'Settings', icon: Settings },
+      ],
+    },
+  ];
+}
+
+// Per-persona portal chrome: sidebar sub-title, accent colour, and role label.
+const PORTAL = {
+  patient: { sub: 'Sovereign Passport', accent: '#2DB584', label: 'Member' },
+  practitioner: { sub: 'Practitioner Portal', accent: '#6B7FD7', label: 'Practitioner' },
+  clinic_admin: { sub: 'Solaris Admin', accent: '#C58A53', label: 'Admin' },
+};
+
+// The tab a persona lands on when they sign in (or after a role switch).
+function defaultTabFor(effectiveRole) {
+  if (effectiveRole === 'practitioner') return 'prac-clients';
+  if (effectiveRole === 'clinic_admin') return 'admin-members';
+  return 'dashboard';
+}
+
+// Build the full navigation for a persona.
+function navForPersona(effectiveRole, legacyRole, isProvider) {
+  if (effectiveRole === 'practitioner') return practitionerNav();
+  if (effectiveRole === 'clinic_admin') return adminNav();
+  return [...navForRole(legacyRole, isProvider), ...solarisNav(effectiveRole)];
+}
 // Warm, human labels for each member journey type (mirrors backend JOURNEY_LABELS).
 const JOURNEY_LABELS = {
   optimal_health: 'Optimal Health',
@@ -700,6 +771,20 @@ const TAB_META = {
   contributions: { title: 'Contributions', sub: 'Your attested contribution record — the same recognition the GPS envelope rewards. Levels honour what you give, never what you extract.' },
   identity: { title: 'Identity & Data', sub: 'Identity above endpoints — your sovereign identity, GPS end address, and one-click data export. You own all of it.' },
   'aura-admin': { title: 'Clinic Console', sub: "Aura Dental's operations — appointments, simulated payments, follow-ups, and GPS treasury." },
+  // Practitioner Portal (Sprint F)
+  'prac-clients': { title: 'My Clients', sub: 'The members in your care across the Solaris network.' },
+  'prac-bookings': { title: 'Bookings', sub: 'Your appointment requests and confirmed visits — confirm, reschedule, or complete.' },
+  'prac-availability': { title: 'Availability', sub: 'Set the weekly hours members can book. Changes take effect instantly.' },
+  'prac-messages': { title: 'Messages', sub: 'End-to-end encrypted conversations with the members in your care.' },
+  'prac-finance': { title: 'Finance', sub: 'Your simulated GPS earnings, transaction ledger, and payout method.' },
+  'prac-settings': { title: 'Settings', sub: 'Your practice profile, availability, notifications, and account.' },
+  // Solaris Admin (Sprint F)
+  'admin-members': { title: 'Members', sub: 'Everyone on the platform — members, practitioners, and access.' },
+  'admin-practitioners': { title: 'Practitioners', sub: 'Review and verify practitioner applications before they go live.' },
+  'admin-bookings': { title: 'Bookings', sub: 'Monitor and resolve appointments across every provider.' },
+  'admin-finance': { title: 'Finance', sub: 'Platform payment reconciliation and the GPS settlement queue.' },
+  'admin-system': { title: 'System', sub: 'Platform health, the living GPS economy, and the activity timeline.' },
+  'admin-settings': { title: 'Settings', sub: 'Platform configuration, data protection, and audit retention.' },
 };
 
 /* ============================== DAILY CHECK-IN ============================== */
@@ -4796,8 +4881,34 @@ function TabPage({ tab, user, go, effectiveRole, onUnread, onInboxUnread, onBeco
     case 'users': return <UserManagementPage />;
     case 'settings': return <SystemSettingsPage />;
     case 'my-practice': return <MyPractice user={user} onBookings={onBookings} />;
+    // ---- Practitioner Portal (Sprint F) ----
+    case 'prac-clients': return <ErrorBoundary><PatientsPage /></ErrorBoundary>;
+    case 'prac-bookings': return <ErrorBoundary><SchedulePage /></ErrorBoundary>;
+    case 'prac-availability': return <ErrorBoundary><AvailabilityManager /></ErrorBoundary>;
+    case 'prac-messages': return <ErrorBoundary><SecureChat user={user} onUnread={onUnread} /></ErrorBoundary>;
+    case 'prac-finance': return <ErrorBoundary><PractitionerFinance /></ErrorBoundary>;
+    case 'prac-settings': return <ErrorBoundary><PractitionerSettings /></ErrorBoundary>;
+    // ---- Solaris Admin (Sprint F) ----
+    case 'admin-members': return <ErrorBoundary><UserManagementPage /></ErrorBoundary>;
+    case 'admin-practitioners': return <ErrorBoundary><ProviderApprovals onStatsChange={onApprovalStats} /></ErrorBoundary>;
+    case 'admin-bookings': return <ErrorBoundary><BookingManagement /></ErrorBoundary>;
+    case 'admin-finance': return <ErrorBoundary><AdminFinance /></ErrorBoundary>;
+    case 'admin-system': return <ErrorBoundary><AdminSystemPage /></ErrorBoundary>;
+    case 'admin-settings': return <ErrorBoundary><AdminSettings /></ErrorBoundary>;
     default: return <DashboardPage user={user} go={go} />;
   }
+}
+
+/* Solaris Admin › System — platform health, the living GPS economy, and the
+   activity timeline composed into one operator view (Sprint F). */
+function AdminSystemPage() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+      <ErrorBoundary><AnalyticsPage /></ErrorBoundary>
+      <ErrorBoundary><GPSStats /></ErrorBoundary>
+      <ErrorBoundary><SystemTimelinePage /></ErrorBoundary>
+    </div>
+  );
 }
 
 /* ============================== MAIN SHELL ============================== */
@@ -4807,8 +4918,9 @@ export default function LucaPassport() {
   const effectiveRole = normalizeSolarisRole(realRole);
   const role = legacyRoleFor(effectiveRole); // legacy role the base nav understands
   const isProvider = user?.isProvider === true;
-  const nav = [...navForRole(role, isProvider), ...solarisNav(effectiveRole)];
-  const [tab, setTab] = useState('dashboard');
+  const nav = navForPersona(effectiveRole, role, isProvider);
+  const portal = PORTAL[effectiveRole] || PORTAL.patient;
+  const [tab, setTab] = useState(() => defaultTabFor(effectiveRole));
   const [drawer, setDrawer] = useState(false);
   const [badges, setBadges] = useState({});
   const [showApplication, setShowApplication] = useState(false);
@@ -4825,10 +4937,10 @@ export default function LucaPassport() {
     return () => window.removeEventListener('solaris:navigate', onNav);
   }, [go]);
 
-  // If the active tab isn't available for the (demo-switched) role, fall back to Dashboard.
+  // If the active tab isn't available for this persona, fall back to its home tab.
   const validTabIds = nav.flatMap((g) => g.items.map((i) => i.id));
   useEffect(() => {
-    if (!validTabIds.includes(tab)) setTab('dashboard');
+    if (!validTabIds.includes(tab)) setTab(defaultTabFor(effectiveRole));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveRole]);
 
@@ -4931,15 +5043,19 @@ export default function LucaPassport() {
     } catch { /* ignore */ }
   }, [user]);
 
-  // Navigate from a notification (e.g. approval → My Practice).
+  // Navigate from a notification — routes to the right tab for the active persona.
   const handleNotificationNavigate = useCallback((n) => {
     if (!n) return;
-    if (n.type === 'application_approved') go('my-practice');
+    const isPrac = effectiveRole === 'practitioner';
+    const isAdmin = effectiveRole === 'clinic_admin';
+    const messagesTab = isPrac ? 'prac-messages' : 'messages';
+    const bookingTab = isAdmin ? 'admin-bookings' : isPrac ? 'prac-bookings' : isProvider ? 'my-practice' : 'my-bookings';
+    if (n.type === 'application_approved') go(isPrac ? 'prac-clients' : 'my-practice');
     else if (n.type === 'application_rejected') setShowApplication(true);
-    else if (n.type === 'message') go('messages');
-    else if (n.type === 'booking') go(isProvider ? 'my-practice' : 'my-bookings');
+    else if (n.type === 'message') go(messagesTab);
+    else if (n.type === 'booking') go(bookingTab);
     else if (n.data?.tab) go(n.data.tab);
-  }, [go, isProvider]);
+  }, [go, isProvider, effectiveRole]);
 
   const meta = TAB_META[tab] || { title: 'Digital Sovereign Passport', sub: '' };
   const displayName = user?.fullName || [user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.email || 'Member';
@@ -4958,7 +5074,7 @@ export default function LucaPassport() {
               <img src="/solaris-logo.png" alt="Solaris" style={{ width: 42, height: 42, objectFit: 'contain', filter: 'drop-shadow(0 0 8px rgba(47,190,159,0.5))' }} />
               <div>
                 <div className="brand-name" style={{ fontSize: 15 }}>SOLARIS</div>
-                <div className="brand-sub">Sovereign Passport</div>
+                <div className="brand-sub" style={{ color: portal.accent }}>{portal.sub}</div>
               </div>
             </div>
           </div>
@@ -4986,7 +5102,7 @@ export default function LucaPassport() {
             ))}
           </nav>
 
-          {!user?.isProvider && (
+          {effectiveRole === 'patient' && !user?.isProvider && (
             appStatus?.status === 'pending' ? (
               <div className="become-provider pending" title="Your application is under review">
                 <Clock size={16} strokeWidth={2} />
@@ -5001,7 +5117,7 @@ export default function LucaPassport() {
           )}
 
           {/* Account footer — avatar, name/email, and sign out at the very bottom */}
-          <div style={{ marginTop: user?.isProvider ? 'auto' : 0, borderTop: '1px solid rgba(255,255,255,.1)', padding: '14px 16px' }}>
+          <div style={{ marginTop: (effectiveRole !== 'patient' || user?.isProvider) ? 'auto' : 0, borderTop: '1px solid rgba(255,255,255,.1)', padding: '14px 16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
               <Avatar name={displayName} size={32} />
               <div style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
@@ -5032,7 +5148,9 @@ export default function LucaPassport() {
             <PageHead title={meta.title} sub={meta.sub}
               action={
                 <div className="row gap-2" style={{ alignItems: 'center' }}>
-                  <Pill tone="mint" icon={ShieldCheck}>{SOLARIS_ROLE_LABEL[effectiveRole] || roleLabel(role)}</Pill>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: portal.accent, background: `${portal.accent}1f`, border: `1px solid ${portal.accent}55`, borderRadius: 999, padding: '4px 11px' }}>
+                    <ShieldCheck size={12} strokeWidth={2.4} />{portal.label}
+                  </span>
                 </div>
               } />
             <TabPage tab={tab} user={user} go={go} effectiveRole={effectiveRole} onUnread={(n) => setBadges((b) => ({ ...b, messages: n }))} onInboxUnread={(n) => setBadges((b) => ({ ...b, inbox: n }))} onBecomeProvider={() => setShowApplication(true)} onApprovalStats={(s) => setBadges((b) => ({ ...b, approvals: s.pending || 0 }))} onBookings={(n) => setBadges((b) => ({ ...b, bookings: n }))} />
@@ -5040,11 +5158,11 @@ export default function LucaPassport() {
         </div>
       </div>
 
-      {/* Persistent mini-player — every tab except Media (full player handles it there) */}
-      <MiniPlayer hidden={tab === 'media'} />
+      {/* Persistent mini-player — patient experience only (except Media, which has its own player) */}
+      <MiniPlayer hidden={tab === 'media' || effectiveRole !== 'patient'} />
 
-      {/* Floating LUCA assistant — available everywhere except the full Coach page */}
-      <LucaWidget user={user} hidden={tab === 'coach'} go={go} />
+      {/* Floating LUCA assistant — patient experience only (except the full Coach page) */}
+      <LucaWidget user={user} hidden={tab === 'coach' || effectiveRole !== 'patient'} go={go} />
 
       {showApplication && (
         <ProviderApplication

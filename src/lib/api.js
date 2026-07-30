@@ -387,6 +387,13 @@ class ApiClient {
   getAdminBookingStats() { return this.request('/admin/bookings/stats'); }
   resolveBooking(id, data) { return this.request(`/admin/bookings/${id}/resolve`, { method: 'PUT', body: JSON.stringify(data) }); }
 
+  // ---- Admin finance & GPS settlement (SIMULATED) ----
+  getAdminFinance() { return this.request('/admin/finance'); }
+  getAdminGpsSettlements() { return this.request('/admin/gps-settlements'); }
+  settleGpsReceipt(id, settlementState = 'SETTLED') {
+    return this.request(`/admin/gps-settlements/${id}`, { method: 'PATCH', body: JSON.stringify({ settlementState }) });
+  }
+
   // ---- Profile photo ----
   uploadProfilePhoto(image) { return this.request('/users/upload-photo', { method: 'POST', body: JSON.stringify({ image }) }); }
 
