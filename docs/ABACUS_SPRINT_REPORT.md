@@ -787,3 +787,100 @@ demo. Every item was committed + pushed on `agent/abacus-sovereign-sprint-v4`.
   fresh `up` self-heals; but the `seed` image must be rebuilt alongside
   `backend`/`frontend` or a stale image will wipe the demo-gap data. This was hit
   and corrected during Sprint E deploy (rebuilt `seed`, re-ran `--demo-gaps`).
+
+---
+
+# Sprint F — Demo readiness & role-differentiated portals
+
+Goal: make the platform investor-demo-ready with **zero dead ends**, and give
+each persona (member / practitioner / clinic admin) its own focused portal.
+
+- **ITEM 1 — Alejandro weekly availability.** `seedAlejandroProfile()` now seeds a
+  **Mon–Fri 09:00–17:00** recurring template (`provider_availability`,
+  `day_of_week` 1–5) — upgraded from the Sprint-E Mon/Wed/Fri. Yields **168**
+  on-the-fly bookable slots across the rolling window (slots are time-relative,
+  so a live count reads 167–168 depending on the hour). Rating pinned 5.0/150.
+  Commit `a97fa0b`.
+- **ITEM 2 — Sarah zero dead-ends.** `seedSarahDemoExtras()` gives
+  `sarah@solaris.health` health documents, an inbox item, a most-recent detox
+  journey, and makes Alejandro her top nutritionist (5.0/150). Guided-task
+  "book a specialist" now resolves deterministically to a real provider
+  (`journey.js` `ORDER BY`). Commit `448bc88`.
+- **ITEM 3 — Availability manager UI.** `practitioner/AvailabilityManager.jsx` —
+  a self-contained weekly grid editor (per-day on/off + start/end), reads
+  `getMyAvailability` + upcoming bookings, writes `updateMyAvailability`
+  (`PUT /api/provider/availability/me`). Wired into the Practitioner Portal.
+  Commit `6f0a047`.
+- **ITEM 4 — Role-differentiated portals.** `navForPersona()` / `defaultTabFor()`
+  / `PORTAL` in `LucaPassport.jsx` route each persona to its own chrome:
+  - **Member** (patient) — unchanged full sovereign experience; green
+    "Sovereign Passport" chrome.
+  - **Practitioner** (`role=practitioner`) — indigo "Practitioner Portal":
+    My Clients · Bookings · Availability · Messages · Finance · Settings.
+  - **Admin** (`role=admin` → `clinic_admin`) — amber "Solaris Admin":
+    Members · Practitioners · Bookings · Finance · System · Settings.
+  Patient-only chrome (MiniPlayer, LUCA widget, "Become a Practitioner" CTA) is
+  hidden for non-member personas. Commit `6f0a047`.
+- **ITEM 5 — Finance sections (all three personas).**
+  - Member — `gps/MemberPayments.jsx`: "My Payments" list + CSV export, wired
+    into the Economic Passport tab beside the existing GPS receipts. Commit
+    `9131a7c`.
+  - Practitioner — `practitioner/PractitionerFinance.jsx`: earnings summary,
+    90% split table, simulated payout form. Commit `6f0a047`.
+  - Admin — `admin/AdminFinance.jsx`: reconciliation table + GPS settlement
+    queue with "Mark as settled". Backed by new admin endpoints. Commit `6f0a047`.
+- **ITEM 6 — Settings sections.** `practitioner/PractitionerSettings.jsx`
+  (profile / availability / notifications / payment / account) and
+  `admin/AdminSettings.jsx` (platform / data-protection / audit-retention).
+  **Member settings** are intentionally **kept as-is** — served by the existing
+  Identity & Data tab (identity key, GPS end address, data export) + profile — to
+  honour ITEM 4's "keep the member experience current"; no new member Settings tab
+  was added. Commit `6f0a047`.
+- **ITEM 7 — Demo credentials verified live** (all 200 on `/api/auth/login`):
+  `sarah@solaris.health` / demo123 (member), `alejandro@solaris.health` / demo123
+  (practitioner, Mon–Fri, bookable, top nutritionist), `admin@solaris.health` /
+  admin123 (admin). Also `elena@solaris.health` / demo123, `majd@luca.health` /
+  demo123.
+
+### New backend endpoints (admin-only, `requireAdmin`)
+- `GET  /api/admin/finance` — payment-intent reconciliation (+ member/provider
+  names, `totalUsd`/`paidUsd`); simulated.
+- `GET  /api/admin/gps-settlements` — GPS shadow-receipt settlement queue
+  (`pending` count, `envelopeUsd`).
+- `PATCH /api/admin/gps-settlements/:id` — mark `SETTLED`/`PREPARED` (demo action,
+  writes `settlement_state` only).
+
+### Adaptation notes (deviations from the brief)
+- Reused the **existing** `PUT /api/provider/availability/me` for the availability
+  editor rather than the brief's assumed `PUT /api/providers/:id/availability`
+  (which does not exist).
+- **Member settings** are served by the existing Identity & Data tab, not a new
+  Settings tab (would have violated "keep member current").
+- **No migration 036** — the practitioner payout form is a **client-side
+  simulation**; no `payout_methods` table was added.
+
+## Validation (Sprint F)
+- `public/sw.js` **solaris-v12 → solaris-v13**. Migrations unchanged (through 035).
+- Backend jest **187/187** (26 suites — new `tests/admin-finance.test.js`, 4
+  cases), frontend **39/39** (6 files — new `src/__tests__/roleRouting.test.jsx`,
+  7 cases), roundtrip **9/9**, `npx vite build` clean.
+- **frontend + backend images rebuilt; `docker compose up -d frontend backend`
+  only** — the `seed` image was deliberately **NOT** rebuilt/rerun this sprint (see
+  gotcha), so the live demo DB (Alejandro incl.) was preserved untouched.
+- Live spot-checks: `/api/health` → 200; site → 200; Alejandro availability =
+  days [1,2,3,4,5] + earnings 200; Sarah sees 167 bookable slots with Alejandro
+  across 42 dates; admin finance (6 intents / $1710) + gps-settlements (5 receipts
+  / 2 pending) → 200. All three demo logins → 200.
+
+## Notes / gotchas (Sprint F)
+- **Do not blindly rerun the `seed` service to deploy.** `alejandro@solaris.health`
+  is created by `seed-demo-data.js`, **not** `seed_solaris.js`; a full
+  `seed_solaris.js` reset truncates the Solaris tables and its
+  `seedAlejandroProfile()` only *looks up* Alejandro (it does not create the user),
+  so a naive `up` with a rebuilt seed **wipes Alejandro**. This sprint deployed by
+  rebuilding **only** `frontend`+`backend` and running `up -d frontend backend`,
+  leaving `postgres`/`seed` untouched. To re-seed intentionally, run the host
+  `--demo-gaps` command against the live DB and then re-lookup the (regenerated)
+  Alejandro `provider_profile` id.
+- The `navForPersona` / `defaultTabFor` / `PORTAL` helpers are exported from
+  `LucaPassport.jsx` for unit testing.

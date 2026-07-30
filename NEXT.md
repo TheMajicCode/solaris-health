@@ -218,3 +218,48 @@ Nine items closing production-readiness gaps from a live-demo walkthrough
   the item-6 demo-gap functions, but the `seed` image must be rebuilt with
   `backend`/`frontend` — a stale seed image wipes the demo-gap data (hit + fixed
   during deploy by rebuilding `seed` and re-running `--demo-gaps`).
+
+## Sprint F — Demo readiness & role-differentiated portals
+
+- **1** Alejandro **Mon–Fri 09:00–17:00** availability template (upgraded from
+  Mon/Wed/Fri) → 168 rolling bookable slots; rating 5.0/150. `a97fa0b`
+- **2** Sarah zero dead-ends — health docs, inbox, most-recent detox journey,
+  Alejandro as top nutritionist; deterministic guided-task provider
+  (`journey.js` ORDER BY). `448bc88`
+- **3** `AvailabilityManager.jsx` weekly grid editor (reuses existing
+  `PUT /api/provider/availability/me`). `6f0a047`
+- **4** Role-differentiated portals via `navForPersona`/`defaultTabFor`/`PORTAL`:
+  member (green, unchanged) · practitioner (indigo Practitioner Portal) · admin
+  (amber Solaris Admin). Patient-only chrome hidden for other personas. `6f0a047`
+- **5** Finance — member `MemberPayments.jsx` (list + CSV, `9131a7c`),
+  practitioner `PractitionerFinance.jsx` (earnings/90% split/payout sim),
+  admin `AdminFinance.jsx` (reconciliation + settlement queue). `6f0a047`
+- **6** Settings — `PractitionerSettings.jsx` + `AdminSettings.jsx`; member
+  settings kept as-is (existing Identity & Data tab), no new member tab. `6f0a047`
+- **7** Demo creds verified live (all `/api/auth/login` → 200): sarah/demo123,
+  alejandro/demo123, admin/admin123 (+ elena, majd).
+
+### New admin endpoints
+- `GET /api/admin/finance`, `GET /api/admin/gps-settlements`,
+  `PATCH /api/admin/gps-settlements/:id` (all `requireAdmin`; simulated).
+
+### Adaptations
+- Reused existing `PUT /api/provider/availability/me` (brief's
+  `PUT /api/providers/:id/availability` does not exist).
+- Member settings served by existing Identity & Data tab (no new tab).
+- No migration 036 — payout form is a client-side simulation.
+
+### Final verification (Sprint F)
+- `sw.js` solaris-v12 → **v13**. Migrations unchanged (through 035).
+- Backend **187/187** (new admin-finance suite), frontend **39/39** (new
+  role-routing suite), roundtrip **9/9**, vite build clean.
+- Rebuilt **frontend+backend only**, `up -d frontend backend`; live DB preserved.
+- Live: `/api/health` 200; site 200; Alejandro days [1–5] + earnings 200; Sarah
+  167 slots w/ Alejandro (42 dates); admin finance + gps-settlements 200.
+
+### Gotcha
+- **Do not rerun the `seed` service to deploy.** `alejandro@solaris.health` comes
+  from `seed-demo-data.js`, not `seed_solaris.js`; a full `seed_solaris.js` reset
+  truncates Solaris tables and only *looks up* Alejandro, so a naive rebuilt-seed
+  `up` **wipes him**. Deploy by rebuilding only `frontend`+`backend`
+  (`up -d frontend backend`), leaving `postgres`/`seed` untouched.
