@@ -637,3 +637,81 @@ system knows and can see about the member.
 - Artificial **recentActions capped at the last 8** AI receipts (metadata only).
 - LUCA never diagnoses or prescribes; Intelligence surfaces provenance and
   boundaries rather than conclusions.
+
+---
+
+# Sprint D — Track B (M6–M8) · branch `agent/abacus-sovereign-sprint-v4`
+
+Sovereign payments + GPS shadow receipts + a working Identity Key (Nostr).
+All work in `/home/ubuntu/luca-passport`; commit+push after every milestone.
+
+## M6 — Payments MVP (Wompi sandbox) · commit `7d4b4f7`
+- `PaymentProvider` port + adapters (Wompi sandbox + a deterministic mock);
+  idempotent webhook handler; A4-compliant allocation ledger
+  (`lib/payments/allocation-policy.js`, `POLICY_ID gps:policy:aura-consultation:v0.1`:
+  earned_value 9000 cents = aura_service 8600 + solaris_coord 400; GPS envelope
+  1000 bps split across user-sovereignty / regenerative / infrastructure /
+  local-community; largest-remainder rounding sums exactly; **no referral leg**).
+- Inbox payment receipt surfaced to the member. Migration **030**.
+- Backend jest **164/164**.
+
+## M7 — GPS shadow receipts · commit `877c3f7`
+- Migration **031** `gps_shadow_receipts` (receipt_id UNIQUE, settlement_state
+  enum, receipt JSONB, L3-financial). `lib/gps-shadow.js` builds a
+  `gps-receipt/1.0` per A4 §3.4 (issuer/policy/context hash, eligible +
+  earned-value summary, `gps_envelope`, four-bucket allocations with
+  `status:SIMULATED`, `settlement_summary`, COUNTERPARTY privacy). Invariants
+  enforced (earned+envelope === eligible; envelope ≤ 10%). Idempotent via
+  `ON CONFLICT (receipt_id)`; settlement_state SCHEDULED ≥ $500 else PREPARED.
+  Hooked into `confirmPaidIntent`.
+- `GET /api/gps/receipts` (+ `/:receiptId` owner-only). Vault serializer writes
+  `payments/gps-receipts.jsonl` + README. Member panel
+  `components/gps/PaymentReceipts.jsx` ("Where your payment goes" — earned +
+  envelope bars, settlement chip, Simulated disclosure).
+- Backend jest **166/166** (+2), frontend **32/32**, roundtrip **9/9**.
+
+## M8 — Identity Key (Nostr) binding + NIP-05 + login · commit `31100df`
+- **Client-side only key custody.** `src/lib/identity-key.js`: BIP-39 mnemonic →
+  NIP-06 (`m/44'/1237'/0'/0/0`) → npub/nsec. The secret key is derived on device,
+  kept in `sessionStorage` (never localStorage, never sent to the server).
+- **Binding.** `POST /api/identity/nostr` stores only the **public npub** +
+  optional NIP-05 handle. Migration **032** `nostr_handles`
+  (handle UNIQUE, pubkey_hex, npub). `bindNostrKey` revokes any prior active
+  nostr binding, mirrors to `users.nostr_npub`, upserts the handle.
+- **Working login (challenge/response).** `POST /api/auth/nostr/challenge`
+  issues a single-use 5-min nonce (`solaris-login:<nonce>`); the client signs it
+  with BIP-340 Schnorr over `sha256(message)`; `POST /api/auth/nostr/login`
+  verifies the signature, finds/creates the user, and issues a JWT. Replaced the
+  old "coming soon" button in `flows/Auth.jsx` with a real
+  create-new / use-existing flow.
+- **NIP-05 + Lightning.** `GET /.well-known/nostr.json?name=<handle>` resolves the
+  handle → pubkey (public, CORS-open). `GET /.well-known/lnurlp/:name` returns a
+  friendly "not yet configured" per A4 §3.4 scope note. nginx vhost updated to
+  proxy `/.well-known/` to the backend.
+- **UI + copy.** Renamed user-visible "Nostr" → **"Identity Key"** everywhere;
+  added an ℹ️ info popover with the exact sovereignty copy (identity key vs
+  account, created on device, belongs to you not Solaris, no password reset, keep
+  a backup, save with 3–5 people, new vs existing key). `IdentityCard` surfaces
+  the bound npub + NIP-05 handle and offers an on-device generate/bind flow.
+- Also fixed a latent M7 build bug (`PaymentReceipts` default-imported `api`).
+- Backend jest **170/170** (+4 `nostr-identity.test.js`), frontend **32/32**,
+  roundtrip **9/9**, `npx vite build` clean.
+
+## Validation (Sprint D)
+- Migrations current through **032**. `public/sw.js` **solaris-v10 → solaris-v11**.
+- Docker rebuilt + up; `/api/health` → ok; live site https://solaris-health.abacusai.cloud → 200.
+- **Live E2E of Identity Key login:** create identity → challenge → sign →
+  `/api/auth/nostr/login` 200 + JWT → `POST /api/identity/nostr` binds npub +
+  handle → `GET /.well-known/nostr.json?name=<handle>` resolves to the pubkey →
+  lnurlp returns the "not configured" notice. Client-sign / server-verify parity
+  confirmed. Test data cleaned up afterward.
+
+## Beta scoping / deferred (A2/A4)
+- **Signing is direct (client holds nsec in sessionStorage), not NIP-46 bunker.**
+  A2 §3.2.4 names NIP-46 as the ideal; M8's scope note says ship NIP-05 + npub
+  binding first. Key never leaves the device / never persisted to disk.
+- **Payments + GPS settlement are simulated** (allocations `SIMULATED`,
+  `settled_cents:0`); Wompi runs in sandbox. Lightning address intentionally
+  returns "not configured".
+- The A4-compliant payments policy runs alongside the older `lib/gps` engine used
+  by the legacy `gps_transactions` flows; they are not merged.

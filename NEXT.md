@@ -132,3 +132,47 @@ built, verified, committed and pushed.
 - Artificial recentActions capped at last 8 receipts (metadata only, no PHI).
 - Remaining Track B milestones (A4 Wompi/GPS, A2 §3 Nostr binding) not started
   — separate later subtasks.
+
+## Sprint D — Track B (M6–M8) · branch `agent/abacus-sovereign-sprint-v4`
+
+Sovereign payments + GPS shadow receipts + working Identity Key (Nostr).
+Commit+push after every milestone.
+
+### M6 — Payments MVP (Wompi sandbox) · commit `7d4b4f7`
+- PaymentProvider port + Wompi-sandbox/mock adapters; idempotent webhook;
+  A4 allocation ledger (`lib/payments/allocation-policy.js`,
+  `gps:policy:aura-consultation:v0.1`; earned 9000 = aura 8600 + coord 400;
+  envelope 1000 bps four buckets; largest-remainder; no referral leg); inbox
+  receipt. Migration 030. Backend 164/164.
+
+### M7 — GPS shadow receipts · commit `877c3f7`
+- Migration 031 `gps_shadow_receipts`. `lib/gps-shadow.js` builds
+  `gps-receipt/1.0` (A4 §3.4), invariants enforced, idempotent, SCHEDULED ≥ $500.
+  `GET /api/gps/receipts(/:id)`; vault `payments/gps-receipts.jsonl`; member
+  panel `PaymentReceipts.jsx`. Backend 166/166, frontend 32/32, roundtrip 9/9.
+
+### M8 — Identity Key (Nostr) + NIP-05 + login · commit `31100df`
+- Client-side BIP-39 → NIP-06 npub (`src/lib/identity-key.js`); nsec in
+  sessionStorage only, never sent up. `POST /api/identity/nostr` stores public
+  npub + NIP-05 handle (migration 032 `nostr_handles`). Working challenge/response
+  login: `/api/auth/nostr/challenge` (single-use 5-min nonce) +
+  `/api/auth/nostr/login` (BIP-340 Schnorr verify → JWT). `flows/Auth.jsx` now has
+  a real create/existing Identity Key flow (replaced "coming soon").
+  `.well-known/nostr.json` resolves handle→pubkey; lnurlp returns "not configured".
+  Renamed "Nostr" → "Identity Key" in UI + ℹ️ info popover with exact sovereignty
+  copy; `IdentityCard` generate/bind flow. Fixed latent M7 `PaymentReceipts` import
+  build bug. Backend 170/170 (+4), frontend 32/32, roundtrip 9/9, vite build clean.
+
+### Final verification (Sprint D)
+- Migrations through 032. `sw.js` solaris-v10 → **v11**. Docker rebuilt + up;
+  `/api/health` ok; live site 200. Live E2E: create → challenge → sign → login
+  200 + JWT → bind npub+handle → `nostr.json` resolves → lnurlp "not configured".
+  nginx `/.well-known/` proxied to backend. Test data cleaned up. Tag
+  `sprint-d-complete`.
+
+### Follow-ups / deferred
+- Signing is direct (nsec in sessionStorage), not NIP-46 bunker (A2 §3.2.4 ideal;
+  scope note says ship NIP-05 + npub first). Key never leaves device.
+- Payments/GPS settlement simulated (Wompi sandbox; allocations SIMULATED).
+  Lightning address returns "not configured".
+- A4 payments policy runs alongside the legacy `lib/gps` engine; not merged.
