@@ -157,10 +157,17 @@ function buildVaultExport(record) {
         (c.meal_notes ? `\n\n**Meals:** ${c.meal_notes}` : '') +
         (c.notes ? `\n\n${c.notes}` : '') + '\n';
     }).join('\n');
+    const cp = checkins[0] || {};
     files.push({
       path: 'health/checkins.md',
-      contents: fm({ type: 'daily-checkins', sensitivity: 'private', entries: checkins.length, exported_at: exportedAt }) +
-        `# Daily Check-ins\n\n${rows}`,
+      contents: fm({
+        type: 'daily-checkins', sensitivity: 'private', entries: checkins.length,
+        provenance_level: cp.level || 'L0',
+        provenance_source: cp.source || 'self_reported',
+        consent_scope: cp.consent_scope || 'personal',
+        exported_at: exportedAt,
+      }) +
+        `# Daily Check-ins\n\n_Self-reported by the member (provenance ${cp.level || 'L0'}, source ${cp.source || 'self_reported'})._\n\n${rows}`,
     });
   }
 
@@ -170,10 +177,17 @@ function buildVaultExport(record) {
       `### ${dateOf(e.created_at)}\n` +
       `**Mood:** ${e.mood || '—'}\n\n${e.content || ''}\n`
     ).join('\n---\n\n');
+    const jp = journal[0] || {};
     files.push({
       path: 'health/journal.md',
-      contents: fm({ type: 'journal', entries: journal.length, exported_at: exportedAt }) +
-        `# Health Journal\n\n${entries}`,
+      contents: fm({
+        type: 'journal', entries: journal.length,
+        provenance_level: jp.level || 'L0',
+        provenance_source: jp.source || 'self_reported',
+        consent_scope: jp.consent_scope || 'personal',
+        exported_at: exportedAt,
+      }) +
+        `# Health Journal\n\n_Self-reported by the member (provenance ${jp.level || 'L0'}, source ${jp.source || 'self_reported'})._\n\n${entries}`,
     });
   }
 

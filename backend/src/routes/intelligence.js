@@ -102,21 +102,23 @@ router.get('/context', authMiddleware, async (req, res) => {
       });
     }
 
-    // Log — recent check-ins (L1) + journal (L0).
+    // Log — recent check-ins + journal (both L0 self_reported per provenance columns).
     const ci = await db.query(
-      `SELECT COUNT(*)::int AS n, MAX(checkin_date) AS last FROM daily_checkins WHERE user_id=$1`, [userId]).catch(() => ({ rows: [{ n: 0 }] }));
+      `SELECT COUNT(*)::int AS n, MAX(observed_at) AS last, MAX(level) AS lvl, MAX(source) AS src, MAX(consent_scope) AS scope FROM daily_checkins WHERE user_id=$1`, [userId]).catch(() => ({ rows: [{ n: 0 }] }));
     if (ci.rows[0] && ci.rows[0].n > 0) {
       natural.push({
         shelf: 'Log', title: 'Daily check-ins', detail: `${ci.rows[0].n} check-in${ci.rows[0].n === 1 ? '' : 's'} logged.`,
-        source: 'self', level: 1, observedAt: ci.rows[0].last || null,
+        source: ci.rows[0].src || 'self_reported', level: ci.rows[0].lvl || 'L0',
+        consentScope: ci.rows[0].scope || 'personal', observedAt: ci.rows[0].last || null,
       });
     }
     const jr = await db.query(
-      `SELECT COUNT(*)::int AS n, MAX(created_at) AS last FROM journal_entries WHERE user_id=$1`, [userId]).catch(() => ({ rows: [{ n: 0 }] }));
+      `SELECT COUNT(*)::int AS n, MAX(observed_at) AS last, MAX(level) AS lvl, MAX(source) AS src, MAX(consent_scope) AS scope FROM journal_entries WHERE user_id=$1`, [userId]).catch(() => ({ rows: [{ n: 0 }] }));
     if (jr.rows[0] && jr.rows[0].n > 0) {
       natural.push({
         shelf: 'Log', title: 'Journal entries', detail: `${jr.rows[0].n} private reflection${jr.rows[0].n === 1 ? '' : 's'}.`,
-        source: 'self', level: 0, observedAt: jr.rows[0].last || null,
+        source: jr.rows[0].src || 'self_reported', level: jr.rows[0].lvl || 'L0',
+        consentScope: jr.rows[0].scope || 'personal', observedAt: jr.rows[0].last || null,
       });
     }
 

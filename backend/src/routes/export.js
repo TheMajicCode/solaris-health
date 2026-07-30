@@ -39,7 +39,7 @@ async function gatherRecord(userId) {
 
   // Journal entries (schema: mood, content, created_at — no separate entry_date column)
   const journal = await db.query(
-    'SELECT mood, content, created_at FROM journal_entries WHERE user_id=$1 ORDER BY created_at DESC LIMIT 30',
+    'SELECT mood, content, level, source, observed_at, consent_scope, created_at FROM journal_entries WHERE user_id=$1 ORDER BY created_at DESC LIMIT 30',
     [userId]
   ).catch(() => ({ rows: [] }));
 
@@ -62,7 +62,7 @@ async function gatherRecord(userId) {
   const checkins = await db.query(
     `SELECT checkin_date, mind_score, body_score, heart_score, spirit_score,
             sleep_hours, hydration_glasses, movement_minutes, nutrition_score,
-            meal_notes, notes, created_at
+            meal_notes, notes, level, source, observed_at, consent_scope, created_at
      FROM daily_checkins WHERE user_id=$1 ORDER BY checkin_date DESC LIMIT 90`,
     [userId]
   ).catch(() => ({ rows: [] }));

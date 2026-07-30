@@ -33,8 +33,8 @@ router.post('/', authMiddleware, async (req, res) => {
     if (mood && !ALLOWED_MOODS.includes(mood)) mood = null;
 
     const { rows } = await db.query(
-      `INSERT INTO journal_entries (user_id, mood, content)
-       VALUES ($1, $2, $3)
+      `INSERT INTO journal_entries (user_id, mood, content, level, source, observed_at, consent_scope)
+       VALUES ($1, $2, $3, 'L0', 'self_reported', now(), 'personal')
        RETURNING id, mood, content, created_at`,
       [req.user.userId, mood || null, content]
     );
