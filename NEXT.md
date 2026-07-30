@@ -176,3 +176,45 @@ Commit+push after every milestone.
 - Payments/GPS settlement simulated (Wompi sandbox; allocations SIMULATED).
   Lightning address returns "not configured".
 - A4 payments policy runs alongside the legacy `lib/gps` engine; not merged.
+
+
+
+---
+
+## Sprint E — Quality Hardening
+
+Nine items closing production-readiness gaps from a live-demo walkthrough
+(branch `agent/abacus-sovereign-sprint-v4`, one commit + push per item):
+
+- **0** Identity Key login button contrast — solid green + white text. `bd56b1a`
+- **1** Postgres-backed rate-limit store (mig 033); preserves `trust proxy=2` +
+  failed-attempts-only keying; test-mode memory fallback. `0c84c19`
+- **2** Email adapter (Resend/SMTP/console), bilingual ES/EN, lazy nodemailer. `18a0726`
+- **3** GPS shadow-receipt demo data — 3 SETTLED + 2 SCHEDULED, idempotent. `769c27c`
+- **4** Provenance rollout (mig 034) to `daily_checkins` + `journal_entries`;
+  Natural shelves show real source·level·date. `3e63b08`
+- **5** Booking payment UI (mig 035) — `payment_intents.booking_id` +
+  `bookings.payment_status`; `/checkout` takes `bookingId`, derives amount,
+  validates ownership, marks pending→paid on webhook; BookingFlow "Pay to
+  confirm" + BookingCard pills (Wompi sandbox). `23ef111`
+- **6** Demo gaps — `seedAlejandroProfile()` (bookable integrative-nutrition
+  profile: 3 services, Mon/Wed/Fri slots → appears in Explore + Curate) and
+  `seedSarahAssessment()` (3 historical snapshots 30/60/90d → real vitality trend
+  line, plus answer backfill). Idempotent; `--demo-gaps` flag + full seed. `78abac9`
+- **7** Identity Key flow UX — verified complete (bundled into item 0).
+- **8** Mobile — check-in sliders ≥44px touch target; Intelligence panes
+  `minmax(min(320|280px,100%),1fr)` (no ≤375px overflow); booking modal padding
+  + 96vh at ≤520px. `e7b072a`
+
+### Final verification (Sprint E)
+- Migrations through **035**. `sw.js` solaris-v11 → **v12**.
+- Backend **183/183**, frontend **32/32**, roundtrip **9/9**, vite build clean.
+- Docker frontend+backend+seed rebuilt; `up -d`; `/api/health` ok; live site 200.
+- Verified live: alejandro bookable (active/approved, 3 services/3 slots); sarah
+  has 4 trending responses (vitality 55→60→63→67).
+
+### Gotcha
+- The `seed` compose service runs a **full reset** on every `up`. It now includes
+  the item-6 demo-gap functions, but the `seed` image must be rebuilt with
+  `backend`/`frontend` — a stale seed image wipes the demo-gap data (hit + fixed
+  during deploy by rebuilding `seed` and re-running `--demo-gaps`).

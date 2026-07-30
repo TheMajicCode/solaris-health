@@ -715,3 +715,75 @@ All work in `/home/ubuntu/luca-passport`; commit+push after every milestone.
   returns "not configured".
 - The A4-compliant payments policy runs alongside the older `lib/gps` engine used
   by the legacy `gps_transactions` flows; they are not merged.
+
+
+
+---
+
+# Sprint E — Quality Hardening
+
+Nine focused items closing production-readiness gaps found while walking the live
+demo. Every item was committed + pushed on `agent/abacus-sovereign-sprint-v4`.
+
+- **ITEM 0 — Identity Key login contrast.** Solid `#2DB584` green button with
+  white text (was dark text on a near-transparent green over the dark auth
+  screen — effectively invisible). Sub-label + info chip forced to white.
+  Commit `bd56b1a`.
+- **ITEM 1 — Postgres-backed rate-limit store (mig 033).** Login/auth limiters
+  now persist counters in Postgres so they survive restarts and work across
+  replicas. Preserves `trust proxy=2` + failed-attempts-only keying (IP+email).
+  A test-mode fallback (`NODE_ENV=test` / `RATE_LIMIT_STORE=memory`) keeps jest
+  runs from carrying 429s. Commit `0c84c19`.
+- **ITEM 2 — Email adapter (Resend / SMTP / console).** 12-factor email port with
+  three drivers auto-selected from env; bilingual (ES/EN) templates; lazy-required
+  `nodemailer` (no cost when unused). Commit `18a0726`.
+- **ITEM 3 — GPS shadow-receipt demo data.** 5 `gps-receipt/1.0` receipts (3
+  SETTLED + 2 SCHEDULED) so the "How your value flows" view is populated out of
+  the box; subject ids looked up at seed time; idempotent. Commit `769c27c`.
+- **ITEM 4 — Provenance rollout (mig 034).** `daily_checkins` + `journal_entries`
+  carry `observed_at / level / source / consent_scope`; the Intelligence Natural
+  shelves surface real provenance (source·level·date) instead of hardcoded
+  defaults. Commit `3e63b08`.
+- **ITEM 5 — Booking payment UI (mig 035).** `payment_intents.booking_id` +
+  `bookings.payment_status`; `/api/payments/checkout` accepts a `bookingId`,
+  derives the amount from the booking, validates ownership, reuses an open intent,
+  and marks the booking `pending`; webhook confirmation flips it to `paid` +
+  confirms the appointment. `BookingFlow` "Pay to confirm" block (Wompi sandbox
+  redirect) + `BookingCard` payment pills. Commit `23ef111`.
+- **ITEM 6 — Demo data gaps.** `seedAlejandroProfile()` gives
+  `alejandro@solaris.health` an active/approved integrative-nutrition
+  `provider_profile` (3 services, Mon/Wed/Fri availability) so the practitioner
+  account is bookable and appears in Explore + LUCA "Curate for me".
+  `seedSarahAssessment()` adds 3 historical assessment snapshots (30/60/90d)
+  trending gently upward toward her current values — with matching
+  body-system/aspect scores and answers, plus answer backfill on the current
+  response — so the dashboard vitality trend renders a real line. Both idempotent;
+  wired a `--demo-gaps` flag and into the full seed. Commit `78abac9`.
+- **ITEM 7 — Identity Key flow UX.** Verified complete: solid green CTA, info
+  popover, choose / create / existing modes, recovery-phrase grid with copy +
+  confirm checkbox, and a mobile-friendly modal (`max-height:88vh; overflow:auto`).
+  Bundled into ITEM 0; no further change needed.
+- **ITEM 8 — Mobile responsiveness.** Check-in sliders now expose a ≥44px touch
+  target on mobile (44px input hit area with a thin centered 8px track + 28px
+  thumb). The Intelligence panes (Natural / Artificial / Enhanced) use
+  `minmax(min(320|280px,100%),1fr)` grid floors so they never overflow at ≤375px.
+  Booking modal padding tightened + height raised to 96vh at ≤520px to reduce
+  cramping. Commit `e7b072a`.
+
+## Validation (Sprint E)
+- Migrations current through **035**. `public/sw.js` **solaris-v11 → solaris-v12**.
+- Backend jest **183/183** (25 suites), frontend **32/32** (5 files),
+  roundtrip **9/9** structural, `npx vite build` clean.
+- Docker `frontend` + `backend` + `seed` images rebuilt; `docker compose up -d`;
+  `/api/health` → ok (database ok); live site
+  https://solaris-health.abacusai.cloud → **200**.
+- Demo data verified live: `alejandro@solaris.health` bookable
+  (active/approved/not-hidden, 3 services, 3 slots); `sarah@solaris.health` has 4
+  trending assessment responses (vitality 55→60→63→67).
+
+## Notes / gotchas
+- The `seed` compose service runs a **full reset** (`node seed_solaris.js`) on
+  every `docker compose up`. It now includes the ITEM 6 demo-gap functions, so a
+  fresh `up` self-heals; but the `seed` image must be rebuilt alongside
+  `backend`/`frontend` or a stale image will wipe the demo-gap data. This was hit
+  and corrected during Sprint E deploy (rebuilt `seed`, re-ran `--demo-gaps`).
