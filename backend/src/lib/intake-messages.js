@@ -11,6 +11,7 @@
 
 const db = require('../db');
 const { SPECIALTY_VARIANT } = require('../db/intake-templates');
+const { sendNotificationEmail } = require('./mailer');
 
 /** Global kill-switch (spec A5: auto_send_intake config, default ON). */
 async function autoSendEnabled() {
@@ -88,6 +89,12 @@ async function onBookingConfirmed(booking) {
       messageType: 'booking_confirmation',
       relatedBookingId: booking.id,
     });
+
+    // De-identified external email nudge (booking confirmation). A single nudge
+    // also covers any first-booking intake request created below in the same
+    // pass, so we never send two emails for one booking event.
+    sendNotificationEmail({ userId: booking.patient_id, deepLinkPath: '/' })
+      .catch(() => {});
 
     if (!providerUserId) return;
 
@@ -184,6 +191,8 @@ async function sendIntakeReminders(dbClient) {
         `UPDATE patient_intake_submissions SET reminder_sent_at = now() WHERE id=$1`,
         [row.submission_id]
       );
+      // De-identified 48h reminder email nudge (no PHI).
+      sendNotificationEmail({ userId: row.patient_id, deepLinkPath: '/' }).catch(() => {});
       sent += 1;
     }
   } catch (err) {
