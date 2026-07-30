@@ -366,15 +366,15 @@ async function seedAlejandroProfile() {
       [pid, s[0], s[1], s[2], s[3], s[4]]
     );
   }
-  // Availability: Mon / Wed / Fri, 09:00–17:00 (day_of_week 1,3,5).
-  for (const dow of [1, 3, 5]) {
+  // Availability: Mon–Fri, 09:00–17:00 (day_of_week 1–5) for rich bookable demo.
+  for (const dow of [1, 2, 3, 4, 5]) {
     await db.query(
       `INSERT INTO provider_availability (provider_id, day_of_week, start_time, end_time, is_available)
        VALUES ($1,$2,'09:00','17:00',true)`,
       [pid, dow]
     );
   }
-  console.log('✓ Seeded practitioner profile for alejandro@solaris.health (3 services, 3 weekly slots).');
+  console.log('✓ Seeded practitioner profile for alejandro@solaris.health (3 services, 5 weekly slots Mon–Fri).');
   return 1;
 }
 
