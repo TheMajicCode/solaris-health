@@ -384,6 +384,66 @@ router.post('/habits/tick', authMiddleware, async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
+// ---------- TO-DO LIST (personal-growth hub, journey-seeded + custom) ----------
+const TODO_DIMENSIONS = ['mind', 'body', 'heart', 'spirit'];
+
+router.get('/todos', authMiddleware, async (req, res) => {
+  try {
+    const r = await db.query(
+      `SELECT id, journey_type, step_key, title, detail, kind, dimension,
+              action_type, action_target, done,
+              to_char(done_at,'YYYY-MM-DD"T"HH24:MI:SSZ') AS done_at, sort_order, created_at
+         FROM member_todos WHERE user_id=$1
+        ORDER BY done ASC, sort_order ASC, created_at ASC`,
+      [req.user.userId]);
+    res.json({ todos: r.rows });
+  } catch (err) { console.error('[todos] list', err); res.status(500).json({ error: 'Server error' }); }
+});
+
+router.post('/todos', authMiddleware, async (req, res) => {
+  try {
+    const title = (req.body?.title || '').trim();
+    if (!title) return res.status(400).json({ error: 'Title required' });
+    let dimension = (req.body?.dimension || '').trim().toLowerCase();
+    if (!TODO_DIMENSIONS.includes(dimension)) dimension = null;
+    const detail = req.body?.detail ? String(req.body.detail).slice(0, 500) : null;
+    const r = await db.query(
+      `INSERT INTO member_todos (user_id, title, detail, kind, dimension, sort_order)
+       VALUES ($1,$2,$3,'activity',$4, 100)
+       RETURNING id, journey_type, step_key, title, detail, kind, dimension, action_type, action_target, done, done_at, sort_order, created_at`,
+      [req.user.userId, title.slice(0, 200), detail, dimension]);
+    res.status(201).json({ todo: r.rows[0] });
+  } catch (err) { console.error('[todos] create', err); res.status(500).json({ error: 'Server error' }); }
+});
+
+router.post('/todos/:id/toggle', authMiddleware, async (req, res) => {
+  try {
+    const r = await db.query(
+      `UPDATE member_todos
+          SET done = NOT done,
+              done_at = CASE WHEN done THEN NULL ELSE now() END
+        WHERE id=$1 AND user_id=$2
+       RETURNING id, done`,
+      [req.params.id, req.user.userId]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
+    // A small nudge of LOVE points the first time a to-do is completed today.
+    if (r.rows[0].done) {
+      await award(req.user.userId, 'todo_complete', 5, 'habit', 'Completed a guided task').catch(() => {});
+    }
+    res.json({ todo: r.rows[0] });
+  } catch (err) { console.error('[todos] toggle', err); res.status(500).json({ error: 'Server error' }); }
+});
+
+router.delete('/todos/:id', authMiddleware, async (req, res) => {
+  try {
+    const r = await db.query(
+      `DELETE FROM member_todos WHERE id=$1 AND user_id=$2 RETURNING id`,
+      [req.params.id, req.user.userId]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json({ ok: true });
+  } catch (err) { console.error('[todos] delete', err); res.status(500).json({ error: 'Server error' }); }
+});
+
 // ---------- REWARDS ----------
 router.get('/rewards', authMiddleware, async (req, res) => {
   const events = await db.query('SELECT * FROM reward_events WHERE user_id=$1 ORDER BY created_at DESC LIMIT 50', [req.user.userId]);

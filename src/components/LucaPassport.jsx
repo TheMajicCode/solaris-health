@@ -2724,12 +2724,195 @@ const JOURNAL_MOODS = [
 ];
 const MOOD_MAP = Object.fromEntries(JOURNAL_MOODS.map((m) => [m.key, m]));
 
-function JournalPage({ user }) {
+/* The four growth dimensions the Journal hub is organised around. */
+const GROWTH_DIMS = [
+  { key: 'mind', label: 'Mental', icon: Brain, color: '#5B77C9' },
+  { key: 'body', label: 'Physical', icon: Activity, color: '#2DB584' },
+  { key: 'heart', label: 'Emotional', icon: Heart, color: '#E07A9B' },
+  { key: 'spirit', label: 'Spiritual', icon: Sparkles, color: '#C79A3A' },
+];
+const DIM_MAP = Object.fromEntries(GROWTH_DIMS.map((d) => [d.key, d]));
+const TODO_KIND_ICON = { checkin: Plus, habit: Droplet, audio: Headphones, activity: Compass, reflection: BookOpen, practitioner: Stethoscope, navigate: ArrowRight };
+
+// CTA shown on a to-do that takes the member somewhere useful (null = no nav).
+function todoCTA(t) {
+  const type = t.action_type;
+  const tgt = t.action_target;
+  if (type === 'start_checkin') return { label: 'Check in', icon: Plus };
+  if (type === 'play_audio') return { label: 'Play', icon: Play };
+  if (type === 'open_listing') return { label: 'View', icon: Stethoscope };
+  if (type === 'navigate' && tgt && tgt !== 'journal') return { label: 'Go', icon: ArrowRight };
+  return null;
+}
+
+/* Guided-journey To-Do list — the member's personal plan. */
+function GrowthTodos({ todos, journeyType, onToggle, onRun, onAdd, onDelete, go }) {
+  const [title, setTitle] = useState('');
+  const [dim, setDim] = useState('mind');
+  const done = todos.filter((t) => t.done).length;
+  const add = () => { const v = title.trim(); if (!v) return; onAdd({ title: v, dimension: dim }); setTitle(''); };
+
+  return (
+    <Card className="lg">
+      <SectionHead
+        eyebrow="Your plan"
+        title="To-do list"
+        action={todos.length ? <Pill tone={done === todos.length ? 'gold' : 'mint'} icon={CheckCircle2}>{done}/{todos.length} done</Pill> : null}
+      />
+      {journeyType ? (
+        <div className="tiny muted" style={{ marginTop: -6, marginBottom: 12 }}>
+          Curated from your {String(journeyType).replace(/_/g, ' ')} journey — check each off as you go.
+        </div>
+      ) : (
+        <div className="tiny muted" style={{ marginTop: -6, marginBottom: 12 }}>
+          Add your own goals, or begin a guided journey in Explore to fill this with a curated plan.
+        </div>
+      )}
+
+      {todos.length === 0 ? (
+        <Empty icon={Compass} title="No tasks yet" sub="Begin a guided journey in Explore, or add your first goal below." />
+      ) : (
+        <div className="col" style={{ gap: 2 }}>
+          {todos.map((t) => {
+            const cta = todoCTA(t);
+            const dm = DIM_MAP[t.dimension];
+            const KindIcon = TODO_KIND_ICON[t.kind] || Compass;
+            const CtaIcon = cta?.icon || ArrowRight;
+            return (
+              <div key={t.id} className="list-row" style={{ padding: '11px 0', opacity: t.done ? 0.62 : 1, borderBottom: '1px solid var(--line,#EDF2F0)' }}>
+                <button
+                  onClick={() => onToggle(t)}
+                  title={t.done ? 'Mark not done' : 'Mark done'}
+                  style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, flex: 'none', display: 'grid', placeItems: 'center' }}
+                >
+                  {t.done
+                    ? <CheckCircle2 size={22} color="#2DB584" strokeWidth={2.2} />
+                    : <span style={{ width: 21, height: 21, borderRadius: 999, border: '2px solid #C9DAD4', display: 'block' }} />}
+                </button>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="small f6" style={{ textDecoration: t.done ? 'line-through' : 'none', display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <KindIcon size={13} style={{ color: dm?.color || 'var(--muted)', flex: 'none' }} />
+                    {t.title}
+                  </div>
+                  {t.detail && <div className="tiny muted" style={{ marginTop: 2, lineHeight: 1.45 }}>{t.detail}</div>}
+                </div>
+                <div className="row" style={{ gap: 4, flex: 'none', alignItems: 'center' }}>
+                  {cta && !t.done && (
+                    <button className="checkin-cta" style={{ padding: '6px 11px', fontSize: 12 }} onClick={() => onRun(t)}>
+                      <CtaIcon size={13} strokeWidth={2.4} /> {cta.label}
+                    </button>
+                  )}
+                  <button className="icon-btn" title="Remove" onClick={() => onDelete(t)}
+                    style={{ border: 'none', background: 'transparent', color: 'var(--muted,#8AA09C)', cursor: 'pointer', padding: 4 }}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Add a custom goal */}
+      <div className="row" style={{ gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+        <div className="row" style={{ gap: 6, flex: 1, minWidth: 200 }}>
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') add(); }}
+            placeholder="Add your own goal…"
+            style={{ flex: 1, minWidth: 0, borderRadius: 10, border: '1.5px solid var(--line,#E6EDEA)', padding: '9px 12px', fontFamily: 'inherit', fontSize: 13.5, color: 'var(--ink)', background: '#fff', outline: 'none' }}
+          />
+        </div>
+        <div className="row" style={{ gap: 5 }}>
+          {GROWTH_DIMS.map((d) => (
+            <button key={d.key} type="button" onClick={() => setDim(d.key)} title={d.label}
+              style={{ width: 34, height: 34, borderRadius: 9, cursor: 'pointer', display: 'grid', placeItems: 'center',
+                border: `1.5px solid ${dim === d.key ? d.color : 'var(--line,#E6EDEA)'}`, background: dim === d.key ? `${d.color}18` : '#fff', color: d.color }}>
+              <d.icon size={15} />
+            </button>
+          ))}
+          <Btn variant="primary" icon={Plus} onClick={add} disabled={!title.trim()}>Add</Btn>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/* Daily habit tracker — today's habits with a tap-to-tick. */
+function HabitTracker({ habits, ticked, onToggle, onAdd, onDelete }) {
+  const [name, setName] = useState('');
+  const doneCount = habits.filter((h) => ticked[h.id]).length;
+  const add = () => { const v = name.trim(); if (!v) return; onAdd(v); setName(''); };
+  return (
+    <Card>
+      <SectionHead
+        eyebrow="Daily habits"
+        title="Habit tracker"
+        action={habits.length ? <Pill tone={doneCount === habits.length ? 'gold' : 'mint'} icon={Sparkles}>{doneCount}/{habits.length} today</Pill> : null}
+      />
+      {habits.length === 0 ? (
+        <Empty icon={Leaf} title="No habits yet" sub="Add up to 5 daily habits — or begin a journey to seed them automatically." />
+      ) : (
+        <div className="ci-habits" style={{ marginTop: 4 }}>
+          {habits.map((h) => (
+            <div key={h.id} className="row" style={{ gap: 8, alignItems: 'center' }}>
+              <button type="button" className={`ci-habit ${ticked[h.id] ? 'on' : ''}`} onClick={() => onToggle(h)} style={{ flex: 1 }}>
+                <span className="ci-hcheck">{ticked[h.id] && <Check size={13} strokeWidth={3} />}</span>
+                <span style={{ fontSize: 16 }}>{h.icon || '🌱'}</span>
+                <span className="ci-hname">{h.name}</span>
+              </button>
+              <button className="icon-btn" title="Remove habit" onClick={() => onDelete(h)}
+                style={{ border: 'none', background: 'transparent', color: 'var(--muted,#8AA09C)', cursor: 'pointer', padding: 4 }}>
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {habits.length < 5 && (
+        <div className="row" style={{ gap: 8, marginTop: 12 }}>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') add(); }}
+            placeholder="Add a daily habit…"
+            style={{ flex: 1, borderRadius: 10, border: '1.5px solid var(--line,#E6EDEA)', padding: '9px 12px', fontFamily: 'inherit', fontSize: 13.5, color: 'var(--ink)', background: '#fff', outline: 'none' }}
+          />
+          <Btn variant="primary" icon={Plus} onClick={add} disabled={!name.trim()}>Add</Btn>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function JournalPage({ user, go }) {
+  const { setPendingProviderId } = useApp();
+  const { playById } = useAudio();
+  const [view, setView] = useState('grow'); // grow | reflect
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [mood, setMood] = useState('good');
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
+  // Growth-hub state
+  const [todos, setTodos] = useState([]);
+  const [habits, setHabits] = useState([]);
+  const [ticked, setTicked] = useState({});
+
+  const loadGrowth = useCallback(async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const [td, h, tk] = await Promise.all([
+      api.getTodos().catch(() => ({ todos: [] })),
+      api.getHabits().catch(() => ({ habits: [] })),
+      api.getHabitTicks(today, today).catch(() => ({ ticks: [] })),
+    ]);
+    setTodos(td?.todos || []);
+    setHabits(h?.habits || []);
+    const pre = {};
+    (tk?.ticks || []).forEach((x) => { pre[x.habit_id] = true; });
+    setTicked(pre);
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -2737,10 +2920,63 @@ function JournalPage({ user }) {
       try {
         const r = await api.getJournal().catch(() => ({ entries: [] }));
         if (alive) setEntries(r?.entries || []);
+        await loadGrowth();
       } finally { alive && setLoading(false); }
     })();
     return () => { alive = false; };
-  }, []);
+  }, [loadGrowth]);
+
+  // ── To-Do handlers ──
+  const toggleTodo = async (t) => {
+    setTodos((xs) => xs.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)));
+    try { await api.toggleTodo(t.id); } catch { setTodos((xs) => xs.map((x) => (x.id === t.id ? { ...x, done: t.done } : x))); }
+  };
+  const runTodo = (t) => {
+    const type = t.action_type;
+    const target = t.action_target;
+    switch (type) {
+      case 'start_checkin':
+        go && go('health');
+        setTimeout(() => window.dispatchEvent(new CustomEvent('solaris:open-checkin')), 380);
+        break;
+      case 'play_audio':
+        if (playById) playById(target, go); else go && go('media');
+        toast.success('Playing your guided session');
+        break;
+      case 'open_listing':
+        if (target && setPendingProviderId) setPendingProviderId(String(target));
+        go && go('explore');
+        break;
+      case 'navigate':
+        if (target && target !== 'journal') go && go(target);
+        break;
+      default: break;
+    }
+  };
+  const addTodo = async (body) => {
+    try { const r = await api.createTodo(body); if (r?.todo) { setTodos((xs) => [...xs, r.todo]); toast.success('Added to your plan'); } }
+    catch { toast.error('Could not add that'); }
+  };
+  const removeTodo = async (t) => {
+    const prev = todos;
+    setTodos((xs) => xs.filter((x) => x.id !== t.id));
+    try { await api.deleteTodo(t.id); } catch { setTodos(prev); toast.error('Could not remove that'); }
+  };
+
+  // ── Habit handlers ──
+  const toggleHabit = async (h) => {
+    setTicked((s) => ({ ...s, [h.id]: !s[h.id] }));
+    try { await api.tickHabit({ habitId: h.id }); } catch { setTicked((s) => ({ ...s, [h.id]: !s[h.id] })); }
+  };
+  const addHabit = async (name) => {
+    try { const r = await api.createHabit({ name }); if (r?.habit) { setHabits((xs) => [...xs, r.habit]); toast.success('Habit added'); } }
+    catch (e) { toast.error(e?.message || 'Could not add habit'); }
+  };
+  const removeHabit = async (h) => {
+    const prev = habits;
+    setHabits((xs) => xs.filter((x) => x.id !== h.id));
+    try { await api.deleteHabit(h.id); } catch { setHabits(prev); toast.error('Could not remove habit'); }
+  };
 
   const save = async () => {
     const text = content.trim();
@@ -2767,83 +3003,142 @@ function JournalPage({ user }) {
   };
 
   const firstName = user?.firstName || 'friend';
+  const journeyType = todos.find((t) => t.journey_type)?.journey_type || null;
 
   return (
-    <div className="grid-2-1" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1.3fr)', gap: 20, alignItems: 'start' }}>
-      {/* Composer */}
+    <div className="col" style={{ gap: 20 }}>
+      {/* Growth-hub header: four dimensions + Grow/Reflect toggle */}
       <Card className="lg">
-        <SectionHead eyebrow="New entry" title={`How are you, ${firstName}?`} />
-        <div className="tiny muted2" style={{ marginBottom: 8 }}>Today's mood</div>
-        <div className="row wrap gap-2" style={{ marginBottom: 14 }}>
-          {JOURNAL_MOODS.map((m) => (
-            <button
-              key={m.key}
-              type="button"
-              onClick={() => setMood(m.key)}
-              className="mood-pill"
-              aria-pressed={mood === m.key}
-              style={{
-                border: `1.5px solid ${mood === m.key ? 'var(--teal, #36C9A9)' : 'var(--line, #E6EDEA)'}`,
-                background: mood === m.key ? '#E7F5F1' : '#fff',
-                color: 'var(--ink)', borderRadius: 999, padding: '7px 12px',
-                display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer',
-                fontWeight: mood === m.key ? 700 : 500, fontSize: 13,
-              }}
-            >
-              <span style={{ fontSize: 16 }}>{m.emoji}</span>{m.label}
-            </button>
-          ))}
-        </div>
-        <textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          placeholder="Write freely. What happened today, how your body feels, what you're grateful for…"
-          rows={7}
-          maxLength={5000}
-          style={{
-            width: '100%', resize: 'vertical', borderRadius: 12,
-            border: '1.5px solid var(--line, #E6EDEA)', padding: '12px 14px',
-            fontFamily: 'inherit', fontSize: 14, lineHeight: 1.6, color: 'var(--ink)',
-            background: '#fff', outline: 'none',
-          }}
-        />
-        <div className="between" style={{ marginTop: 12, alignItems: 'center' }}>
-          <span className="tiny muted">{content.length}/5000 · Private to you</span>
-          <Btn variant="primary" icon={Check} onClick={save} disabled={saving || !content.trim()}>
-            {saving ? 'Saving…' : 'Save entry'}
-          </Btn>
+        <div className="between" style={{ alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+          <div>
+            <SectionHead eyebrow="Personal growth" title={`Your space, ${firstName}`} />
+            <div className="tiny muted" style={{ marginTop: -6 }}>
+              A hub for the whole you — nurture your mind, body, heart and spirit.
+            </div>
+            <div className="row wrap" style={{ gap: 8, marginTop: 12 }}>
+              {GROWTH_DIMS.map((d) => (
+                <span key={d.key} className="row" style={{ gap: 6, alignItems: 'center', padding: '5px 11px', borderRadius: 999, background: `${d.color}14`, color: d.color, fontSize: 12.5, fontWeight: 600 }}>
+                  <d.icon size={14} /> {d.label}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="row" style={{ gap: 4, background: '#F1F5F3', borderRadius: 999, padding: 4, flex: 'none' }}>
+            {[{ k: 'grow', label: 'Grow', icon: Compass }, { k: 'reflect', label: 'Reflect', icon: BookOpen }].map((v) => (
+              <button key={v.k} type="button" onClick={() => setView(v.k)}
+                className="row" style={{ gap: 6, alignItems: 'center', border: 'none', cursor: 'pointer', borderRadius: 999, padding: '8px 16px', fontSize: 13, fontWeight: 700,
+                  background: view === v.k ? '#fff' : 'transparent', color: view === v.k ? 'var(--ink)' : 'var(--muted,#8AA09C)',
+                  boxShadow: view === v.k ? '0 1px 4px rgba(0,0,0,.08)' : 'none' }}>
+                <v.icon size={15} /> {v.label}
+              </button>
+            ))}
+          </div>
         </div>
       </Card>
 
-      {/* Timeline */}
-      <div className="col gap-3">
-        <SectionHead eyebrow="Your reflections" title="Recent entries" />
-        {loading ? (
-          <><CardSkeleton rows={2} /><CardSkeleton rows={2} /></>
-        ) : entries.length === 0 ? (
-          <Card><Empty icon={BookOpen} title="Your journal is empty" sub="Write your first reflection. Over time, LUCA can help you notice the patterns." /></Card>
-        ) : entries.map((e) => {
-          const m = MOOD_MAP[e.mood];
-          return (
-            <Card key={e.id}>
-              <div className="between" style={{ alignItems: 'flex-start', gap: 10 }}>
-                <div className="row gap-2" style={{ alignItems: 'center' }}>
-                  {m && <span style={{ fontSize: 18 }} title={m.label}>{m.emoji}</span>}
-                  <div>
-                    <div className="small f6" style={{ color: 'var(--ink)' }}>{m ? m.label : 'Entry'}</div>
-                    <div className="tiny muted">{new Date(e.created_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</div>
-                  </div>
-                </div>
-                <button className="icon-btn" title="Delete entry" onClick={() => remove(e.id)}
-                  style={{ border: 'none', background: 'transparent', color: 'var(--muted, #8AA09C)', cursor: 'pointer', padding: 4 }}>
-                  <Trash2 size={15} />
+      {view === 'grow' ? (
+        loading ? (
+          <div className="grid-2-1" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.3fr) minmax(0,1fr)', gap: 20, alignItems: 'start' }}>
+            <CardSkeleton rows={4} /><CardSkeleton rows={3} />
+          </div>
+        ) : (
+          <div className="grid-2-1" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.3fr) minmax(0,1fr)', gap: 20, alignItems: 'start' }}>
+            <GrowthTodos
+              todos={todos}
+              journeyType={journeyType}
+              onToggle={toggleTodo}
+              onRun={runTodo}
+              onAdd={addTodo}
+              onDelete={removeTodo}
+              go={go}
+            />
+            <HabitTracker
+              habits={habits}
+              ticked={ticked}
+              onToggle={toggleHabit}
+              onAdd={addHabit}
+              onDelete={removeHabit}
+            />
+          </div>
+        )
+      ) : (
+        <div className="grid-2-1" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1.3fr)', gap: 20, alignItems: 'start' }}>
+          {/* Composer */}
+          <Card className="lg">
+            <SectionHead eyebrow="New entry" title="How are you today?" />
+            <div className="tiny muted2" style={{ marginBottom: 8 }}>Today's mood</div>
+            <div className="row wrap gap-2" style={{ marginBottom: 14 }}>
+              {JOURNAL_MOODS.map((m) => (
+                <button
+                  key={m.key}
+                  type="button"
+                  onClick={() => setMood(m.key)}
+                  className="mood-pill"
+                  aria-pressed={mood === m.key}
+                  style={{
+                    border: `1.5px solid ${mood === m.key ? 'var(--teal, #36C9A9)' : 'var(--line, #E6EDEA)'}`,
+                    background: mood === m.key ? '#E7F5F1' : '#fff',
+                    color: 'var(--ink)', borderRadius: 999, padding: '7px 12px',
+                    display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer',
+                    fontWeight: mood === m.key ? 700 : 500, fontSize: 13,
+                  }}
+                >
+                  <span style={{ fontSize: 16 }}>{m.emoji}</span>{m.label}
                 </button>
-              </div>
-              <div className="small" style={{ marginTop: 8, color: 'var(--ink)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{e.content}</div>
-            </Card>
-          );
-        })}
-      </div>
+              ))}
+            </div>
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="Write freely. What happened today, how your body feels, what you're grateful for…"
+              rows={7}
+              maxLength={5000}
+              style={{
+                width: '100%', resize: 'vertical', borderRadius: 12,
+                border: '1.5px solid var(--line, #E6EDEA)', padding: '12px 14px',
+                fontFamily: 'inherit', fontSize: 14, lineHeight: 1.6, color: 'var(--ink)',
+                background: '#fff', outline: 'none',
+              }}
+            />
+            <div className="between" style={{ marginTop: 12, alignItems: 'center' }}>
+              <span className="tiny muted">{content.length}/5000 · Private to you</span>
+              <Btn variant="primary" icon={Check} onClick={save} disabled={saving || !content.trim()}>
+                {saving ? 'Saving…' : 'Save entry'}
+              </Btn>
+            </div>
+          </Card>
+
+          {/* Timeline */}
+          <div className="col gap-3">
+            <SectionHead eyebrow="Your reflections" title="Recent entries" />
+            {loading ? (
+              <><CardSkeleton rows={2} /><CardSkeleton rows={2} /></>
+            ) : entries.length === 0 ? (
+              <Card><Empty icon={BookOpen} title="Your journal is empty" sub="Write your first reflection. Over time, LUCA can help you notice the patterns." /></Card>
+            ) : entries.map((e) => {
+              const m = MOOD_MAP[e.mood];
+              return (
+                <Card key={e.id}>
+                  <div className="between" style={{ alignItems: 'flex-start', gap: 10 }}>
+                    <div className="row gap-2" style={{ alignItems: 'center' }}>
+                      {m && <span style={{ fontSize: 18 }} title={m.label}>{m.emoji}</span>}
+                      <div>
+                        <div className="small f6" style={{ color: 'var(--ink)' }}>{m ? m.label : 'Entry'}</div>
+                        <div className="tiny muted">{new Date(e.created_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</div>
+                      </div>
+                    </div>
+                    <button className="icon-btn" title="Delete entry" onClick={() => remove(e.id)}
+                      style={{ border: 'none', background: 'transparent', color: 'var(--muted, #8AA09C)', cursor: 'pointer', padding: 4 }}>
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                  <div className="small" style={{ marginTop: 8, color: 'var(--ink)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{e.content}</div>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2964,9 +3259,23 @@ function AudioProvider({ children }) {
     return false;
   }, [play]);
 
+  // Play a specific track by id (used by guided-journey audio to-dos). Falls
+  // back to navigating to the media library if the track isn't unlocked.
+  const playById = useCallback(async (id, go) => {
+    try {
+      const r = await api.getMyAudio();
+      const tracks = r?.tracks || [];
+      const hit = tracks.find((t) => String(t.id) === String(id));
+      if (hit) { play(hit, tracks); return true; }
+      if (tracks.length) { play(tracks[0], tracks); return true; }
+    } catch { /* fall through */ }
+    if (go) go('media');
+    return false;
+  }, [play]);
+
   const value = {
     audioRef, currentTime, duration, rate, setRate, repeat, setRepeat, shuffle, setShuffle,
-    play, toggle, seek, skip, next: () => goTo(1), prev: () => goTo(-1), close, playFromLibrary,
+    play, toggle, seek, skip, next: () => goTo(1), prev: () => goTo(-1), close, playFromLibrary, playById,
   };
 
   return (
@@ -4866,7 +5175,7 @@ function TabPage({ tab, user, go, effectiveRole, onUnread, onInboxUnread, onBeco
     case 'timeline': return <TimelinePage user={user} />;
     case 'coach': return <CoachPage user={user} go={go} />;
     case 'intelligence': return <ErrorBoundary><IntelligencePage user={user} go={go} /></ErrorBoundary>;
-    case 'journal': return <ErrorBoundary><JournalPage user={user} /></ErrorBoundary>;
+    case 'journal': return <ErrorBoundary><JournalPage user={user} go={go} /></ErrorBoundary>;
     case 'media': return <ErrorBoundary><MediaPage user={user} go={go} /></ErrorBoundary>;
     case 'appointments': return <AppointmentsPage user={user} />;
     case 'my-bookings': return <MyBookings user={user} onExplore={() => go('explore')} />;

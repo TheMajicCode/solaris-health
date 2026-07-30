@@ -1,8 +1,85 @@
 const express = require('express');
 const db = require('../db');
 const { authMiddleware } = require('../middleware/auth');
+const { getBlueprint, planSummary, OFFER_ORDER, JOURNEY_FOCUS } = require('../lib/journey-blueprints');
 
 const router = express.Router();
+
+/* ------------------------------------------------------------------
+   Seed a member's To-Do list + core habits from a journey blueprint.
+   Resolves audio steps to a real audio track and the practitioner step
+   to a real bookable provider. Idempotent (unique index on step_key).
+------------------------------------------------------------------- */
+async function seedJourneyPlan(userId, journeyType) {
+  const bp = getBlueprint(journeyType);
+  if (!bp) return { todos: 0, habits: 0 };
+
+  // Resolve a real audio track per audioMatch (fallback: shortest track).
+  const audioRows = (await db.query(
+    'SELECT id, title, duration_seconds FROM audio_library ORDER BY duration_seconds ASC'
+  ).catch(() => ({ rows: [] }))).rows;
+  const resolveAudio = (match) => {
+    if (!audioRows.length) return null;
+    const hit = match ? audioRows.find((a) => match.test(a.title)) : null;
+    return (hit || audioRows[0]).id;
+  };
+
+  // Resolve the practitioner step to a real provider matched to this journey.
+  const focus = JOURNEY_FOCUS[journeyType] || { type: 'wellness' };
+  const prov = (await db.query(
+    `SELECT id FROM provider_profiles
+      WHERE status='active' AND approval_status='approved' AND hidden=false AND provider_type=$1
+      ORDER BY rating DESC NULLS LAST, review_count DESC NULLS LAST, id ASC LIMIT 1`,
+    [focus.type]
+  ).catch(() => ({ rows: [] }))).rows[0];
+
+  // 1) Seed To-Do rows (one per step).
+  let todoCount = 0;
+  for (let i = 0; i < bp.steps.length; i++) {
+    const s = bp.steps[i];
+    let actionType = s.action?.type || null;
+    let actionTarget = s.action?.target || null;
+    if (s.kind === 'audio') actionTarget = resolveAudio(s.audioMatch);
+    if (s.kind === 'practitioner') {
+      if (prov) { actionType = 'open_listing'; actionTarget = String(prov.id); }
+      else { actionType = 'navigate'; actionTarget = 'explore'; }
+    }
+    try {
+      const r = await db.query(
+        `INSERT INTO member_todos
+           (user_id, journey_type, step_key, title, detail, kind, dimension, action_type, action_target, sort_order)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         ON CONFLICT (user_id, journey_type, step_key)
+           WHERE journey_type IS NOT NULL AND step_key IS NOT NULL
+         DO NOTHING
+         RETURNING id`,
+        [userId, journeyType, s.key, s.title.slice(0, 200), s.detail || null,
+         s.kind, s.dimension || null, actionType, actionTarget, i]
+      );
+      if (r.rows.length) todoCount += 1;
+    } catch (e) { /* ignore individual step failures */ }
+  }
+
+  // 2) Seed a few core daily habits (respect the 5-habit cap; dedupe by name).
+  let habitCount = 0;
+  const existing = (await db.query(
+    'SELECT LOWER(name) AS name FROM member_habits WHERE user_id=$1 AND active=true', [userId]
+  ).catch(() => ({ rows: [] }))).rows.map((x) => x.name);
+  let slots = Math.max(0, 5 - existing.length);
+  for (const h of (bp.habits || [])) {
+    if (slots <= 0) break;
+    if (existing.includes(String(h.name).toLowerCase())) continue;
+    try {
+      await db.query(
+        `INSERT INTO member_habits (user_id, name, icon) VALUES ($1,$2,$3)`,
+        [userId, String(h.name).slice(0, 100), (h.icon || '🌱').slice(0, 20)]);
+      habitCount += 1; slots -= 1;
+      existing.push(String(h.name).toLowerCase());
+    } catch (e) { /* ignore */ }
+  }
+
+  return { todos: todoCount, habits: habitCount, providerId: prov ? String(prov.id) : null };
+}
 
 /* ------------------------------------------------------------------
    Milestone definitions — static per journey type. User progress is
@@ -255,6 +332,8 @@ router.post('/start', authMiddleware, async (req, res) => {
       [userId, journeyType]
     );
     const row = r.rows[0];
+    // Seed the member's To-Do list + core habits from the blueprint.
+    const seeded = await seedJourneyPlan(userId, journeyType).catch(() => ({ todos: 0, habits: 0 }));
     res.json({
       journey: {
         id: row.id,
@@ -262,11 +341,25 @@ router.post('/start', authMiddleware, async (req, res) => {
         status: row.status,
         startedAt: row.started_at,
       },
+      seeded,
+      plan: planSummary(journeyType),
     });
   } catch (err) {
     console.error('POST /journeys/start failed:', err.message);
     res.status(500).json({ error: 'Could not start journey' });
   }
+});
+
+/* GET /api/journeys/blueprints — the guided-journey offers (grid + preview). */
+router.get('/blueprints', authMiddleware, (req, res) => {
+  res.json({ blueprints: OFFER_ORDER.map((t) => planSummary(t)).filter(Boolean) });
+});
+
+/* GET /api/journeys/:type/plan — the full step plan for one journey. */
+router.get('/:type/plan', authMiddleware, (req, res) => {
+  const plan = planSummary(req.params.type);
+  if (!plan) return res.status(404).json({ error: 'Unknown journey type' });
+  res.json({ plan });
 });
 
 /* Shared status setter for pause/complete. */

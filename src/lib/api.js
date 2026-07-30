@@ -126,6 +126,13 @@ class ApiClient {
   pauseJourney(id) { return this.request(`/journeys/${id}/pause`, { method: 'POST', body: JSON.stringify({}) }); }
   completeJourney(id) { return this.request(`/journeys/${id}/complete`, { method: 'POST', body: JSON.stringify({}) }); }
   getJourneyMilestones(journeyType) { return this.request(`/journeys/milestones/${journeyType}`); }
+  getJourneyBlueprints() { return this.request('/journeys/blueprints'); }
+  getJourneyPlan(journeyType) { return this.request(`/journeys/${journeyType}/plan`); }
+  // ---- Personal-growth To-Do list ----
+  getTodos() { return this.request('/journey/todos'); }
+  createTodo(body) { return this.request('/journey/todos', { method: 'POST', body: JSON.stringify(body) }); }
+  toggleTodo(id) { return this.request(`/journey/todos/${id}/toggle`, { method: 'POST', body: JSON.stringify({}) }); }
+  deleteTodo(id) { return this.request(`/journey/todos/${id}`, { method: 'DELETE' }); }
   getDocuments() { return this.request('/journey/documents'); }
   getDocument(id) { return this.request(`/journey/documents/${id}`); }
   uploadDocument(data) { return this.request('/journey/documents', { method: 'POST', body: JSON.stringify(data) }); }

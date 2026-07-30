@@ -8,7 +8,7 @@
  *   onBecomeProvider  ()=>void  — optional CTA to open provider onboarding
  */
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Search, MapPin, Map as MapIcon, List as ListIcon, Loader2, Store, Plus, X, Sprout, Sparkles, RefreshCw, ArrowRight, Compass } from 'lucide-react';
+import { Search, MapPin, Map as MapIcon, List as ListIcon, Loader2, Store, Plus, X, Sprout, Sparkles, RefreshCw, ArrowRight, Compass, Clock, Headphones, Stethoscope, Heart, Brain, Activity, BookOpen, CheckCircle2, Footprints } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '../../lib/api.js';
 import { useApp } from '../../state/AppContext.jsx';
@@ -21,28 +21,49 @@ const DEFAULT_FILTERS = {
   types: [], minRating: 0, vtv: false, verified: false, price: [], radius: 25, sort: 'rating',
 };
 
-// Guided member journeys offered on Explore (mirrors JOURNEY_LABELS on the backend).
-const JOURNEY_OFFERS = [
-  { type: 'detox', label: 'Gentle Detox', blurb: 'Ease your system into cleaner rhythms — food, rest, and breath.' },
-  { type: 'optimal_health', label: 'Optimal Health', blurb: 'A steady path to your fullest Mind, Body, Heart & Spirit.' },
-  { type: 'menopause', label: 'Menopause Support', blurb: 'Grounded, warm guidance through a season of change.' },
-];
+// Step-kind → icon + human label, used in the plan preview.
+const STEP_KIND = {
+  checkin:      { icon: CheckCircle2, label: 'Daily check-in' },
+  habit:        { icon: Sparkles,     label: 'Habit' },
+  audio:        { icon: Headphones,   label: 'Guided audio' },
+  activity:     { icon: Footprints,   label: 'Activity' },
+  reflection:   { icon: BookOpen,     label: 'Reflection' },
+  practitioner: { icon: Stethoscope,  label: 'Practitioner' },
+  navigate:     { icon: ArrowRight,   label: 'Explore' },
+};
+// Growth dimension → colour (mirrors the Journal hub).
+const DIM_COLOR = { mind: '#5B77C9', body: '#2DB584', heart: '#E07A9B', spirit: '#C79A3A' };
 
 export default function ExploreMarketplace({ user, onBecomeProvider }) {
   const { exploreFilter, setExploreFilter, setTab, pendingProviderId, setPendingProviderId, pendingCurate, setPendingCurate } = useApp() || {};
 
   // ── Guided journeys ──
+  const [blueprints, setBlueprints] = useState([]);
+  const [previewType, setPreviewType] = useState(null); // journey type to preview in modal
   const [startingJourney, setStartingJourney] = useState('');
+
+  useEffect(() => {
+    api.getJourneyBlueprints().then((d) => setBlueprints(d?.blueprints || [])).catch(() => {});
+  }, []);
+
   const beginJourney = useCallback(async (journeyType) => {
     if (startingJourney) return;
     setStartingJourney(journeyType);
     try {
-      await api.startJourney(journeyType);
-      toast.success('Journey started! Your guided tasks are waiting in your Health Passport.');
-      // Navigate the whole app shell (its visible tab is local state, so we
-      // broadcast a navigation event the shell listens for).
-      window.dispatchEvent(new CustomEvent('solaris:navigate', { detail: { tab: 'health' } }));
-      setTab?.('health');
+      const r = await api.startJourney(journeyType);
+      const seeded = r?.seeded || {};
+      const nTodos = seeded.todos || 0;
+      toast.success(
+        nTodos
+          ? `Your plan is ready — ${nTodos} steps added to your Journal.`
+          : 'Your journey is ready in your Journal.',
+        { duration: 4000 }
+      );
+      setPreviewType(null);
+      // The Journal tab is the personal-growth hub where the seeded plan lives.
+      // The app shell's visible tab is local state, so broadcast a navigation event.
+      window.dispatchEvent(new CustomEvent('solaris:navigate', { detail: { tab: 'journal' } }));
+      setTab?.('journal');
     } catch (e) {
       toast.error(e?.message || 'Could not start that journey — try again shortly.');
     } finally {
@@ -264,7 +285,7 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
       )}
 
       {/* Guided journeys rail */}
-      <JourneyOffers starting={startingJourney} onBegin={beginJourney} />
+      <JourneyOffers offers={blueprints} starting={startingJourney} onBegin={beginJourney} onPreview={setPreviewType} />
 
       <div className="exm-body">
         {/* Filter rail */}
@@ -289,7 +310,7 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
               <h4>No providers match your filters</h4>
               <p>Try widening your search or resetting the filters — or begin a guided journey below.</p>
               <button className="exm-resetbtn" onClick={reset}>Reset filters</button>
-              <JourneyOffers starting={startingJourney} onBegin={beginJourney} compact />
+              <JourneyOffers offers={blueprints} starting={startingJourney} onBegin={beginJourney} onPreview={setPreviewType} compact />
             </div>
           ) : (
             <div className="exm-cards">
@@ -334,27 +355,119 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
           onUpdated={fetchProviders}
         />
       )}
+      {previewType && (
+        <JourneyPreviewModal
+          plan={blueprints.find((b) => b.type === previewType)}
+          starting={startingJourney}
+          onBegin={beginJourney}
+          onClose={() => setPreviewType(null)}
+        />
+      )}
       <style>{CSS}</style>
     </div>
   );
 }
 
-function JourneyOffers({ starting, onBegin, compact }) {
+function JourneyOffers({ offers, starting, onBegin, onPreview, compact }) {
+  if (!offers || offers.length === 0) return null;
   return (
     <div className={`exm-journeys${compact ? ' compact' : ''}`}>
       <div className="exm-journeys-head"><Compass size={16} /> Begin a guided journey</div>
-      <p className="exm-journeys-sub">A gentle, milestone-based path LUCA walks beside you — start any time.</p>
+      <p className="exm-journeys-sub">A complete, step-by-step program LUCA walks beside you — habits, guided audio, activities and a recommended practitioner, all waiting in your Journal.</p>
       <div className="exm-journeys-grid">
-        {JOURNEY_OFFERS.map((j) => (
-          <div key={j.type} className="exm-jc">
-            <h5>{j.label}</h5>
-            <p>{j.blurb}</p>
-            <button className="exm-jc-btn" disabled={!!starting} onClick={() => onBegin(j.type)}>
-              {starting === j.type ? <Loader2 size={14} className="exm-spin" /> : <Compass size={14} />}
-              Begin journey
-            </button>
+        {offers.map((j) => {
+          const kinds = [...new Set((j.steps || []).map((s) => s.kind))];
+          return (
+            <div key={j.type} className="exm-jc">
+              <div className="exm-jc-meta">
+                {j.weeks ? <span><Clock size={12} /> {j.weeks} wk{j.weeks > 1 ? 's' : ''}</span> : null}
+                <span><Compass size={12} /> {j.stepCount || (j.steps || []).length} steps</span>
+              </div>
+              <h5>{j.label}</h5>
+              <p>{j.tagline || j.overview}</p>
+              <div className="exm-jc-kinds">
+                {kinds.slice(0, 5).map((k) => {
+                  const K = STEP_KIND[k];
+                  if (!K) return null;
+                  return <span key={k} className="exm-jc-kind" title={K.label}><K.icon size={12} /> {K.label}</span>;
+                })}
+              </div>
+              <div className="exm-jc-actions">
+                <button className="exm-jc-preview" disabled={!!starting} onClick={() => onPreview(j.type)}>
+                  View plan
+                </button>
+                <button className="exm-jc-btn" disabled={!!starting} onClick={() => onBegin(j.type)}>
+                  {starting === j.type ? <Loader2 size={14} className="exm-spin" /> : <Compass size={14} />}
+                  Begin
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* Full plan preview — every step of the journey before the member commits. */
+function JourneyPreviewModal({ plan, starting, onBegin, onClose }) {
+  if (!plan) return null;
+  return (
+    <div className="exm-jp-overlay" onClick={onClose}>
+      <div className="exm-jp" onClick={(e) => e.stopPropagation()}>
+        <button className="exm-jp-close" onClick={onClose} aria-label="Close"><X size={18} /></button>
+        <div className="exm-jp-head">
+          <div className="exm-jp-meta">
+            {plan.weeks ? <span><Clock size={13} /> {plan.weeks} week{plan.weeks > 1 ? 's' : ''}</span> : null}
+            <span><Compass size={13} /> {plan.stepCount || (plan.steps || []).length} steps</span>
           </div>
-        ))}
+          <h3>{plan.label}</h3>
+          <p className="exm-jp-overview">{plan.overview || plan.tagline}</p>
+          {plan.focus?.label && (
+            <div className="exm-jp-focus"><Stethoscope size={14} /> We'll connect you with {plan.focus.label}.</div>
+          )}
+        </div>
+
+        {plan.habits?.length ? (
+          <div className="exm-jp-section">
+            <div className="exm-jp-label">Core daily habits</div>
+            <div className="exm-jp-habits">
+              {plan.habits.map((h, i) => (
+                <span key={i} className="exm-jp-habit">{h.icon || '🌱'} {h.name}</span>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="exm-jp-section">
+          <div className="exm-jp-label">Your step-by-step plan</div>
+          <div className="exm-jp-steps">
+            {(plan.steps || []).map((s, i) => {
+              const K = STEP_KIND[s.kind] || STEP_KIND.navigate;
+              const color = DIM_COLOR[s.dimension] || 'var(--teal-d)';
+              return (
+                <div key={s.key || i} className="exm-jp-step">
+                  <span className="exm-jp-step-ic" style={{ background: `${color}18`, color }}><K.icon size={15} /></span>
+                  <div className="exm-jp-step-body">
+                    <div className="exm-jp-step-top">
+                      <strong>{s.title}</strong>
+                      <span className="exm-jp-step-tag" style={{ color }}>{K.label}</span>
+                    </div>
+                    {s.detail && <p>{s.detail}</p>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="exm-jp-foot">
+          <button className="exm-jp-begin" disabled={!!starting} onClick={() => onBegin(plan.type)}>
+            {starting === plan.type ? <Loader2 size={15} className="exm-spin" /> : <Compass size={15} />}
+            Begin this journey
+          </button>
+          <span className="exm-jp-foot-note">Your plan and habits will be waiting in your Journal.</span>
+        </div>
       </div>
     </div>
   );
@@ -380,6 +493,54 @@ const CSS = `
   font-family:inherit;transition:background .15s}
 .luca .exm-jc-btn:hover{background:var(--teal-d2)}
 .luca .exm-jc-btn:disabled{opacity:.6;cursor:default}
+.luca .exm-jc-meta{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:2px}
+.luca .exm-jc-meta span{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;color:var(--muted)}
+.luca .exm-jc-meta svg{color:var(--teal-d)}
+.luca .exm-jc-kinds{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 2px}
+.luca .exm-jc-kind{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:var(--mint-ink);
+  background:var(--mint-soft);border:1px solid var(--mint-line);border-radius:999px;padding:3px 9px}
+.luca .exm-jc-kind svg{color:var(--teal-d)}
+.luca .exm-jc-actions{display:flex;gap:8px;margin-top:10px}
+.luca .exm-jc-preview{display:inline-flex;align-items:center;gap:6px;background:var(--surface);color:var(--ink);
+  border:1px solid var(--line);border-radius:10px;padding:9px 14px;font-weight:700;font-size:13px;cursor:pointer;
+  font-family:inherit;transition:border-color .15s}
+.luca .exm-jc-preview:hover{border-color:var(--teal-d)}
+.luca .exm-jc-preview:disabled{opacity:.6;cursor:default}
+/* Journey plan-preview modal */
+.luca .exm-jp-overlay{position:fixed;inset:0;z-index:4000;background:rgba(2,18,24,.5);display:flex;align-items:flex-start;
+  justify-content:center;padding:40px 16px;overflow-y:auto;backdrop-filter:blur(2px)}
+.luca .exm-jp{position:relative;width:100%;max-width:560px;background:var(--surface);border:1px solid var(--line);
+  border-radius:18px;box-shadow:0 20px 60px rgba(2,18,24,.35);padding:26px 26px 22px}
+.luca .exm-jp-close{position:absolute;top:16px;right:16px;border:none;background:var(--bg);cursor:pointer;color:var(--muted);
+  display:grid;place-items:center;width:32px;height:32px;border-radius:9px}
+.luca .exm-jp-close:hover{background:var(--mint-soft);color:var(--ink)}
+.luca .exm-jp-meta{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+.luca .exm-jp-meta span{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:var(--muted)}
+.luca .exm-jp-meta svg{color:var(--teal-d)}
+.luca .exm-jp-head h3{font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:700;color:var(--ink);margin:0 0 6px;padding-right:36px}
+.luca .exm-jp-overview{font-size:13.5px;color:var(--muted);line-height:1.55;margin:0}
+.luca .exm-jp-focus{display:inline-flex;align-items:center;gap:7px;margin-top:12px;font-size:12.5px;color:var(--mint-ink);
+  background:var(--mint-soft);border:1px solid var(--mint-line);border-radius:10px;padding:8px 12px}
+.luca .exm-jp-focus svg{color:var(--teal-d);flex:none}
+.luca .exm-jp-section{margin-top:20px}
+.luca .exm-jp-label{font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+.luca .exm-jp-habits{display:flex;gap:7px;flex-wrap:wrap}
+.luca .exm-jp-habit{font-size:12.5px;font-weight:600;color:var(--ink);background:var(--bg);border:1px solid var(--line);
+  border-radius:999px;padding:6px 12px}
+.luca .exm-jp-steps{display:flex;flex-direction:column;gap:12px}
+.luca .exm-jp-step{display:flex;gap:12px;align-items:flex-start}
+.luca .exm-jp-step-ic{flex:none;width:34px;height:34px;border-radius:10px;display:grid;place-items:center}
+.luca .exm-jp-step-body{flex:1;min-width:0}
+.luca .exm-jp-step-top{display:flex;align-items:baseline;gap:8px;justify-content:space-between}
+.luca .exm-jp-step-top strong{font-size:14px;color:var(--ink);font-weight:700}
+.luca .exm-jp-step-tag{font-size:10.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap;flex:none}
+.luca .exm-jp-step-body p{font-size:12.5px;color:var(--muted);line-height:1.5;margin:3px 0 0}
+.luca .exm-jp-foot{margin-top:22px;padding-top:18px;border-top:1px solid var(--line);display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.luca .exm-jp-begin{display:inline-flex;align-items:center;gap:8px;background:var(--teal-d);color:#fff;border:none;
+  border-radius:12px;padding:12px 22px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;transition:background .15s}
+.luca .exm-jp-begin:hover{background:var(--teal-d2)}
+.luca .exm-jp-begin:disabled{opacity:.6;cursor:default}
+.luca .exm-jp-foot-note{font-size:12px;color:var(--muted);flex:1;min-width:160px}
 .luca .exm-bar{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
 .luca .exm-search{flex:1;min-width:240px;display:flex;align-items:center;gap:9px;background:var(--surface);
   border:1px solid var(--line);border-radius:13px;padding:11px 15px;box-shadow:var(--shadow-sm);color:var(--muted)}

@@ -8,7 +8,7 @@
 // MUST be network-first so the freshly deployed index.html (which points at the
 // current bundle) is always used; the cached shell is only a last-resort offline
 // fallback. Hashed static assets remain cache-first (they are immutable).
-const CACHE_NAME = 'solaris-v14';
+const CACHE_NAME = 'solaris-v15';
 const SHELL_URL = '/index.html';
 
 self.addEventListener('install', () => {
