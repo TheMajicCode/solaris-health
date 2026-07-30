@@ -152,6 +152,97 @@ router.post('/login', async (req, res) => {
 // All keys/values are clearly fake (npub1mock..., nsec1mock...). No real Nostr.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Identity Key (Nostr) LOGIN — real BIP-340 challenge/response (M8; A2 §3).
+//
+// The member's device holds the secret key (derived client-side from the
+// BIP-39 seed, kept in sessionStorage only — never sent to Solaris). Login is
+// a proof of control: the server issues a random nonce, the device signs it
+// with a Schnorr signature, and the server verifies it against the npub. No
+// password, no secret key on the server.
+// ---------------------------------------------------------------------------
+const crypto = require('crypto');
+const { isValidNpub, npubToHex, verifyChallengeSignature } = require('../lib/nostr');
+const { bindNostrKey } = require('../lib/identity');
+
+// Short-lived single-use challenge store (nonce -> { npub, pubkeyHex, expiresAt }).
+const challenges = new Map();
+const CHALLENGE_TTL_MS = 5 * 60 * 1000;
+function sweepChallenges() {
+  const now = Date.now();
+  for (const [k, v] of challenges) if (v.expiresAt < now) challenges.delete(k);
+}
+
+// POST /api/auth/nostr/challenge  { npub }
+router.post('/nostr/challenge', (req, res) => {
+  try {
+    const npub = String(req.body?.npub || '').trim();
+    if (!isValidNpub(npub)) return res.status(400).json({ error: 'A valid Identity Key (npub1…) is required.' });
+    sweepChallenges();
+    const pubkeyHex = npubToHex(npub);
+    const nonce = crypto.randomBytes(24).toString('hex');
+    const message = `solaris-login:${nonce}`;
+    challenges.set(nonce, { npub, pubkeyHex, expiresAt: Date.now() + CHALLENGE_TTL_MS });
+    res.json({ nonce, message, expiresInMs: CHALLENGE_TTL_MS });
+  } catch (err) {
+    console.error('nostr challenge error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/auth/nostr/login  { npub, nonce, sig }  (sig = hex Schnorr signature of the message)
+router.post('/nostr/login', async (req, res) => {
+  try {
+    const npub = String(req.body?.npub || '').trim();
+    const nonce = String(req.body?.nonce || '').trim();
+    const sig = String(req.body?.sig || '').trim();
+    if (!isValidNpub(npub) || !nonce || !sig) {
+      return res.status(400).json({ error: 'npub, nonce and signature are required.' });
+    }
+    const ch = challenges.get(nonce);
+    if (!ch || ch.expiresAt < Date.now() || ch.npub !== npub) {
+      return res.status(401).json({ error: 'Challenge expired or invalid. Please try again.' });
+    }
+    challenges.delete(nonce); // single-use, regardless of outcome
+
+    const message = `solaris-login:${nonce}`;
+    if (!verifyChallengeSignature({ pubkey: npub, message, sigHex: sig })) {
+      return res.status(401).json({ error: 'Signature did not verify for this Identity Key.' });
+    }
+
+    // Proven control of the key. Find or create the account.
+    let result = await db.query('SELECT * FROM users WHERE nostr_npub = $1 AND deleted_at IS NULL', [npub]);
+    let user;
+    let isNew = false;
+    if (result.rows.length) {
+      user = result.rows[0];
+    } else {
+      isNew = true;
+      const syntheticEmail = `${npub.slice(0, 24)}@nostr.solaris`;
+      const passwordHash = await bcrypt.hash('identity-key-' + crypto.randomBytes(8).toString('hex'), 10);
+      const displayName = 'Sovereign ' + npub.slice(5, 11);
+      const ins = await db.query(
+        `INSERT INTO users (email, password_hash, full_name, display_name, role,
+            onboarding_status, nostr_npub, key_custody, created_via, level_points)
+         VALUES ($1,$2,$3,$4,'patient','profile',$5,'self','nostr',0) RETURNING *`,
+        [syntheticEmail, passwordHash, displayName, displayName, npub]
+      );
+      user = ins.rows[0];
+      try { await award(user.id, 'account_created', 10, 'onboarding', 'Welcome to Solaris (Identity Key)'); } catch (e) {}
+      try { await ensureReferralCode(user.id, displayName); } catch (e) {}
+    }
+
+    // Bind (or refresh) the Identity Key on the permanent subject — public key only.
+    try { await bindNostrKey(user.id, npub, npubToHex(npub), null); } catch (e) { /* non-fatal */ }
+
+    const token = generateToken(user.id, user.email, user.role, await subjectRef(user.id));
+    res.json({ user: shapeUser(user), token, isNew });
+  } catch (err) {
+    console.error('nostr login error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 function mockNsec(seed) {
   return 'nsec1mock' + Buffer.from(String(seed)).toString('hex').slice(0, 40);
 }

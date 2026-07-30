@@ -402,6 +402,8 @@ class ApiClient {
   // ---- Solaris ID (permanent identity — ADR 001) ----
   getIdentityMe() { return this.request('/identity/me'); }
   setGpsEndAddress(address) { return this.request('/identity/me/end-address', { method: 'PUT', body: JSON.stringify({ address }) }); }
+  // Identity Key (Nostr) — bind the PUBLIC key (npub) + optional NIP-05 handle.
+  bindIdentityKey(npub, handle) { return this.request('/identity/nostr', { method: 'POST', body: JSON.stringify({ npub, handle: handle || undefined }) }); }
   getGpsTreasury() { return this.request('/gps/treasury'); }
   getGpsTreasuryBreakdown() { return this.request('/gps/treasury/breakdown'); }
   getReferralCode() { return this.request('/gps/referrals/my-code'); }
@@ -416,6 +418,12 @@ class ApiClient {
   // ---- Solaris: sovereign auth (mock) ----
   async nostrLogin(npub) {
     const data = await this.request('/auth/nostr-mock', { method: 'POST', body: JSON.stringify({ npub }) });
+    this.setToken(data.token); return data;
+  }
+  // Identity Key login — real BIP-340 challenge/response (M8).
+  nostrChallenge(npub) { return this.request('/auth/nostr/challenge', { method: 'POST', body: JSON.stringify({ npub }) }); }
+  async nostrKeyLogin(npub, nonce, sig) {
+    const data = await this.request('/auth/nostr/login', { method: 'POST', body: JSON.stringify({ npub, nonce, sig }) });
     this.setToken(data.token); return data;
   }
   async googleMockLogin(payload = {}) {

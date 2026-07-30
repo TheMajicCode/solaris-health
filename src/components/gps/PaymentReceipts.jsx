@@ -9,7 +9,7 @@
  * Data: GET /api/gps/receipts (api.getGpsReceipts).
  */
 import React, { useEffect, useState } from 'react';
-import api from '../../lib/api.js';
+import { api } from '../../lib/api.js';
 
 const C = {
   head: '#0A2B29', body: '#6b807a', green: '#2DB584', amber: '#C58A53',

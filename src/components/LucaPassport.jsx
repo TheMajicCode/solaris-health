@@ -1408,7 +1408,7 @@ const roleLabel = (r) => ({ patient: 'Member', practitioner: 'Practitioner', adm
 /* ---- Sovereignty status card (Slice 6): who am I, who has access, where my
    data lives, which AI touched it last, and how to export/revoke — in plain
    language, with identifiers tucked behind an advanced-details disclosure. ---- */
-const BINDING_CHIP_LABEL = { did: 'DID', nostr: 'Nostr', wallet: 'Wallet', clinic: 'Clinic ID' };
+const BINDING_CHIP_LABEL = { did: 'DID', nostr: 'Identity Key', wallet: 'Wallet', clinic: 'Clinic ID' };
 
 function SovereigntyCard({ onExport, exporting }) {
   const [status, setStatus] = useState(null);

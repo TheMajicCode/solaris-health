@@ -139,12 +139,82 @@ async function setGpsEndAddress(userId, address) {
   return r.rows[0];
 }
 
+/**
+ * Bind (or replace) the member's Identity Key (Nostr npub) on their subject.
+ * A2 §3.2: only the PUBLIC key is ever stored — never the nsec or mnemonic.
+ * Idempotent: replacing the npub is a one-row change (A2 §3.2.5). Also mirrors
+ * the npub onto users.nostr_npub and records an NIP-05 handle when supplied.
+ *
+ * @param {string} userId
+ * @param {string} npub    bech32 npub1...
+ * @param {string} pubkeyHex 32-byte x-only pubkey hex (decoded from npub)
+ * @param {string|null} handle optional NIP-05 local part
+ */
+async function bindNostrKey(userId, npub, pubkeyHex, handle = null) {
+  const subject = await ensureSubjectForUser(userId);
+  if (!subject) throw Object.assign(new Error('Identity not found'), { status: 404 });
+  const subjectId = subject.subject_id;
+  const hash = sha256hex(npub);
+
+  // Revoke any previous active nostr binding, then insert the new one — replacing
+  // a key never deletes history (A2 §1.3 / §3.2.6).
+  await db.query(
+    `UPDATE solaris_identity_bindings SET status='revoked', revoked_at=NOW()
+     WHERE subject_id=$1 AND binding_type='nostr' AND status='active' AND binding_hash<>$2`,
+    [subjectId, hash]
+  );
+  await db.query(
+    `INSERT INTO solaris_identity_bindings
+       (subject_id, binding_type, binding_value, binding_hash, status, verified_at)
+     VALUES ($1,'nostr',$2,$3,'active',NOW())
+     ON CONFLICT (subject_id, binding_type, binding_hash)
+     DO UPDATE SET status='active', binding_value=EXCLUDED.binding_value, revoked_at=NULL`,
+    [subjectId, npub, hash]
+  );
+
+  // Mirror onto users.nostr_npub for the existing account surfaces.
+  await db.query('UPDATE users SET nostr_npub=$1 WHERE id=$2', [npub, userId]).catch(() => {});
+
+  let savedHandle = null;
+  if (handle) {
+    const clean = String(handle).trim().toLowerCase();
+    if (!/^[a-z0-9._-]{3,32}$/.test(clean)) {
+      throw Object.assign(new Error('Handle must be 3–32 chars: letters, numbers, . _ -'), { status: 400 });
+    }
+    // One handle per subject; a handle is unique across members.
+    const clash = await db.query(
+      'SELECT subject_id FROM nostr_handles WHERE handle=$1 AND subject_id<>$2',
+      [clean, subjectId]
+    );
+    if (clash.rows.length) {
+      throw Object.assign(new Error('That handle is already taken.'), { status: 409 });
+    }
+    await db.query(
+      `INSERT INTO nostr_handles (subject_id, user_id, handle, npub, pubkey_hex, nip05_verified)
+       VALUES ($1,$2,$3,$4,$5,true)
+       ON CONFLICT (handle) DO UPDATE SET npub=EXCLUDED.npub, pubkey_hex=EXCLUDED.pubkey_hex, user_id=EXCLUDED.user_id`,
+      [subjectId, userId, clean, npub, pubkeyHex]
+    );
+    savedHandle = clean;
+  } else {
+    // Keep any existing handle pointed at the new key.
+    await db.query(
+      'UPDATE nostr_handles SET npub=$1, pubkey_hex=$2 WHERE subject_id=$3',
+      [npub, pubkeyHex, subjectId]
+    ).catch(() => {});
+    const h = await db.query('SELECT handle FROM nostr_handles WHERE subject_id=$1 LIMIT 1', [subjectId]);
+    savedHandle = h.rows[0]?.handle || null;
+  }
+
+  return { subjectId, npub, handle: savedHandle };
+}
+
 /** Plain-language binding descriptor for the UI (no PII for email). */
 function describeBinding(b) {
   const labels = {
     email: 'Login email',
     did: 'Decentralized ID (DID)',
-    nostr: 'Nostr public key',
+    nostr: 'Identity Key',
     wallet: 'Wallet address',
     clinic: 'Clinic ID',
   };
@@ -181,7 +251,16 @@ async function getIdentitySummary(userId) {
 
   const usingDefault = subject.gps_end_address_type === 'solaris_default';
   const presentTypes = new Set(bindings.filter((b) => b.status !== 'revoked').map((b) => b.binding_type));
-  const comingSoon = ['did', 'nostr', 'wallet', 'clinic'].filter((t) => !presentTypes.has(t));
+  // Identity Key (nostr) is now live in M8 — drop it from the "coming soon" chips.
+  const comingSoon = ['did', 'wallet', 'clinic'].filter((t) => !presentTypes.has(t));
+
+  // NIP-05 handle for this subject, if one was claimed.
+  let nostrHandle = null;
+  try {
+    const h = await db.query('SELECT handle FROM nostr_handles WHERE subject_id=$1 LIMIT 1', [subject.subject_id]);
+    nostrHandle = h.rows[0]?.handle || null;
+  } catch { /* table optional */ }
+  const activeNpub = bindings.find((b) => b.binding_type === 'nostr' && b.status === 'active')?.binding_value || null;
 
   return {
     solarisId: subject.subject_id,
@@ -191,6 +270,12 @@ async function getIdentitySummary(userId) {
     headline: 'Your Solaris ID is your permanent identity. Emails, keys and wallets are replaceable pointers attached to it.',
     bindings: bindings.map(describeBinding),
     comingSoon, // binding types with honest "coming soon" chips (no dead buttons)
+    identityKey: {
+      npub: activeNpub,
+      handle: nostrHandle,
+      nip05: nostrHandle ? `${nostrHandle}@solaris.health` : null,
+      hasKey: Boolean(activeNpub),
+    },
     gps: {
       endAddress: subject.gps_end_address,
       endAddressType: subject.gps_end_address_type,
@@ -240,6 +325,7 @@ module.exports = {
   getSubjectByUser,
   subjectIdForUser,
   listBindings,
+  bindNostrKey,
   setGpsEndAddress,
   getIdentitySummary,
   exportIdentity,

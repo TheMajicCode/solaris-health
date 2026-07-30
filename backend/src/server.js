@@ -129,6 +129,40 @@ app.use((req, res, next) => {
   });
 });
 
+// ---- NIP-05 (Identity Key handles; M8, spec A2 §3.3) ----
+// GET /.well-known/nostr.json?name=<handle> -> { "names": { "<handle>": "<hex pubkey>" } }
+// Resolves a member's `name@solaris.health` handle to their Nostr pubkey.
+// Public + CORS-open per the NIP-05 spec. No PII beyond the public key.
+app.get('/.well-known/nostr.json', async (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  try {
+    const name = String(req.query.name || '').trim().toLowerCase();
+    const names = {};
+    const relays = {};
+    if (name && /^[a-z0-9._-]{1,64}$/.test(name)) {
+      const db = require('./db');
+      const r = await db.query('SELECT pubkey_hex FROM nostr_handles WHERE handle=$1 LIMIT 1', [name]);
+      if (r.rows.length) names[name] = r.rows[0].pubkey_hex;
+    }
+    res.json({ names, relays });
+  } catch (err) {
+    console.error('[nip05] nostr.json failed:', err.message);
+    res.json({ names: {} });
+  }
+});
+
+// GET /.well-known/lnurlp/<name> — Lightning Address (A2 §3.3/§3.4). Not yet
+// configured: the identity handle doubles as a payment address, but this
+// endpoint stays inert until real payment rails make it meaningful.
+app.get('/.well-known/lnurlp/:name', (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.status(404).json({
+    status: 'ERROR',
+    reason: 'Lightning Address not yet configured. Your handle works today for identity (NIP-05); '
+      + 'payments are simulated in this pilot.',
+  });
+});
+
 // ---- Health & monitoring ----
 // Liveness probe (legacy path, kept for backwards compatibility)
 app.get('/health', (req, res) => {

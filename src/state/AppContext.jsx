@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { api } from '../lib/api.js';
+import { signChallenge, rememberKeyForSession } from '../lib/identity-key.js';
 
 const AppContext = createContext(null);
 export const useApp = () => useContext(AppContext);
@@ -78,6 +79,16 @@ export function AppProvider({ children }) {
     await loadUser();
     return user;
   };
+  // Identity Key login — real BIP-340 challenge/response (M8). The secret key never
+  // leaves the device: we fetch a challenge, sign it locally, and send only the signature.
+  const loginWithIdentityKey = async ({ npub, skHex, pubkeyHex }) => {
+    const ch = await api.nostrChallenge(npub);
+    const sig = signChallenge(skHex, ch.message);
+    await api.nostrKeyLogin(npub, ch.nonce, sig);
+    rememberKeyForSession({ npub, skHex, pubkeyHex });
+    await loadUser();
+    return true;
+  };
   const register = async (payload) => {
     const { user } = await api.register(payload);
     setUser(user);
@@ -103,7 +114,7 @@ export function AppProvider({ children }) {
   return (
     <AppContext.Provider value={{
       user, profile, loading, tab, setTab, authView, setAuthView,
-      login, register, logout, refreshUser, setUser, setProfile,
+      login, loginWithIdentityKey, register, logout, refreshUser, setUser, setProfile,
       demoRole, setDemoRole, nostrBanner, setNostrBanner,
       lucaMessages, setLucaMessages, lucaLoaded, loadLucaHistory,
       currentTrack, setCurrentTrack, isPlaying, setIsPlaying, audioQueue, setAudioQueue,
