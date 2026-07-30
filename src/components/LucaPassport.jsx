@@ -701,21 +701,21 @@ function adminNav() {
 }
 
 // Per-persona portal chrome: sidebar sub-title, accent colour, and role label.
-const PORTAL = {
+export const PORTAL = {
   patient: { sub: 'Sovereign Passport', accent: '#2DB584', label: 'Member' },
   practitioner: { sub: 'Practitioner Portal', accent: '#6B7FD7', label: 'Practitioner' },
   clinic_admin: { sub: 'Solaris Admin', accent: '#C58A53', label: 'Admin' },
 };
 
 // The tab a persona lands on when they sign in (or after a role switch).
-function defaultTabFor(effectiveRole) {
+export function defaultTabFor(effectiveRole) {
   if (effectiveRole === 'practitioner') return 'prac-clients';
   if (effectiveRole === 'clinic_admin') return 'admin-members';
   return 'dashboard';
 }
 
 // Build the full navigation for a persona.
-function navForPersona(effectiveRole, legacyRole, isProvider) {
+export function navForPersona(effectiveRole, legacyRole, isProvider) {
   if (effectiveRole === 'practitioner') return practitionerNav();
   if (effectiveRole === 'clinic_admin') return adminNav();
   return [...navForRole(legacyRole, isProvider), ...solarisNav(effectiveRole)];
