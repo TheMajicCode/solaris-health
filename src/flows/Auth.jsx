@@ -286,15 +286,17 @@ export default function Auth() {
       )}
 
       <style>{`
-        .auth-nostr-btn{width:100%;display:flex;flex-direction:column;align-items:center;gap:3px;
-          background:rgba(45,181,132,0.08);border:1px solid rgba(45,181,132,0.35);color:#0A2B29;
-          border-radius:var(--radius-md);padding:13px 16px;cursor:pointer;transition:background .15s}
-        .auth-nostr-btn:hover{background:rgba(45,181,132,0.14)}
-        .auth-nostr-row{display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:0.9rem}
-        .auth-nostr-sub{font-size:0.72rem;opacity:0.85;display:inline-flex;align-items:center;gap:6px}
+        .auth-nostr-btn{width:100%;display:flex;flex-direction:column;align-items:center;gap:4px;
+          background:#2DB584;border:1px solid #2DB584;color:#FFFFFF;
+          border-radius:var(--radius-md);padding:14px 16px;cursor:pointer;transition:background .15s,box-shadow .15s;
+          box-shadow:0 4px 14px rgba(45,181,132,0.28)}
+        .auth-nostr-btn:hover{background:#26a074;border-color:#26a074}
+        .auth-nostr-row{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:0.92rem;color:#FFFFFF}
+        .auth-nostr-row svg{color:#FFFFFF}
+        .auth-nostr-sub{font-size:0.73rem;color:rgba(255,255,255,0.92);display:inline-flex;align-items:center;gap:6px}
         .auth-ik-info{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;
-          border-radius:99px;background:rgba(45,181,132,0.16);color:#2DB584;cursor:pointer}
-        .auth-ik-info:hover{background:rgba(45,181,132,0.28)}
+          border-radius:99px;background:rgba(255,255,255,0.25);color:#FFFFFF;cursor:pointer}
+        .auth-ik-info:hover{background:rgba(255,255,255,0.4)}
         .auth-or{display:flex;align-items:center;text-align:center;gap:12px;margin:16px 0 18px;color:var(--on-surface-variant);font-size:0.78rem}
         .auth-or::before,.auth-or::after{content:'';flex:1;height:1px;background:rgba(220,226,248,0.12)}
         .ik-modal-backdrop{position:fixed;inset:0;background:rgba(6,20,19,0.55);backdrop-filter:blur(3px);
