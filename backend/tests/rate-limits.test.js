@@ -15,7 +15,8 @@
  */
 const express = require('express');
 const request = require('supertest');
-const { makeGlobalLimiter, makeLoginLimiter, clientIpKey } = require('../src/lib/rate-limits');
+const { makeGlobalLimiter, makeLoginLimiter, clientIpKey, PostgresRateLimitStore } = require('../src/lib/rate-limits');
+const db = require('../src/db');
 
 /** Minimal app that mirrors server.js middleware order (json before login limiter). */
 function makeApp({ failEmails = ['bad@x.com'] } = {}) {
@@ -102,6 +103,36 @@ describe('global limiter', () => {
       const res = await request(app).get('/api/ping').set(asClient('203.0.113.7'));
       expect(res.status).toBe(200);
     }
+  });
+});
+
+describe('PostgresRateLimitStore (durable failed-attempt buckets, mig 033)', () => {
+  const store = new PostgresRateLimitStore({ prefix: 'test' });
+  store.init({ windowMs: 15 * 60 * 1000 });
+  const KEY = `unit-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  afterAll(async () => { await store.resetKey(KEY); });
+
+  it('increment accumulates within the window and returns a future resetTime', async () => {
+    const a = await store.increment(KEY);
+    expect(a.totalHits).toBe(1);
+    expect(a.resetTime.getTime()).toBeGreaterThan(Date.now());
+    const b = await store.increment(KEY);
+    expect(b.totalHits).toBe(2);
+  });
+
+  it('decrement walks the count back (skipSuccessfulRequests semantics)', async () => {
+    await store.decrement(KEY);
+    const c = await store.increment(KEY);
+    expect(c.totalHits).toBe(2);
+  });
+
+  it('resetKey clears the bucket; the row is gone from rate_limit_hits', async () => {
+    await store.resetKey(KEY);
+    const { rows } = await db.query('SELECT 1 FROM rate_limit_hits WHERE key = $1', [`test|${KEY}`]);
+    expect(rows.length).toBe(0);
+    const d = await store.increment(KEY);
+    expect(d.totalHits).toBe(1);
   });
 });
 
