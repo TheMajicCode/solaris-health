@@ -249,7 +249,7 @@ router.get('/tasks', authMiddleware, async (req, res) => {
     const provider = await db.query(
       `SELECT id, business_name FROM provider_profiles
        WHERE status='active' AND approval_status='approved' AND hidden=false AND provider_type=$1
-       ORDER BY rating DESC NULLS LAST LIMIT 1`, [focus.type]);
+       ORDER BY rating DESC NULLS LAST, review_count DESC NULLS LAST, id ASC LIMIT 1`, [focus.type]);
     const hasBooking = Number(bookings.rows[0] && bookings.rows[0].n) > 0;
     if (provider.rows[0]) {
       tasks.push({

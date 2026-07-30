@@ -350,7 +350,7 @@ async function seedAlejandroProfile() {
       'Alejandro Reyes — Nutrición Integrativa',
       'Integrative-medicine practitioner blending functional nutrition, metabolic health, and lifestyle medicine. Alejandro helps members restore energy, balance blood sugar, and build sustainable habits rooted in whole foods and circadian alignment.',
       JSON.stringify(['Integrative Medicine', 'Functional Nutrition', 'Metabolic Health']),
-      '$60–$180', 4.8, 57]
+      '$60–$180', 5.0, 150]
   );
   const pid = prof.rows[0].id;
 
@@ -474,6 +474,75 @@ async function seedSarahAssessment() {
   return n;
 }
 
+/**
+ * seedSarahDemoExtras — eliminate demo dead-ends for sarah@solaris.health by
+ * seeding the pieces the sample-result seed does not create (spec: ITEM 2):
+ *   - an active `detox` journey (nutrition focus) so the guided-task rail
+ *     surfaces a "Connect with a nutrition specialist" task pointing at the
+ *     top-rated nutritionist (Alejandro, rating 5.0);
+ *   - 2 health documents with real provenance (L0 self-report, L2 lab PDF);
+ *   - 2 inbox messages (welcome + intake request) for the patient inbox.
+ * Idempotent: removes anything it previously seeded (tagged) before re-inserting.
+ */
+async function seedSarahDemoExtras() {
+  const u = await db.query("SELECT id FROM users WHERE lower(email)='sarah@solaris.health' LIMIT 1");
+  if (!u.rows.length) { console.warn('  (skip sarah extras: user not found)'); return 0; }
+  const userId = u.rows[0].id;
+  const subj = await db.query('SELECT subject_id FROM solaris_subjects WHERE user_id=$1 LIMIT 1', [userId]);
+  const subjectId = subj.rows[0] ? subj.rows[0].subject_id : null;
+
+  // 1. Active nutrition-focused journey (detox → JOURNEY_FOCUS nutritionist).
+  //    Idempotent: reset any existing detox journey to a fresh, most-recent one.
+  await db.query("DELETE FROM member_journeys WHERE user_id=$1 AND journey_type='detox'", [userId]);
+  await db.query(
+    `INSERT INTO member_journeys (user_id, journey_type, status, started_at, milestones_json, subject_id)
+     VALUES ($1,'detox','active', now(), $2, $3)`,
+    [userId, JSON.stringify([{ key: 'intake', completed: true, completed_at: new Date().toISOString() }]), subjectId]
+  );
+
+  // 2. Health documents with provenance (L0 self-report, L2 clinical lab).
+  await db.query("DELETE FROM health_documents WHERE user_id=$1 AND doc_type='seed-demo'", [userId]);
+  const docs = [
+    ['seed-demo', 'symptom-journal-jul2026.txt', 4096, 'text/plain',
+      'Self-reported symptom journal covering energy, sleep, and digestion over 4 weeks.',
+      'Sarah logged steadily improving morning energy and fewer afternoon crashes after adopting a whole-food breakfast.',
+      0, 'self', 'private'],
+    ['seed-demo', 'comprehensive-metabolic-panel.pdf', 248320, 'application/pdf',
+      'Comprehensive metabolic panel from Laboratorio Clínico Cuscatlán (fasting draw).',
+      'Fasting glucose 96 mg/dL and HbA1c 5.4% — within range; vitamin D slightly low at 28 ng/mL.',
+      2, 'lab', 'shared_care'],
+  ];
+  for (const d of docs) {
+    await db.query(
+      `INSERT INTO health_documents
+         (user_id, doc_type, filename, file_size_bytes, mime_type, description, luca_summary,
+          provenance_level, source, consent_scope, subject_id, observed_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, now()-interval '5 day')`,
+      [userId, d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7], d[8], subjectId]
+    );
+  }
+
+  // 3. Patient inbox messages (welcome + intake request).
+  await db.query("DELETE FROM patient_messages WHERE recipient_id=$1 AND message_type IN ('welcome','intake_request')", [userId]);
+  await db.query(
+    `INSERT INTO patient_messages (recipient_id, sender_name, subject, body, message_type, is_read, action_url, action_label, created_at)
+     VALUES ($1,'Solaris Health','Welcome to your Sovereign Passport',
+             'Hi Sarah — welcome to Solaris. Your health data lives in a passport that only you control. Complete a daily check-in and explore practitioners whenever you are ready.',
+             'welcome', false, '/explore', 'Explore practitioners', now()-interval '6 day')`,
+    [userId]
+  );
+  await db.query(
+    `INSERT INTO patient_messages (recipient_id, sender_name, subject, body, message_type, is_read, action_url, action_label, created_at)
+     VALUES ($1,'Alejandro Reyes — Nutrición Integrativa','Intake form before your consultation',
+             'Looking forward to working with you. Please complete a short integrative-nutrition intake so I can prepare a personalized plan before our first session.',
+             'intake_request', false, '/explore', 'Book an intake', now()-interval '1 day')`,
+    [userId]
+  );
+
+  console.log('✓ Seeded sarah@solaris.health demo extras (detox journey, 2 health docs, 2 inbox messages).');
+  return 1;
+}
+
 async function resetMember(email) {
   const u = await db.query('SELECT id, first_name, last_name FROM users WHERE lower(email)=lower($1)', [email]);
   if (!u.rows.length) throw new Error(`No member found with email: ${email}`);
@@ -512,9 +581,10 @@ async function resetMember(email) {
       process.exit(0);
     }
     if (process.argv.includes('--demo-gaps')) {
-      console.log('Filling demo gaps (alejandro profile + sarah assessment history)...');
+      console.log('Filling demo gaps (alejandro profile + sarah assessment history + extras)...');
       await seedAlejandroProfile();
       await seedSarahAssessment();
+      await seedSarahDemoExtras();
       process.exit(0);
     }
     console.log('Resetting Solaris tables...');
@@ -533,6 +603,7 @@ async function resetMember(email) {
     console.log('Filling demo gaps (alejandro profile + sarah assessment history)...');
     await seedAlejandroProfile().catch((e) => console.warn('  (alejandro profile skipped:', e.message, ')'));
     await seedSarahAssessment().catch((e) => console.warn('  (sarah assessment skipped:', e.message, ')'));
+    await seedSarahDemoExtras().catch((e) => console.warn('  (sarah extras skipped:', e.message, ')'));
     console.log('✓ Solaris seed complete.');
     console.log('  Patient:      sarah@solaris.health / demo123');
     console.log('  Patient:      majd@luca.health / demo123');
