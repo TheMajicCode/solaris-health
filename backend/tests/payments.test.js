@@ -35,6 +35,7 @@ afterAll(async () => {
     if (subj) {
       const its = await db.query('SELECT id FROM payment_intents WHERE subject_id=$1', [subj]);
       for (const r of its.rows) {
+        await db.query('DELETE FROM gps_shadow_receipts WHERE intent_id=$1', [r.id]).catch(() => {});
         await db.query('DELETE FROM allocations WHERE intent_id=$1', [r.id]);
         await db.query('DELETE FROM payment_events WHERE intent_id=$1', [r.id]);
       }
@@ -129,4 +130,48 @@ test('webhook confirms booking exactly once, writes ledger, rejects bad signatur
   // Inbox receipt created.
   const notif = await db.query("SELECT * FROM notifications WHERE user_id=$1 AND type='payment'", [userId]);
   expect(notif.rows.length).toBeGreaterThanOrEqual(1);
+
+  // --- M7: a gps-receipt/1.0 shadow receipt was generated (exactly once).
+  const sr = await db.query('SELECT * FROM gps_shadow_receipts WHERE intent_id=$1', [intentId]);
+  expect(sr.rows.length).toBe(1);
+  const receipt = typeof sr.rows[0].receipt === 'string' ? JSON.parse(sr.rows[0].receipt) : sr.rows[0].receipt;
+  expect(receipt.receipt_version).toBe('gps-receipt/1.0');
+  expect(receipt.issuer_id).toBe('gps:identity:solaris');
+  expect(receipt.policy.hash).toMatch(/^sha256:/);
+  // Four-bucket invariant: earned + envelope sum EXACTLY to eligible; envelope ≤ 10%.
+  expect(receipt.eligible_value.amount_cents).toBe(20000);
+  expect(receipt.earned_value_summary.amount_cents + receipt.gps_envelope.amount_cents).toBe(20000);
+  expect(receipt.gps_envelope.amount_cents).toBe(2000);
+  expect(receipt.gps_envelope.bps).toBeLessThanOrEqual(1000);
+  // Solaris coordination is in EARNED value, not the envelope.
+  const coord = receipt.allocations.find((a) => /coordination/i.test(a.recipient_label));
+  expect(coord.bucket).toBe('earned_value');
+  // Money is simulated; nothing settled.
+  expect(receipt.settlement_summary.settled_cents).toBe(0);
+  expect(receipt.allocations.every((a) => a.status === 'SIMULATED' && a.settled_cents === 0)).toBe(true);
+});
+
+test('GET /api/gps/receipts returns the member shadow receipts', async () => {
+  const res = await request(app).get('/api/gps/receipts').set('Authorization', `Bearer ${token}`);
+  expect(res.status).toBe(200);
+  expect(Array.isArray(res.body.receipts)).toBe(true);
+  expect(res.body.receipts.length).toBeGreaterThanOrEqual(1);
+  const r = res.body.receipts[0];
+  expect(r.receiptVersion).toBe('gps-receipt/1.0');
+  expect(r.settlementState).toBeTruthy();
+  expect(r.receipt.earned_value_summary.amount_cents + r.receipt.gps_envelope.amount_cents)
+    .toBe(r.eligibleCents);
+});
+
+test('shadow receipt serializes into the vault export', async () => {
+  const { buildVaultExport } = require('../src/lib/vault-export');
+  const sr = await db.query('SELECT * FROM gps_shadow_receipts WHERE user_id=$1', [userId]);
+  const files = buildVaultExport({
+    user: { id: userId, email: 'x@example.com' },
+    gpsReceipts: sr.rows,
+  });
+  const jsonl = files.find((f) => f.path === 'payments/gps-receipts.jsonl');
+  expect(jsonl).toBeTruthy();
+  const first = JSON.parse(jsonl.contents.trim().split('\n')[0]);
+  expect(first.receipt_version).toBe('gps-receipt/1.0');
 });

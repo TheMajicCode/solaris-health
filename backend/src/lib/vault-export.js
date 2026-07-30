@@ -46,6 +46,7 @@ function buildVaultExport(record) {
     agentAuthority = null,
     solarisIdentity = null,
     notifications = [],
+    gpsReceipts = [],
     foundational = null,
   } = record;
   const exportedAt = new Date().toISOString();
@@ -313,6 +314,42 @@ function buildVaultExport(record) {
         agents: agentAuthority.agents,
         capability_grants: agentAuthority.grants,
       }, null, 2) + '\n',
+    });
+  }
+
+  // GPS SHADOW RECEIPTS (M7; spec A4 §3) — gps-receipt/1.0. Money is SIMULATED:
+  // this shows how Solaris WILL route value when live. The full canonical
+  // receipt is preserved so the vault is a complete, portable record.
+  if (gpsReceipts && gpsReceipts.length) {
+    const lines = gpsReceipts.map((g) => {
+      let receiptObj = g.receipt;
+      if (typeof receiptObj === 'string') {
+        try { receiptObj = JSON.parse(receiptObj); } catch { receiptObj = null; }
+      }
+      return JSON.stringify(receiptObj || {
+        receipt_id: g.receipt_id,
+        receipt_version: g.receipt_version,
+        eligible_cents: Number(g.eligible_cents),
+        earned_value_summary: { amount_cents: Number(g.earned_cents) },
+        gps_envelope: { bps: g.envelope_bps, amount_cents: Number(g.envelope_cents) },
+        settlement_state: g.settlement_state,
+        policy: { id: g.policy_id, hash: g.policy_hash },
+        created_at: g.created_at ? new Date(g.created_at).toISOString() : null,
+      });
+    });
+    files.push({
+      path: 'payments/gps-receipts.jsonl',
+      contents: lines.join('\n') + '\n',
+    });
+    files.push({
+      path: 'payments/README.md',
+      contents:
+        `# GPS shadow receipts\n\n` +
+        `Each line in \`gps-receipts.jsonl\` is a \`gps-receipt/1.0\` document — one per ` +
+        `payment you made. It records how your payment **would** be routed across the ` +
+        `earned-value pool and the ≤10% regenerative envelope.\n\n` +
+        `**Simulated — no funds have moved.** This shows how Solaris will route value when ` +
+        `live. A payment proof shows money moved; it does not by itself prove an outcome.\n`,
     });
   }
 

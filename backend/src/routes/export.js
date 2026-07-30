@@ -92,6 +92,14 @@ async function gatherRecord(userId) {
     [userId]
   ).catch(() => ({ rows: [] }));
 
+  // GPS shadow receipts (M7; spec A4 §3) — gps-receipt/1.0, money SIMULATED
+  const gpsReceipts = await db.query(
+    `SELECT receipt_id, receipt_version, eligible_cents, earned_cents, envelope_cents,
+            envelope_bps, settlement_state, policy_id, policy_hash, receipt, created_at
+     FROM gps_shadow_receipts WHERE user_id=$1 ORDER BY created_at ASC`,
+    [userId]
+  ).catch(() => ({ rows: [] }));
+
   // Unlocked audio practices
   const audioUnlocks = await db.query(
     `SELECT al.title, al.description, al.tags_json, ua.unlocked_at
@@ -118,6 +126,7 @@ async function gatherRecord(userId) {
     agentAuthority,
     solarisIdentity,
     notifications: notifications.rows,
+    gpsReceipts: gpsReceipts.rows,
     foundational,
   };
 }

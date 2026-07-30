@@ -62,6 +62,70 @@ router.get('/policy', (req, res) => {
   res.json(getGpsPolicy());
 });
 
+/* ==================== GPS SHADOW RECEIPTS (M7; spec A4 §3) ==================== */
+// GET /api/gps/receipts — the logged-in member's gps-receipt/1.0 shadow
+// receipts (one per paid PaymentIntent). Money is SIMULATED — the receipt
+// shows how Solaris WILL route value when live. See lib/gps-shadow.js.
+router.get('/receipts', authMiddleware, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    const r = await db.query(
+      `SELECT g.receipt_id, g.receipt_version, g.intent_id, g.policy_id, g.policy_hash,
+              g.eligible_cents, g.earned_cents, g.envelope_cents, g.envelope_bps,
+              g.settlement_state, g.receipt, g.created_at,
+              pi.purpose, pi.currency, pi.status AS intent_status
+         FROM gps_shadow_receipts g
+         JOIN payment_intents pi ON pi.id = g.intent_id
+        WHERE g.user_id = $1
+        ORDER BY g.created_at DESC
+        LIMIT $2`,
+      [req.user.userId, limit]
+    );
+    res.json({
+      receipts: r.rows.map((row) => ({
+        receiptId: row.receipt_id,
+        receiptVersion: row.receipt_version,
+        intentId: row.intent_id,
+        purpose: row.purpose,
+        currency: row.currency,
+        intentStatus: row.intent_status,
+        policyId: row.policy_id,
+        policyHash: row.policy_hash,
+        eligibleCents: Number(row.eligible_cents),
+        earnedCents: Number(row.earned_cents),
+        envelopeCents: Number(row.envelope_cents),
+        envelopeBps: row.envelope_bps,
+        settlementState: row.settlement_state,
+        createdAt: row.created_at,
+        receipt: row.receipt,
+      })),
+      disclosure: 'Simulated — no funds have moved. This shows how Solaris will route value when live.',
+    });
+  } catch (err) {
+    console.error('gps receipts', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/gps/receipts/:receiptId — one shadow receipt (owner only).
+router.get('/receipts/:receiptId', authMiddleware, async (req, res) => {
+  try {
+    const r = await db.query(
+      'SELECT receipt, user_id FROM gps_shadow_receipts WHERE receipt_id=$1',
+      [req.params.receiptId]
+    );
+    const row = r.rows[0];
+    if (!row) return res.status(404).json({ error: 'Receipt not found' });
+    if (row.user_id !== req.user.userId && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'This receipt does not belong to you.' });
+    }
+    res.json({ receipt: row.receipt });
+  } catch (err) {
+    console.error('gps receipt detail', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 /* ============================ PATIENT LEDGER ============================ */
 // GET /api/gps/my-ledger?limit=&offset=
 router.get('/my-ledger', authMiddleware, async (req, res) => {

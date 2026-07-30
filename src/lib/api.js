@@ -393,6 +393,7 @@ class ApiClient {
   // ---- GPS (Global Prosperous Split) ----
   getGpsPolicy() { return this.request('/gps/policy'); }
   getGpsLedger(limit = 20, offset = 0) { return this.request(`/gps/my-ledger?limit=${limit}&offset=${offset}`); }
+  getGpsReceipts(limit = 50) { return this.request(`/gps/receipts?limit=${limit}`); }
   getGpsEarnings() { return this.request('/gps/my-earnings'); }
 
   // ---- Sovereign Passport completeness ----

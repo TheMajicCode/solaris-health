@@ -41,6 +41,7 @@ import BookingManagement from './admin/BookingManagement.jsx';
 import NotificationCenter from './NotificationCenter.jsx';
 import GPSLedger from './gps/GPSLedger.jsx';
 import GpsExplainer from './gps/GpsExplainer.jsx';
+import PaymentReceipts from './gps/PaymentReceipts.jsx';
 import ReferralHub from './gps/ReferralHub.jsx';
 import RegenerativeTreasury from './gps/RegenerativeTreasury.jsx';
 import GPSStats from './admin/GPSStats.jsx';
@@ -4523,6 +4524,9 @@ function EconomicPassportPage({ user }) {
 
       {/* ── What is GPS — interactive explainer ── */}
       <ErrorBoundary><GpsExplainer /></ErrorBoundary>
+
+      {/* ── Where your payment goes — GPS shadow receipts (M7) ── */}
+      <ErrorBoundary><PaymentReceipts /></ErrorBoundary>
 
       {/* ── Divider ── */}
       <div style={{ height: 1, background: 'var(--line,#e3ece8)', margin: '2px 0' }} />
