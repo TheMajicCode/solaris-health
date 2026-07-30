@@ -315,6 +315,165 @@ async function seedGpsReceipts() {
   return n;
 }
 
+/**
+ * seedAlejandroProfile — give the practitioner demo account alejandro@solaris.health
+ * a real, bookable marketplace profile (spec: fill demo gaps).
+ *
+ * Without a provider_profiles row, alejandro never appears in Explore or LUCA's
+ * "Curate for me" rail and the practitioner login has no profile to manage.
+ * This upserts an `active`/`approved` integrative-nutrition profile plus 3
+ * services and 3 weekly availability slots. Idempotent: any existing profile
+ * (and its services/availability) is removed first, so re-runs are safe.
+ */
+async function seedAlejandroProfile() {
+  const u = await db.query("SELECT id FROM users WHERE lower(email)='alejandro@solaris.health' LIMIT 1");
+  if (!u.rows.length) { console.warn('  (skip alejandro profile: user not found)'); return 0; }
+  const userId = u.rows[0].id;
+
+  // Idempotent: remove any existing profile + its services/availability first.
+  const existing = await db.query('SELECT id FROM provider_profiles WHERE user_id=$1', [userId]);
+  for (const row of existing.rows) {
+    await db.query('DELETE FROM provider_services WHERE provider_id=$1', [row.id]);
+    await db.query('DELETE FROM provider_availability WHERE provider_id=$1', [row.id]);
+  }
+  await db.query('DELETE FROM provider_profiles WHERE user_id=$1', [userId]);
+
+  const prof = await db.query(
+    `INSERT INTO provider_profiles
+       (user_id, provider_type, business_name, description, city, country,
+        specialties, price_range, rating, review_count, verified, status,
+        approval_status, hidden, auto_confirm_bookings, claimed, featured)
+     VALUES ($1,'nutritionist',$2,$3,'San Salvador','El Salvador',
+             $4,$5,$6,$7,true,'active','approved',false,true,true,true)
+     RETURNING id`,
+    [userId,
+      'Alejandro Reyes — Nutrición Integrativa',
+      'Integrative-medicine practitioner blending functional nutrition, metabolic health, and lifestyle medicine. Alejandro helps members restore energy, balance blood sugar, and build sustainable habits rooted in whole foods and circadian alignment.',
+      JSON.stringify(['Integrative Medicine', 'Functional Nutrition', 'Metabolic Health']),
+      '$60–$180', 4.8, 57]
+  );
+  const pid = prof.rows[0].id;
+
+  const services = [
+    ['Integrative Nutrition Intake', 'Comprehensive 90-minute root-cause intake covering diet, labs, sleep, and stress.', 120, 90, 'Consultation'],
+    ['Metabolic Reset Program', '4-week personalized protocol to stabilize energy and blood sugar.', 180, 45, 'Program'],
+    ['Follow-up Consultation', 'Progress review and protocol adjustment.', 60, 30, 'Consultation'],
+  ];
+  for (const s of services) {
+    await db.query(
+      `INSERT INTO provider_services (provider_id, service_name, description, price, currency, duration_minutes, category)
+       VALUES ($1,$2,$3,$4,'USD',$5,$6)`,
+      [pid, s[0], s[1], s[2], s[3], s[4]]
+    );
+  }
+  // Availability: Mon / Wed / Fri, 09:00–17:00 (day_of_week 1,3,5).
+  for (const dow of [1, 3, 5]) {
+    await db.query(
+      `INSERT INTO provider_availability (provider_id, day_of_week, start_time, end_time, is_available)
+       VALUES ($1,$2,'09:00','17:00',true)`,
+      [pid, dow]
+    );
+  }
+  console.log('✓ Seeded practitioner profile for alejandro@solaris.health (3 services, 3 weekly slots).');
+  return 1;
+}
+
+/**
+ * seedSarahAssessment — populate assessment history for sarah@solaris.health so
+ * the dashboard vitality-over-time trend renders a real line (spec: fill demo gaps).
+ *
+ * Sarah has exactly ONE assessment_response, so the trend chart has a single
+ * point. This adds 3 historical snapshots (30/60/90 days back) trending gently
+ * upward toward her current values, each with matching body_system_scores,
+ * aspect_scores, and assessment_answers. It also backfills answers on her current
+ * (real) response. Idempotent: seeded history is tagged summary_json._seed
+ * 'sarah-history' and removed before re-inserting; the real response is untouched.
+ */
+async function seedSarahAssessment() {
+  const u = await db.query("SELECT id FROM users WHERE lower(email)='sarah@solaris.health' LIMIT 1");
+  if (!u.rows.length) { console.warn('  (skip sarah assessment: user not found)'); return 0; }
+  const userId = u.rows[0].id;
+
+  const tpl = await db.query("SELECT id FROM assessment_templates WHERE status='active' ORDER BY created_at DESC LIMIT 1");
+  const templateId = tpl.rows[0]?.id || null;
+
+  // Map system/aspect key -> question id for the answer rows.
+  const qrows = await db.query('SELECT id, system_key, aspect_key FROM assessment_questions WHERE template_id=$1', [templateId]);
+  const qBySystem = {}; const qByAspect = {};
+  for (const q of qrows.rows) {
+    if (q.system_key) qBySystem[q.system_key] = q.id;
+    if (q.aspect_key) qByAspect[q.aspect_key] = q.id;
+  }
+
+  const SYS_NAMES = { bioelectrical: 'Bioelectrical', hydration: 'Hydration', circadian: 'Circadian Rhythm', microbiome: 'Microbiome', respiratory: 'Respiratory', neurological: 'Neurological', cardiovascular: 'Cardiovascular', nutritional: 'Nutritional' };
+  const ASP_NAMES = { mental: 'Mental', emotional: 'Emotional', physical: 'Physical', spiritual: 'Spiritual' };
+  const band = (s) => (s >= 80 ? 'thriving' : s >= 60 ? 'balanced' : s >= 40 ? 'attention' : 'priority');
+
+  // Idempotent: remove previously seeded history (children first).
+  const seeded = await db.query("SELECT id FROM assessment_responses WHERE user_id=$1 AND summary_json->>'_seed'='sarah-history'", [userId]);
+  for (const r of seeded.rows) {
+    await db.query('DELETE FROM assessment_answers WHERE response_id=$1', [r.id]);
+    await db.query('DELETE FROM body_system_scores WHERE response_id=$1', [r.id]);
+    await db.query('DELETE FROM aspect_scores WHERE response_id=$1', [r.id]);
+    await db.query('DELETE FROM assessment_responses WHERE id=$1', [r.id]);
+  }
+
+  // Historical snapshots trending gently upward toward current values.
+  const HISTORY = [
+    { daysAgo: 90, aspects: { mental: 58, emotional: 45, physical: 52, spiritual: 68 }, systems: { bioelectrical: 58, hydration: 42, circadian: 40, microbiome: 56, respiratory: 64, neurological: 60, cardiovascular: 58, nutritional: 52 } },
+    { daysAgo: 60, aspects: { mental: 63, emotional: 50, physical: 57, spiritual: 72 }, systems: { bioelectrical: 63, hydration: 46, circadian: 43, microbiome: 60, respiratory: 68, neurological: 64, cardiovascular: 62, nutritional: 55 } },
+    { daysAgo: 30, aspects: { mental: 68, emotional: 54, physical: 60, spiritual: 76 }, systems: { bioelectrical: 67, hydration: 49, circadian: 45, microbiome: 63, respiratory: 71, neurological: 68, cardiovascular: 65, nutritional: 58 } },
+  ];
+
+  const avg = (arr) => Math.round(arr.reduce((a, b) => a + b, 0) / arr.length);
+  let n = 0;
+  for (const h of HISTORY) {
+    const vitality = Math.round(avg(Object.values(h.aspects)) * 0.5 + avg(Object.values(h.systems)) * 0.5);
+    const combined = [
+      ...Object.entries(h.systems).map(([k, v]) => ({ name: SYS_NAMES[k], score: v })),
+      ...Object.entries(h.aspects).map(([k, v]) => ({ name: ASP_NAMES[k], score: v })),
+    ].sort((a, b) => a.score - b.score);
+    const topFocus = combined.slice(0, 3);
+    const summary = {
+      headline: vitality >= 70 ? 'You are thriving with room to optimize' : vitality >= 50 ? 'A solid foundation with clear growth areas' : 'Your body is asking for support — and that is okay',
+      strengths: combined.slice(-2).map((c) => c.name),
+      focus: topFocus.map((c) => c.name),
+      _seed: 'sarah-history',
+    };
+    const resp = await db.query(
+      `INSERT INTO assessment_responses
+         (user_id, template_id, completed_at, created_at, raw_score, vitality_score, mental_score, emotional_score, physical_score, spiritual_score, summary_json, top_focus_areas_json)
+       VALUES ($1,$2, now()-($3::int*interval '1 day'), now()-($3::int*interval '1 day'), $4::int,$4::int,$5,$6,$7,$8,$9,$10)
+       RETURNING id`,
+      [userId, templateId, h.daysAgo, vitality, h.aspects.mental, h.aspects.emotional, h.aspects.physical, h.aspects.spiritual, JSON.stringify(summary), JSON.stringify(topFocus)]
+    );
+    const rid = resp.rows[0].id;
+    for (const [k, v] of Object.entries(h.systems)) {
+      await db.query('INSERT INTO body_system_scores (response_id,user_id,system_key,system_name,score,severity_band) VALUES ($1,$2,$3,$4,$5,$6)', [rid, userId, k, SYS_NAMES[k], v, band(v)]);
+      if (qBySystem[k]) await db.query('INSERT INTO assessment_answers (response_id,question_id,system_key,answer_number,normalized_score) VALUES ($1,$2,$3,$4,$4)', [rid, qBySystem[k], k, v]);
+    }
+    for (const [k, v] of Object.entries(h.aspects)) {
+      await db.query('INSERT INTO aspect_scores (response_id,user_id,aspect_key,aspect_name,score) VALUES ($1,$2,$3,$4,$5)', [rid, userId, k, ASP_NAMES[k], v]);
+      if (qByAspect[k]) await db.query('INSERT INTO assessment_answers (response_id,question_id,aspect_key,answer_number,normalized_score) VALUES ($1,$2,$3,$4,$4)', [rid, qByAspect[k], k, v]);
+    }
+    n += 1;
+  }
+
+  // Backfill answers on the CURRENT (real) response so its answer log isn't empty.
+  const cur = await db.query("SELECT id FROM assessment_responses WHERE user_id=$1 AND (summary_json->>'_seed') IS DISTINCT FROM 'sarah-history' ORDER BY created_at DESC LIMIT 1", [userId]);
+  if (cur.rows.length) {
+    const rid = cur.rows[0].id;
+    await db.query('DELETE FROM assessment_answers WHERE response_id=$1', [rid]);
+    const sys = await db.query('SELECT system_key, score FROM body_system_scores WHERE response_id=$1', [rid]);
+    for (const row of sys.rows) if (qBySystem[row.system_key]) await db.query('INSERT INTO assessment_answers (response_id,question_id,system_key,answer_number,normalized_score) VALUES ($1,$2,$3,$4,$4)', [rid, qBySystem[row.system_key], row.system_key, row.score]);
+    const asp = await db.query('SELECT aspect_key, score FROM aspect_scores WHERE response_id=$1', [rid]);
+    for (const row of asp.rows) if (qByAspect[row.aspect_key]) await db.query('INSERT INTO assessment_answers (response_id,question_id,aspect_key,answer_number,normalized_score) VALUES ($1,$2,$3,$4,$4)', [rid, qByAspect[row.aspect_key], row.aspect_key, row.score]);
+  }
+
+  console.log(`✓ Seeded ${n} historical assessment snapshots + backfilled answers for sarah@solaris.health.`);
+  return n;
+}
+
 async function resetMember(email) {
   const u = await db.query('SELECT id, first_name, last_name FROM users WHERE lower(email)=lower($1)', [email]);
   if (!u.rows.length) throw new Error(`No member found with email: ${email}`);
@@ -352,6 +511,12 @@ async function resetMember(email) {
       await seedGpsReceipts();
       process.exit(0);
     }
+    if (process.argv.includes('--demo-gaps')) {
+      console.log('Filling demo gaps (alejandro profile + sarah assessment history)...');
+      await seedAlejandroProfile();
+      await seedSarahAssessment();
+      process.exit(0);
+    }
     console.log('Resetting Solaris tables...');
     await reset();
     console.log('Seeding users...');
@@ -365,6 +530,9 @@ async function resetMember(email) {
     await seedSampleResult(majd, tid);
     console.log('Seeding GPS shadow receipts...');
     await seedGpsReceipts().catch((e) => console.warn('  (GPS seed skipped:', e.message, ')'));
+    console.log('Filling demo gaps (alejandro profile + sarah assessment history)...');
+    await seedAlejandroProfile().catch((e) => console.warn('  (alejandro profile skipped:', e.message, ')'));
+    await seedSarahAssessment().catch((e) => console.warn('  (sarah assessment skipped:', e.message, ')'));
     console.log('✓ Solaris seed complete.');
     console.log('  Patient:      sarah@solaris.health / demo123');
     console.log('  Patient:      majd@luca.health / demo123');
