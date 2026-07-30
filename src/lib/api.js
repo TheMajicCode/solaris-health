@@ -442,6 +442,11 @@ class ApiClient {
   simulatePayment(payload) { return this.request('/payments/simulate', { method: 'POST', body: JSON.stringify(payload) }); }
   getMyPayments() { return this.request('/payments/mine'); }
 
+  // ---- Solaris: Wompi hosted checkout (M6) ----
+  createCheckout(payload) { return this.request('/payments/checkout', { method: 'POST', body: JSON.stringify(payload) }); }
+  getPaymentIntents() { return this.request('/payments/intents'); }
+  getPaymentIntent(id) { return this.request(`/payments/intents/${id}`); }
+
   // ---- Solaris: LUCA context ----
   getLucaRecommendations(opts = {}) { return this.request(`/luca/recommendations${opts.refresh ? '?refresh=true' : ''}`); }
   getLucaContext(userId) {

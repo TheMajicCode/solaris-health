@@ -20,6 +20,8 @@ const { computeAllocations, ENVELOPE_CAP_BPS } = require('../src/lib/payments/al
 
 let token;
 let userId;
+let providerId;
+let bookingId;
 
 beforeAll(async () => {
   process.env.PAYMENT_PROVIDER = 'mock';
@@ -30,6 +32,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  if (bookingId) {
+    await db.query('DELETE FROM booking_status_history WHERE booking_id=$1', [bookingId]).catch(() => {});
+    await db.query('DELETE FROM bookings WHERE id=$1', [bookingId]).catch(() => {});
+  }
+  if (providerId) await db.query('DELETE FROM provider_profiles WHERE id=$1', [providerId]).catch(() => {});
   if (userId) {
     const subj = await subjectIdForUser(userId).catch(() => null);
     if (subj) {
@@ -161,6 +168,65 @@ test('GET /api/gps/receipts returns the member shadow receipts', async () => {
   expect(r.settlementState).toBeTruthy();
   expect(r.receipt.earned_value_summary.amount_cents + r.receipt.gps_envelope.amount_cents)
     .toBe(r.eligibleCents);
+});
+
+test('checkout for a booking derives price, marks pending, and webhook confirms + marks paid', async () => {
+  // Minimal provider + booking owned by the member.
+  const prov = await db.query(
+    "INSERT INTO provider_profiles (provider_type, business_name) VALUES ('practitioner','Test Clinic') RETURNING id");
+  providerId = prov.rows[0].id;
+  const bk = await db.query(
+    `INSERT INTO bookings (patient_id, provider_id, booking_date, start_time, end_time, status, total_price, currency)
+     VALUES ($1,$2, CURRENT_DATE + 3, '10:00', '11:00', 'pending', 150.00, 'USD') RETURNING id`,
+    [userId, providerId]);
+  bookingId = bk.rows[0].id;
+
+  // Checkout WITHOUT amountCents -> derives 15000 from the booking price.
+  const chk = await request(app)
+    .post('/api/payments/checkout')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ bookingId, purpose: 'consultation' });
+  expect(chk.status).toBe(201);
+  expect(chk.body.amountCents).toBe(15000);
+  expect(chk.body.bookingId).toBe(bookingId);
+  expect(chk.body.checkoutUrl).toMatch(/^https?:\/\//);
+
+  // Booking now shows a pending charge.
+  const pend = await db.query('SELECT payment_status, status FROM bookings WHERE id=$1', [bookingId]);
+  expect(pend.rows[0].payment_status).toBe('pending');
+
+  // Re-checkout reuses the open intent (no duplicate rows).
+  const chk2 = await request(app)
+    .post('/api/payments/checkout')
+    .set('Authorization', `Bearer ${token}`)
+    .send({ bookingId, purpose: 'consultation' });
+  expect(chk2.body.reused).toBe(true);
+  expect(chk2.body.intentId).toBe(chk.body.intentId);
+
+  // Approved webhook -> booking paid + auto-confirmed.
+  const adapter = new MockPaymentAdapter({ eventsSecret: process.env.WOMPI_EVENTS_SECRET });
+  const event = adapter.buildSignedEvent({
+    providerRef: chk.body.providerRef, reference: chk.body.intentId, status: 'APPROVED', amountCents: 15000, currency: 'USD',
+  });
+  const ok = await request(app).post('/api/payments/webhook').send(event);
+  expect(ok.body.confirmed).toBe(true);
+
+  const paid = await db.query('SELECT payment_status, status FROM bookings WHERE id=$1', [bookingId]);
+  expect(paid.rows[0].payment_status).toBe('paid');
+  expect(paid.rows[0].status).toBe('confirmed');
+});
+
+test('checkout rejects a booking that is not the caller\'s', async () => {
+  // A second member cannot pay for the first member's booking.
+  const other = await request(app).post('/api/auth/register').send(global.makeUserPayload());
+  const r = await request(app)
+    .post('/api/payments/checkout')
+    .set('Authorization', `Bearer ${other.body.token}`)
+    .send({ bookingId, purpose: 'consultation' });
+  expect(r.status).toBe(403);
+  // Cleanup the throwaway user.
+  await db.query('DELETE FROM audit_logs WHERE actor_id=$1', [other.body.user.id]).catch(() => {});
+  await db.query('DELETE FROM users WHERE id=$1', [other.body.user.id]).catch(() => {});
 });
 
 test('shadow receipt serializes into the vault export', async () => {

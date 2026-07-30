@@ -31,6 +31,14 @@ const STATUS = {
   no_show:   { label: 'No-show',    cls: 'noshow' },
 };
 
+// Payment status pills (patient view only). 'unpaid' is intentionally omitted —
+// no pill until a charge is actually initiated.
+const PAY_STATUS = {
+  pending: { label: '⏳ Payment pending', cls: 'pay-pending' },
+  paid:    { label: '✓ Paid',            cls: 'pay-paid' },
+  failed:  { label: '⚠ Payment failed',  cls: 'pay-failed' },
+};
+
 function initials(name) {
   if (!name) return '?';
   return name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('');
@@ -116,6 +124,11 @@ export default function BookingCard({
               {!isPatient && b.provider_payout != null && (
                 <em> · you earn ${Number(b.provider_payout).toFixed(2)}</em>
               )}
+            </span>
+          )}
+          {isPatient && Number(b.total_price) > 0 && PAY_STATUS[b.payment_status] && (
+            <span className={`bkc-pay ${PAY_STATUS[b.payment_status].cls}`} title="Payment status">
+              {PAY_STATUS[b.payment_status].label}
             </span>
           )}
         </div>
@@ -212,9 +225,15 @@ const CSS = `
 .luca .bkc-chev{color:var(--muted-2);flex:none;align-self:center}
 .luca .bkc-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 15px;
   border-top:1px solid var(--line);background:var(--canvas);flex-wrap:wrap}
-.luca .bkc-price{font-size:12.5px;color:var(--ink);font-weight:700;font-family:'IBM Plex Mono',monospace}
+.luca .bkc-price{font-size:12.5px;color:var(--ink);font-weight:700;font-family:'IBM Plex Mono',monospace;
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .luca .bkc-price span{display:flex;align-items:center;gap:2px}
 .luca .bkc-price em{font-style:normal;color:var(--muted);font-weight:500;font-family:'IBM Plex Sans',sans-serif}
+.luca .bkc-pay{font-family:'IBM Plex Sans',sans-serif;font-size:11px;font-weight:700;border-radius:20px;
+  padding:2px 9px;white-space:nowrap}
+.luca .bkc-pay.pay-pending{background:#fbf3e8;color:#8a5a25}
+.luca .bkc-pay.pay-paid{background:var(--mint-soft);color:var(--teal-d)}
+.luca .bkc-pay.pay-failed{background:#fbe9e9;color:#a23b3b}
 .luca .bkc-actions{display:flex;gap:7px;flex-wrap:wrap;margin-left:auto}
 .luca .bkc-btn{display:inline-flex;align-items:center;gap:5px;border-radius:9px;padding:7px 12px;font-weight:700;font-size:12.5px;
   cursor:pointer;font-family:inherit;border:1px solid transparent;transition:all .12s}

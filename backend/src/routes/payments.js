@@ -37,14 +37,10 @@ router.post('/checkout', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.userId;
     const {
-      appointmentId = null, amountCents, currency = 'USD',
+      appointmentId = null, bookingId = null, amountCents, currency = 'USD',
       purpose = 'consultation', description, returnUrl, idempotencyKey,
     } = req.body || {};
 
-    const amount = parseInt(amountCents, 10);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      return res.status(400).json({ error: 'amountCents must be a positive integer' });
-    }
     if (!['consultation', 'deposit', 'treatment', 'membership'].includes(purpose)) {
       return res.status(400).json({ error: 'invalid purpose' });
     }
@@ -52,12 +48,44 @@ router.post('/checkout', authMiddleware, async (req, res) => {
     const subjectId = await subjectIdForUser(userId);
     if (!subjectId) return res.status(404).json({ error: 'subject not found' });
 
+    // Validate booking ownership if supplied; the booking price is authoritative.
+    let booking = null;
+    let bookingCurrency = currency;
+    if (bookingId) {
+      const bk = await db.query(
+        'SELECT id, patient_id, total_price, currency, status FROM bookings WHERE id=$1', [bookingId]);
+      if (!bk.rows.length) return res.status(404).json({ error: 'booking not found' });
+      booking = bk.rows[0];
+      if (booking.patient_id !== userId) return res.status(403).json({ error: 'not your booking' });
+      bookingCurrency = booking.currency || currency;
+    }
+
+    // Amount: explicit amountCents wins; otherwise derive from the booking price.
+    let amount = parseInt(amountCents, 10);
+    if ((!Number.isFinite(amount) || amount <= 0) && booking) {
+      amount = Math.round(Number(booking.total_price || 0) * 100);
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ error: 'amountCents must be a positive integer' });
+    }
+    const cur = bookingCurrency || 'USD';
+
     // Idempotency: one key per intent. Reuse the existing intent if replayed.
-    const key = String(idempotencyKey || `chk_${userId}_${appointmentId || 'na'}_${amount}_${Date.now()}`);
+    const key = String(idempotencyKey || `chk_${userId}_${bookingId || appointmentId || 'na'}_${amount}_${Date.now()}`);
     const existing = await db.query('SELECT * FROM payment_intents WHERE idempotency_key=$1', [key]);
     if (existing.rows.length) {
       const it = existing.rows[0];
       return res.json({ intentId: it.id, checkoutUrl: it.checkout_url, status: it.status, reused: true });
+    }
+    // Reuse a still-open intent for the same booking rather than piling up rows.
+    if (bookingId) {
+      const open = await db.query(
+        "SELECT * FROM payment_intents WHERE booking_id=$1 AND status IN ('created','pending') ORDER BY created_at DESC LIMIT 1",
+        [bookingId]);
+      if (open.rows.length) {
+        const it = open.rows[0];
+        return res.json({ intentId: it.id, checkoutUrl: it.checkout_url, status: it.status, reused: true });
+      }
     }
 
     // Validate appointment ownership if supplied.
@@ -70,12 +98,16 @@ router.post('/checkout', authMiddleware, async (req, res) => {
 
     const ins = await db.query(
       `INSERT INTO payment_intents
-         (subject_id, user_id, appointment_id, amount_cents, currency, purpose, description, status, provider, idempotency_key)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'created',$8,$9)
+         (subject_id, user_id, appointment_id, booking_id, amount_cents, currency, purpose, description, status, provider, idempotency_key)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'created',$9,$10)
        RETURNING *`,
-      [apptSubject, userId, appointmentId, amount, currency, purpose, description || null,
+      [apptSubject, userId, appointmentId, bookingId, amount, cur, purpose, description || null,
        getPaymentProvider().name, key]
     );
+    // Reflect a pending charge on the booking for the member's UI.
+    if (bookingId) {
+      await db.query("UPDATE bookings SET payment_status='pending' WHERE id=$1 AND payment_status <> 'paid'", [bookingId]);
+    }
     const intent = ins.rows[0];
 
     const provider = getPaymentProvider();
@@ -85,7 +117,7 @@ router.post('/checkout', authMiddleware, async (req, res) => {
       checkout = await provider.createCheckout({
         intentId: intent.id,
         amount,
-        currency,
+        currency: cur,
         description: description || 'Solaris booking',
         returnUrl: returnUrl || null,
         metadata: { customerEmail: userRow.rows[0] && userRow.rows[0].email },
@@ -102,11 +134,11 @@ router.post('/checkout', authMiddleware, async (req, res) => {
     await db.query(
       `INSERT INTO payment_events (intent_id, kind, payload, provider_signature_valid)
        VALUES ($1,'checkout.created',$2,NULL)`,
-      [intent.id, JSON.stringify({ providerRef: checkout.providerRef, amount, currency })]
+      [intent.id, JSON.stringify({ providerRef: checkout.providerRef, amount, currency: cur })]
     );
     await audit({
       actorId: userId, action: 'payment.checkout_created', resourceType: 'payment_intent',
-      resourceId: intent.id, newValues: { amount, currency, purpose }, purpose: 'payments', consentScope: 'payments',
+      resourceId: intent.id, newValues: { amount, currency: cur, purpose }, purpose: 'payments', consentScope: 'payments',
       ip: req.ip,
     });
 
@@ -115,7 +147,8 @@ router.post('/checkout', authMiddleware, async (req, res) => {
       checkoutUrl: checkout.checkoutUrl,
       providerRef: checkout.providerRef,
       amountCents: amount,
-      currency,
+      currency: cur,
+      bookingId: bookingId || null,
       status: 'pending',
       provider: provider.name,
       note: 'Booking is confirmed by the payment webhook, not by this redirect.',
@@ -157,6 +190,13 @@ async function confirmPaidIntent(intent, providerFeeCents = null) {
   // Confirm the booking (idempotent — status already defaults confirmed).
   if (it.appointment_id) {
     await db.query("UPDATE appointments SET status='confirmed' WHERE id=$1", [it.appointment_id]);
+  }
+  // Marketplace booking: mark paid and confirm if it was still pending.
+  if (it.booking_id) {
+    await db.query(
+      "UPDATE bookings SET payment_status='paid', status=CASE WHEN status='pending' THEN 'confirmed' ELSE status END, confirmed_at=COALESCE(confirmed_at, NOW()) WHERE id=$1",
+      [it.booking_id]
+    );
   }
 
   // M7 hook: generate the GPS shadow receipt (added in M7; safe no-op if absent).
@@ -238,6 +278,9 @@ router.post('/webhook', async (req, res) => {
     if (['DECLINED', 'ERROR', 'VOIDED'].includes(status)) {
       if (intent.status !== 'paid') {
         await db.query('UPDATE payment_intents SET status=$1 WHERE id=$2', ['failed', intent.id]);
+        if (intent.booking_id) {
+          await db.query("UPDATE bookings SET payment_status='failed' WHERE id=$1 AND payment_status <> 'paid'", [intent.booking_id]);
+        }
       }
       return res.status(200).json({ received: true, processed: true, status: 'failed' });
     }
@@ -295,6 +338,7 @@ function shapeIntent(it, allocations) {
   const earned = allocations.filter((a) => a.bucket === 'earned_value');
   return {
     id: it.id,
+    bookingId: it.booking_id || null,
     amountCents: Number(it.amount_cents),
     currency: it.currency,
     purpose: it.purpose,

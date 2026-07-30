@@ -15,7 +15,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   X, Loader2, Check, ChevronRight, ChevronLeft, Calendar, Clock, Tag,
-  MapPin, FileText, ShieldCheck, CalendarPlus, PartyPopper,
+  MapPin, FileText, ShieldCheck, CalendarPlus, PartyPopper, CreditCard, ExternalLink,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '../../lib/api.js';
@@ -39,6 +39,8 @@ export default function BookingFlow({ providerId, provider: provIn, services: sv
   const [phone, setPhone] = useState(user?.phone || '');
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
+  const [paying, setPaying] = useState(false);
+  const [payStatus, setPayStatus] = useState(null); // null | 'pending' | 'paid' | 'failed'
   const tz = tzLabel();
 
   // Load provider + services if not supplied.
@@ -110,6 +112,33 @@ export default function BookingFlow({ providerId, provider: provIn, services: sv
 
   const price = service?.price != null ? Number(service.price) : 0;
   const fee = Math.round(price * 10) / 100;
+
+  // Wompi hosted checkout — create a PaymentIntent for this booking and open the
+  // sandbox checkout in a new tab. The webhook confirms; here we only surface intent.
+  const payNow = async () => {
+    if (!result?.booking?.id) return;
+    setPaying(true);
+    try {
+      const r = await api.createCheckout({
+        bookingId: result.booking.id,
+        purpose: 'consultation',
+        description: `${service?.service_name || 'Consultation'} · ${provider?.business_name || 'Solaris'}`,
+      });
+      if (r.checkoutUrl) {
+        window.open(r.checkoutUrl, '_blank', 'noopener');
+        setPayStatus('pending');
+        toast.success('Opening secure checkout — complete payment in the new tab.');
+      } else {
+        setPayStatus('pending');
+        toast('Payment initiated. Status will update once confirmed.');
+      }
+    } catch (e) {
+      setPayStatus('failed');
+      toast.error(e.message || 'Could not start payment');
+    } finally {
+      setPaying(false);
+    }
+  };
 
   const canNext = (step === 0 && service) || (step === 1 && slot) || step === 2 || step === 3;
 
@@ -216,8 +245,10 @@ export default function BookingFlow({ providerId, provider: provIn, services: sv
                   <ValueFlowViz total={price} compact />
                 </div>
                 <p className="bkf-policy">
-                  <ShieldCheck size={13} /> Cancellation policy: 24 hours notice required. Payment is collected in person for now —
-                  online payment is coming soon.
+                  <ShieldCheck size={13} /> Cancellation policy: 24 hours notice required.
+                  {price > 0
+                    ? ' After you request, you can pay securely online to confirm — or settle in person.'
+                    : ' No payment needed to request this session.'}
                 </p>
               </div>
             )}
@@ -242,6 +273,26 @@ export default function BookingFlow({ providerId, provider: provIn, services: sv
                   🌱 When this session completes, {price ? `$${(price * 0.02).toFixed(2)}` : 'your'} LOVE rewards land in your
                   Economic Passport and a share seeds the Community Treasury. Value flows to where value was created.
                 </p>
+                {price > 0 && (
+                  <div className="bkf-pay">
+                    {payStatus === 'paid' ? (
+                      <div className="bkf-pay-badge paid"><Check size={14} /> Payment confirmed</div>
+                    ) : payStatus === 'pending' ? (
+                      <div className="bkf-pay-badge pending">
+                        <Loader2 className="bkf-spin" size={14} /> Payment pending — finish in the checkout tab. This booking confirms automatically once payment clears.
+                      </div>
+                    ) : payStatus === 'failed' ? (
+                      <div className="bkf-pay-badge failed">Payment didn't start. You can retry below or settle in person.</div>
+                    ) : null}
+                    {payStatus !== 'paid' && (
+                      <button className="bkf-btn pay" disabled={paying} onClick={payNow}>
+                        {paying ? <><Loader2 className="bkf-spin" size={15} /> Starting…</>
+                          : <><CreditCard size={15} /> {payStatus === 'pending' ? 'Reopen checkout' : `Pay $${price.toFixed(2)} to confirm`} <ExternalLink size={13} /></>}
+                      </button>
+                    )}
+                    <p className="bkf-pay-note">Secure sandbox checkout via Wompi. Solaris never stores your card.</p>
+                  </div>
+                )}
                 <div className="bkf-done-actions">
                   <button className="bkf-btn ghost" onClick={() => downloadICS({ ...result.booking, service_name: service?.service_name, business_name: provider?.business_name, address: provider?.address, city: provider?.city })}>
                     <CalendarPlus size={15} /> Add to Calendar
@@ -363,4 +414,14 @@ const CSS = `
 .luca .bkf-done-card div{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink);font-weight:600}
 .luca .bkf-done-card svg{color:var(--teal-d);flex:none}
 .luca .bkf-done-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.luca .bkf-pay{max-width:420px;margin:0 auto 16px;display:flex;flex-direction:column;gap:10px;align-items:center}
+.luca .bkf-btn.pay{background:var(--amber,#C58A53);color:#fff;border:none;justify-content:center}
+.luca .bkf-btn.pay:hover{filter:brightness(.95)}
+.luca .bkf-btn.pay:disabled{opacity:.55;cursor:not-allowed}
+.luca .bkf-pay-badge{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;line-height:1.45;
+  border-radius:11px;padding:10px 13px;text-align:left;width:100%}
+.luca .bkf-pay-badge.paid{background:var(--mint-soft);color:var(--teal-d);border:1px solid var(--mint-line)}
+.luca .bkf-pay-badge.pending{background:#fbf3e8;color:#8a5a25;border:1px solid #e6d3b8}
+.luca .bkf-pay-badge.failed{background:#fbe9e9;color:#a23b3b;border:1px solid #f0cccc}
+.luca .bkf-pay-note{font-size:11px;color:var(--muted-2);margin:0;text-align:center}
 `;
