@@ -28,6 +28,7 @@ const adminProvidersRoutes = require('./routes/admin/providers');
 const adminInviteRoutes = require('./routes/admin/invite');
 const notificationsRoutes = require('./routes/notifications');
 const bookingsRoutes = require('./routes/bookings');
+const providersRoutes = require('./routes/providers');
 const providerAvailabilityRoutes = require('./routes/provider/availability');
 const providerBookingsRoutes = require('./routes/provider/bookings');
 const providerEarningsRoutes = require('./routes/provider/earnings');
@@ -271,6 +272,7 @@ app.use('/api/wallet', walletRoutes);
 app.use('/api/messages', messagesRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/bookings', bookingsRoutes);
+app.use('/api/providers', providersRoutes); // public available-slots
 app.use('/api/provider/availability', providerAvailabilityRoutes);
 app.use('/api/provider/bookings', providerBookingsRoutes);
 app.use('/api/provider/patients', providerPatientsRoutes);

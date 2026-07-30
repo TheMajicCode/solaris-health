@@ -193,11 +193,12 @@ router.get('/providers/:id', optionalAuth, async (req, res) => {
       return res.status(404).json({ error: 'Not found' });
     }
 
-    const [services, credentials, photos, reviews] = await Promise.all([
+    const [services, credentials, photos, reviews, availability] = await Promise.all([
       db.query('SELECT * FROM provider_services WHERE provider_id=$1 ORDER BY category, service_name', [id]),
       db.query('SELECT * FROM provider_credentials WHERE provider_id=$1 ORDER BY issued_date DESC NULLS LAST', [id]),
       db.query('SELECT * FROM provider_photos WHERE provider_id=$1 ORDER BY sort_order, id', [id]),
       db.query('SELECT * FROM provider_ratings WHERE provider_id=$1 ORDER BY created_at DESC LIMIT 50', [id]),
+      db.query('SELECT day_of_week, start_time, end_time, is_available FROM provider_availability WHERE provider_id=$1 ORDER BY day_of_week', [id]),
     ]);
 
     const provider = p.rows[0];
@@ -211,6 +212,7 @@ router.get('/providers/:id', optionalAuth, async (req, res) => {
       credentials: credentials.rows,
       photos: photos.rows,
       reviews: reviews.rows,
+      availability: availability.rows,
     });
   } catch (err) {
     console.error('provider detail', err);

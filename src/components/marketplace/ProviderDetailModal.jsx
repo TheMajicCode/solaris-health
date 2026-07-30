@@ -30,6 +30,37 @@ const DAYS = [
   ['fri', 'Fri'], ['sat', 'Sat'], ['sun', 'Sun'],
 ];
 
+// Display order Mon→Sun with the day_of_week integer used by the weekly
+// availability template (0=Sun … 6=Sat, matching Postgres + JS getDay()).
+const WEEK_ORDER = [
+  [1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'],
+  [5, 'Fri'], [6, 'Sat'], [0, 'Sun'],
+];
+
+// "HH:MM[:SS]" -> "9:00am"
+function fmt12(t) {
+  if (!t) return '';
+  const [hRaw, mRaw] = String(t).split(':');
+  let h = parseInt(hRaw, 10);
+  const m = parseInt(mRaw, 10) || 0;
+  if (Number.isNaN(h)) return '';
+  const ap = h >= 12 ? 'pm' : 'am';
+  h = h % 12; if (h === 0) h = 12;
+  return m ? `${h}:${String(m).padStart(2, '0')}${ap}` : `${h}${ap}`;
+}
+
+// Build {dow:int -> "9am – 5pm"} from a weekly availability template array.
+function hoursFromTemplate(availability) {
+  const byDow = {};
+  for (const a of (availability || [])) {
+    if (a.is_available === false) continue;
+    const k = Number(a.day_of_week);
+    const range = `${fmt12(a.start_time)} – ${fmt12(a.end_time)}`;
+    (byDow[k] = byDow[k] || []).push(range);
+  }
+  return byDow;
+}
+
 function miniPin(accent) {
   const color = accent === 'gold' ? '#d4a52a' : accent === 'emerald' ? '#10b981' : '#0f766e';
   return L.divIcon({
@@ -104,6 +135,10 @@ export default function ProviderDetailModal({ providerId, user, onClose, onUpdat
   const accent = p ? typeMeta(p.provider_type).accent : 'teal';
   let hours = null;
   try { hours = p?.hours_of_operation ? (typeof p.hours_of_operation === 'string' ? JSON.parse(p.hours_of_operation) : p.hours_of_operation) : null; } catch { hours = null; }
+  // Prefer the weekly availability template (source of truth for bookings);
+  // fall back to the legacy hours_of_operation JSON blob.
+  const templateHours = hoursFromTemplate(data?.availability);
+  const hasTemplateHours = Object.keys(templateHours).length > 0;
   let specialties = [];
   try { specialties = p?.specialties ? (typeof p.specialties === 'string' ? JSON.parse(p.specialties) : p.specialties) : []; } catch { specialties = []; }
 
@@ -295,7 +330,17 @@ export default function ProviderDetailModal({ providerId, user, onClose, onUpdat
                   {p.phone && <div className="pdm-info-row"><Phone size={15} /><span>{p.phone}</span></div>}
                   {p.website && <div className="pdm-info-row"><Globe size={15} /><a href={p.website} target="_blank" rel="noreferrer">{p.website.replace(/^https?:\/\//, '')}</a></div>}
                 </div>
-                {hours && (
+                {hasTemplateHours ? (
+                  <div className="pdm-hours">
+                    <span className="pdm-hours-title"><Clock size={14} /> Hours</span>
+                    {WEEK_ORDER.map(([dow, label]) => (
+                      <div className="pdm-hours-row" key={dow}>
+                        <span>{label}</span>
+                        <span className="pdm-hours-v">{templateHours[dow] ? templateHours[dow].join(', ') : 'Closed'}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : hours && (
                   <div className="pdm-hours">
                     <span className="pdm-hours-title"><Clock size={14} /> Hours</span>
                     {DAYS.map(([k, label]) => (
