@@ -40,22 +40,21 @@ async function authMiddleware(req, res, next) {
     return res.status(401).json({ error: 'Invalid token' });
   }
 
-  // Revocation check (skip if jti absent — older token format).
-  if (decoded.jti) {
-    try {
-      const revoked = await db.query(
-        'SELECT id FROM revoked_tokens WHERE jti = $1',
-        [decoded.jti]
-      );
-      if (revoked.rows.length > 0) {
-        return res.status(401).json({ error: 'Session expired — please log in again.' });
-      }
-    } catch (err) {
-      // Fail OPEN: if the revocation check itself fails (e.g. DB down), allow the
-      // request through. Locking out every user during a DB blip is worse than
-      // briefly honouring a token that may have been revoked.
-      console.warn('Token revocation check failed:', err.message);
+  // Fail closed: tokens without jti cannot be revocation-checked — require re-login.
+  if (!decoded.jti) {
+    return res.status(401).json({ error: 'TOKEN_REQUIRES_RELOGIN' });
+  }
+  try {
+    const revoked = await db.query(
+      'SELECT id FROM revoked_tokens WHERE jti = $1',
+      [decoded.jti]
+    );
+    if (revoked.rows.length > 0) {
+      return res.status(401).json({ error: 'Session expired — please log in again.' });
     }
+  } catch (_err) {
+    // Fail closed: store unavailable → deny, never pass through.
+    return res.status(503).json({ error: 'SESSION_VALIDATION_UNAVAILABLE' });
   }
 
   req.user = decoded;
