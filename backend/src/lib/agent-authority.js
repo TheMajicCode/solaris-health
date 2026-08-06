@@ -54,24 +54,38 @@ async function ensureLucaAgent(userId) {
 /**
  * Check whether the user's LUCA agent may exercise `capability` right now.
  * Returns { allowed, reason, agent, grant } — never throws for flow control.
+ *
+ * Failure direction (S1A-P0-FAIL-CLOSED):
+ * - Any storage/infra error → { allowed: false, reason: 'authority_unavailable' }
+ * - requires_human_approval=true → { allowed: false, reason: 'approval_required' }
+ *   (approval artifact is not implemented in this sprint; all such grants are denied)
  */
 async function checkCapability(userId, capability) {
-  const agent = await ensureLucaAgent(userId);
-  if (!agent.active) {
-    return { allowed: false, reason: 'agent_disabled', agent, grant: null };
+  try {
+    const agent = await ensureLucaAgent(userId);
+    if (!agent.active) {
+      return { allowed: false, reason: 'agent_disabled', agent, grant: null };
+    }
+    const r = await db.query(
+      `SELECT * FROM agent_capability_grants
+        WHERE agent_id=$1 AND capability=$2 LIMIT 1`,
+      [agent.id, capability]
+    );
+    const grant = r.rows[0] || null;
+    if (!grant) return { allowed: false, reason: 'no_grant', agent, grant: null };
+    if (grant.status !== 'active') return { allowed: false, reason: 'grant_revoked', agent, grant };
+    if (grant.expires_at && new Date(grant.expires_at) < new Date()) {
+      return { allowed: false, reason: 'grant_expired', agent, grant };
+    }
+    // A grant requiring human approval is denied until an approval artifact exists.
+    if (grant.requires_human_approval) {
+      return { allowed: false, reason: 'approval_required', agent, grant };
+    }
+    return { allowed: true, reason: null, agent, grant };
+  } catch (_err) {
+    console.warn('[agent-authority] checkCapability: storage unavailable');
+    return { allowed: false, reason: 'authority_unavailable', agent: null, grant: null };
   }
-  const r = await db.query(
-    `SELECT * FROM agent_capability_grants
-      WHERE agent_id=$1 AND capability=$2 LIMIT 1`,
-    [agent.id, capability]
-  );
-  const grant = r.rows[0] || null;
-  if (!grant) return { allowed: false, reason: 'no_grant', agent, grant: null };
-  if (grant.status !== 'active') return { allowed: false, reason: 'grant_revoked', agent, grant };
-  if (grant.expires_at && new Date(grant.expires_at) < new Date()) {
-    return { allowed: false, reason: 'grant_expired', agent, grant };
-  }
-  return { allowed: true, reason: null, agent, grant };
 }
 
 /** Audit one use of a grant (best-effort — never throws). */

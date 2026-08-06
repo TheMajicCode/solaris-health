@@ -4,6 +4,10 @@
  * Proves the core promise: one user-owned LUCA agent with scoped, revocable,
  * expirable capability grants — and disabling LUCA never deletes the user,
  * their data, or their session.
+ *
+ * S1A-P0-FAIL-CLOSED additions:
+ * - requires_human_approval=true → approval_required (denied)
+ * - DB failure in checkCapability → authority_unavailable (denied, never allowed)
  */
 const request = require('supertest');
 const app = require('../src/server');
@@ -163,5 +167,60 @@ describe('LUCA agent HTTP routes', () => {
     );
     expect(audit.rows.length).toBeGreaterThanOrEqual(1);
     expect(audit.rows[0].new_values.capability).toBe('luca.chat');
+  });
+});
+
+// S1A-P0-FAIL-CLOSED: checkCapability fail-closed additions.
+describe('S1A checkCapability fail-closed', () => {
+  it('returns approval_required for a grant with requires_human_approval=true', async () => {
+    const agent = await ensureLucaAgent(userId);
+    try {
+      await db.query(
+        `UPDATE agent_capability_grants SET requires_human_approval=true
+           WHERE agent_id=$1 AND capability='luca.chat'`,
+        [agent.id]
+      );
+      const check = await checkCapability(userId, 'luca.chat');
+      expect(check.allowed).toBe(false);
+      expect(check.reason).toBe('approval_required');
+    } finally {
+      await db.query(
+        `UPDATE agent_capability_grants SET requires_human_approval=false
+           WHERE agent_id=$1 AND capability='luca.chat'`,
+        [agent.id]
+      );
+    }
+  });
+
+  it('returns authority_unavailable and logs only a fixed marker on DB failure', async () => {
+    const originalQuery = db.query.bind(db);
+    const errorMarker = 'S1A_AUTHORITY_DETAIL_MUST_NOT_LEAK';
+    let intercepted = false;
+    db.query = async function (text, params) {
+      // Throw on the agents SELECT that ensureLucaAgent uses.
+      if (!intercepted && typeof text === 'string' && text.includes('FROM agents')) {
+        intercepted = true;
+        throw Object.assign(new Error(errorMarker), { code: '08006' });
+      }
+      return originalQuery(text, params);
+    };
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const check = await checkCapability(userId, 'luca.chat');
+      expect(check.allowed).toBe(false);
+      expect(check.reason).toBe('authority_unavailable');
+      expect(check.agent).toBeNull();
+      expect(check.grant).toBeNull();
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith('[agent-authority] checkCapability: storage unavailable');
+      const captured = JSON.stringify(warnSpy.mock.calls);
+      expect(captured).not.toContain(errorMarker);
+      expect(captured).not.toContain('08006');
+      expect(captured).not.toContain(String(userId));
+      expect(captured).not.toContain('luca.chat');
+    } finally {
+      db.query = originalQuery;
+      warnSpy.mockRestore();
+    }
   });
 });
