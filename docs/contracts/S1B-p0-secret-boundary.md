@@ -2,13 +2,44 @@
 
 **Node:** `S1B-P0-SECRET-BOUNDARY`
 **Sprint:** Beta V1 Hardening
-**Closes:** P0-03 (RELEASE-LEDGER.md §P0 — GLOBAL SECRET-SHAPED BODY GUARD ABSENT)
+**Targets:** P0-03 (RELEASE-LEDGER.md §P0 — GLOBAL SECRET-SHAPED BODY GUARD ABSENT)
 **Authorities:** CONTEXT.md rule 5; IBC §9; G0-governance.md §6.3
-**Status:** READY FOR CODEX RE-REVIEW — implementation requires explicit `PROCEED S1B`
+**Status:** READY FOR CODEX S1B CONTRACT-DELTA REVIEW — implementation requires explicit `PROCEED S1B`
+
+> **P0-03 remains OPEN** until implementation, verification, reviewed commit, PR and merge are complete. A contract alone cannot close the finding.
+
+> **Governance incident — provenance note:** The initial corrected contract was committed and pushed as `c2f6aa98d85ec9fb0549b8ca5116fdf5b7326b50` without the required Majd/Codex commit and push gates. That commit contains documentation only and is preserved for auditability. It does not authorize implementation.
 
 ---
 
 ## 1. Base Branch / Commit / Clean-Worktree Precondition
+
+### 1A. SHA reference table
+
+Three SHA concepts are separated. They are not interchangeable.
+
+| Role | SHA | Notes |
+|------|-----|-------|
+| **Code-audit base** | `41b0cf363a6b43bbb16667b9c4339f322ecca356` | Sovereign branch tip; the exact tree against which all route/middleware/dependency evidence in this contract was gathered |
+| **Contract-only commit** | `c2f6aa98d85ec9fb0549b8ca5116fdf5b7326b50` | Adds `docs/contracts/S1B-p0-secret-boundary.md` only; committed and pushed without authorization; preserved for auditability; does not authorize implementation |
+| **Implementation starting commit** | **UNASSIGNED — BLOCKED** | Implementation is blocked until: (1) this corrected contract receives independent Codex review; (2) a separately authorized contract-only corrective commit is made and pushed via `PROCEED S1B-CONTRACT-CORRECTION` + `AUTHORIZE S1B CONTRACT PUSH`; (3) the exact resulting SHA is supplied by Majd/Codex in a later `PROCEED S1B` authorization. That later authorization supplies the only valid implementation starting commit SHA. `41b0cf36` is historical evidence only and is NOT a valid implementation starting commit. |
+
+Stale SHAs from prior documents — reject without acting:
+- `7b8843a9367cebb5ebb0a64c74f597a6c4ac2879` — rejected earlier node
+- `7b8843a9367cebb5ebb0a64c74f597a6c4ac2789` — typo variant
+
+### 1B. Authorization gates (four separate gates — not combinable without explicit instruction)
+
+| Gate | Authorizes | Does NOT authorize |
+|------|-----------|-------------------|
+| **`PROCEED S1B-CONTRACT-CORRECTION`** | Committing only the corrected contract file after Codex approves the review evidence | Source implementation; push; any file other than the contract |
+| **`AUTHORIZE S1B CONTRACT PUSH`** | Pushing the reviewed contract-only commit to `agent/abacus-beta-v1-hardening` | Source implementation; merge; deployment |
+| **`PROCEED S1B`** | The five-file source implementation beginning from the exact SHA named in that authorization | Any additional file; commit of the contract itself (already tracked) |
+| **Commit, push, PR, merge, deployment** | Each remains a separate gate unless Majd explicitly combines them in writing |  |
+
+These gates are sequential. `PROCEED S1B` cannot be issued until `PROCEED S1B-CONTRACT-CORRECTION` and `AUTHORIZE S1B CONTRACT PUSH` have both been issued and executed.
+
+### 1C. Pre-implementation verification (run immediately on `PROCEED S1B` authorization)
 
 The implementer MUST verify ALL of the following before touching any source file.
 If any value differs, Git status cannot be obtained, or the environment reports
@@ -19,29 +50,26 @@ git branch --show-current
 # → agent/abacus-beta-v1-hardening
 
 git rev-parse HEAD
-# → 41b0cf363a6b43bbb16667b9c4339f322ecca356
+# → <exact SHA supplied in the PROCEED S1B authorization — UNASSIGNED until then>
 
 git cat-file -p HEAD | grep tree
-# → tree 91b68f5ee036489827f8fdea74db0fe69dafdedd
+# → <tree SHA corresponding to the authorized implementation starting commit — UNASSIGNED until then>
 
 git status --porcelain=v1 --untracked-files=all
-# → ?? docs/contracts/S1B-p0-secret-boundary.md    (contract only — no other changes)
+# → (empty — clean worktree; the corrected contract is already committed and tracked)
 
 git diff --check HEAD
 # → (no output)
 ```
 
-Remote branch pre-conditions (both must resolve to `41b0cf36...`):
+Remote Beta branch state at implementation start — it must equal the exact authorized implementation SHA and local HEAD:
 
 ```bash
-git ls-remote origin refs/heads/agent/abacus-sovereign-sprint-v4
 git ls-remote origin refs/heads/agent/abacus-beta-v1-hardening
-# both: 41b0cf363a6b43bbb16667b9c4339f322ecca356
+# → <exact SHA supplied by the later PROCEED S1B authorization — must equal local HEAD>
 ```
 
-Do not carry either stale SHA from any prior document:
-- `7b8843a9367cebb5ebb0a64c74f597a6c4ac2879` — rejected earlier node
-- `7b8843a9367cebb5ebb0a64c74f597a6c4ac2789` — typo variant
+The sovereign branch (`agent/abacus-sovereign-sprint-v4`) is historical/informational and is not pinned by this contract. Its current or future SHA is not an S1B implementation precondition. If S1B is rebased onto the sovereign branch or any base other than the exact authorized Beta SHA, STOP for new authorization and re-audit.
 
 ---
 
@@ -133,7 +161,7 @@ Implement one new global pre-business-handler middleware that rejects any `appli
 request body containing secret-shaped material before any route handler executes.
 No route, migration, frontend, CI, or environment file changes.
 
-The closed finding is **P0-03**: *GLOBAL SECRET-SHAPED BODY GUARD ABSENT*.
+The targeted finding is **P0-03**: *GLOBAL SECRET-SHAPED BODY GUARD ABSENT*. P0-03 remains OPEN until implementation, verification, reviewed commit, PR and merge are complete.
 
 ### 4.2 Explicit Non-Goals
 
@@ -148,7 +176,7 @@ The closed finding is **P0-03**: *GLOBAL SECRET-SHAPED BODY GUARD ABSENT*.
 | Blocking `Content-Type` other than `application/json` | Express.json leaves `req.body` undefined for non-JSON; guard no-ops on non-object body |
 | New environment variables or feature flags | Guard is always active; no flag |
 | JWT lifetime, PHI-egress, or identity-binding changes | Separate contracts: P0-01, P0-02, P1-02 |
-| Commits, pushes, PRs, merges, migrations, deploys | Contract-only until `PROCEED S1B` is received |
+| Commits, pushes, PRs, merges, migrations, deploys | Governed by the distinct Section 1B authorization gates; this contract authorizes none of them by itself |
 | Logging or auditing IP addresses, user-agents, or field names | Explicitly prohibited by IBC §9 and G0 §6.3 |
 
 ---
@@ -368,7 +396,9 @@ On detection, the following apply in order:
 
 **`console.warn` is prohibited.** Do not emit any `console.warn` or `console.log` on detection.
 
-**Audit call:**
+**`reason` field:** Must be the fixed string `'SECRET_MATERIAL_REJECTED'` — not the detected shape. The detected shape belongs only in the safe structured `newValues` object below.
+
+**Audit call (G0 §6.3 — endpoint is required):**
 
 ```js
 const crypto = require('crypto');
@@ -376,38 +406,47 @@ const { audit } = require('../lib/helpers');
 
 // On detection:
 const requestId = crypto.randomUUID();
-await audit({
-  actorId:      req.user?.userId ?? null,
-  action:       'identity.secret_material.rejected',
-  resourceType: 'request',
-  resourceId:   requestId,
-  result:       'blocked',
-  reason:       detectedShape,   // one of the four coarse values only
-  purpose:      'operations',
-  consentScope: 'private',
-  // newValues: omitted
-  // oldValues: omitted
-  // ip: omitted — IP storage is outside the accepted event contract
-});
-```
+const endpoint = `${req.method} ${req.path}`;   // req.path only — no query string
 
-**Await semantics:** The `audit()` call is awaited with a `.catch` guard. If the audit
-write fails, the middleware still returns the 400 response and does NOT call `next()`.
-`setImmediate` fire-and-forget is NOT used — the audit attempt must be invoked before
-the response is returned.
-
-```js
-await audit({ … }).catch(err =>
-  console.error('[secret-boundary] audit write failed:', err.message)
-);
+try {
+  await audit({
+    actorId:      req.user?.userId ?? null,
+    action:       'identity.secret_material.rejected',
+    resourceType: 'request',
+    resourceId:   requestId,
+    result:       'blocked',
+    reason:       'SECRET_MATERIAL_REJECTED',    // fixed code — not the detected shape
+    purpose:      'operations',
+    consentScope: 'private',
+    newValues: {
+      endpoint,                                  // safe: method + path, no query string
+      requestId,
+      detectedShape: hit.detectedShape,          // coarse shape only
+    },
+    // oldValues: omitted
+    // ip: omitted — IP storage is outside the accepted event contract
+  });
+} catch {
+  // Audit failure must not propagate; still return 400 and never call next().
+  // No error message derived from the request may be logged here.
+}
 return res.status(400).json({
   error:   'SECRET_MATERIAL_REJECTED',
   message: 'Secret key or recovery phrase material is not accepted.',
 });
 ```
 
+**`newValues` safe contract:** The `newValues` object must contain exactly:
+- `endpoint` — `req.method + ' ' + req.path` (no query string; `req.path` not `req.originalUrl`)
+- `requestId` — the server-generated UUID
+- `detectedShape` — one of the four coarse shape strings
+
+`newValues` must never contain: body, submitted value, field name, word count, hash, IP, user-agent, or query string.
+
+**Await / error semantics:** Use explicit `try/catch`. Do not rely on `.catch()` chained to a helper that is described as never rejecting — the middleware must tolerate a mocked or future rejected promise. If the audit write fails, the middleware still returns 400 and does NOT call `next()`. `setImmediate` fire-and-forget is NOT used.
+
 **Audit COLLIDES check:** The existing `audit()` interface (action, resourceType, resourceId,
-result, reason) can represent the safe event described above without storing any prohibited
+result, reason, newValues) can represent the safe event described above without storing any prohibited
 field. No modification to `lib/helpers.js` is needed or permitted. If the schema were to
 reject the action string or the UUID resourceId, that constitutes a stop condition — do not
 silently add `helpers.js` to the allowlist; report to Majd.
@@ -422,7 +461,7 @@ silently add `helpers.js` to the allowlist; report to Majd.
  * secret-shaped material before any route handler executes.
  *
  * Contract: docs/contracts/S1B-p0-secret-boundary.md
- * Closes:   P0-03 — GLOBAL SECRET-SHAPED BODY GUARD ABSENT
+ * Targets:  P0-03 — GLOBAL SECRET-SHAPED BODY GUARD ABSENT (remains OPEN until reviewed commit merged)
  *
  * Detection:
  *   1. Forbidden key name (normalised: nsec, mnemonic, seedphrase, privatekey, secretkey)
@@ -506,18 +545,29 @@ module.exports = async function secretBoundary(req, res, next) {
   if (!hit) return next();
 
   const requestId = crypto.randomUUID();
-  await audit({
-    actorId:      req.user?.userId ?? null,
-    action:       'identity.secret_material.rejected',
-    resourceType: 'request',
-    resourceId:   requestId,
-    result:       'blocked',
-    reason:       hit.detectedShape,
-    purpose:      'operations',
-    consentScope: 'private',
-  }).catch(err =>
-    console.error('[secret-boundary] audit write failed:', err.message)
-  );
+  const endpoint = `${req.method} ${req.path}`;  // req.path only — no query string
+
+  try {
+    await audit({
+      actorId:      req.user?.userId ?? null,
+      action:       'identity.secret_material.rejected',
+      resourceType: 'request',
+      resourceId:   requestId,
+      result:       'blocked',
+      reason:       'SECRET_MATERIAL_REJECTED',   // fixed code — not the detected shape
+      purpose:      'operations',
+      consentScope: 'private',
+      newValues: {
+        endpoint,
+        requestId,
+        detectedShape: hit.detectedShape,         // coarse shape only
+      },
+      // ip: omitted — IP storage is outside the accepted event contract
+    });
+  } catch {
+    // Audit failure must not propagate; still return 400 and never call next().
+    // No error message derived from the request may be logged here.
+  }
   return res.status(400).json({
     error:   'SECRET_MATERIAL_REJECTED',
     message: 'Secret key or recovery phrase material is not accepted.',
@@ -548,8 +598,10 @@ And update `backend/package-lock.json` via the backend package manager only:
 
 ```bash
 cd backend
-npm install @scure/bip39@1.6.0 --save-exact --omit=dev
+HOME=/tmp npm install @scure/bip39@1.6.0 --save-exact
 ```
+
+Note: `--omit=dev` is NOT used here. A fresh implementation checkout needs Jest and ESLint from backend development dependencies. `--omit=dev` would conflict with the verification commands in §12.2 and may cause `npx` to download unreviewed tooling at test time.
 
 ### 7.3 CJS import (VERIFIED from npm registry)
 
@@ -593,8 +645,7 @@ echo "AUDIT_EXIT=$audit_rc"
 
 Baseline at `41b0cf36` (VERIFIED): `3 vulnerabilities (1 low, 2 high)` — `brace-expansion` (low + high) and `ip-address` (high).
 
-The addition of `@scure/bip39 1.6.0` must introduce zero new vulnerabilities. If the
-audit count increases, STOP and report the delta before committing.
+The addition of `@scure/bip39 1.6.0` must introduce zero new vulnerabilities. Comparison must check advisory identities and affected packages, not only the total count. The accepted baseline findings are specifically `brace-expansion` and `ip-address`. Any advisory not in that set is a stop condition, even if the total count remains three. If a new advisory appears, STOP and report the delta before committing.
 
 ---
 
@@ -656,19 +707,18 @@ Rules:
 
 ## 10. Exact Implementation Allowlist
 
-Only these six files may differ from commit `41b0cf36` after implementation:
+Only these five files may differ from the implementation starting commit after implementation. The contract file (`docs/contracts/S1B-p0-secret-boundary.md`) is already tracked and committed — implementation must not modify it. Any contract amendment discovered during implementation requires a separate stop and contract-review cycle before proceeding.
 
 | # | Path | Change |
 |---|------|--------|
 | 1 | `backend/package.json` | Add `"@scure/bip39": "1.6.0"` to `dependencies` |
-| 2 | `backend/package-lock.json` | Updated by `npm install` in the backend directory |
+| 2 | `backend/package-lock.json` | Updated by `HOME=/tmp npm install` in the backend directory |
 | 3 | `backend/src/middleware/secret-boundary.js` | **CREATE** — the guard |
 | 4 | `backend/src/server.js` | **PATCH** — 2 lines added after line 109 |
 | 5 | `backend/tests/secret-boundary.test.js` | **CREATE** — all acceptance tests |
-| 6 | `docs/contracts/S1B-p0-secret-boundary.md` | This file (already written) |
 
-No route file, migration, frontend file, `.env`, CI, deployment, or other test file
-may be touched. Any path outside these six is a stop condition.
+No route file, migration, frontend file, `.env`, CI, deployment, contract, or other test file
+may be touched. Any path outside these five is a stop condition.
 
 ---
 
@@ -703,12 +753,20 @@ Mnemonic sequences in tests must be constructed from real BIP39 English wordlist
 | Non-wordlist word in 12-word string | `{ content: 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon notaword' }` |
 | 11-word all-wordlist string | `{ content: 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon' }` |
 | 13-word all-wordlist string | `{ content: 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about about' }` |
+| Top-level empty array | `[]` (body is empty array) |
+| Top-level array — benign strings | `['hello', 'world']` (body is array; no secret-shaped values) |
+| Top-level array — benign objects | `[{ email: 'a@b.com' }, { email: 'c@d.com' }]` (body is array; no forbidden keys or values) |
 
 ### 11B. Fail Cases — guard must return 400, never call `next()`
 
 **GIVEN** any of the following request bodies  
 **WHEN** the middleware processes the request  
-**THEN** `res.status(400).json({ error: 'SECRET_MATERIAL_REJECTED', message: '...' })` is called, `next()` is never called, `audit()` is called with `action: 'identity.secret_material.rejected'` and `reason` equal to the indicated `detectedShape`
+**THEN** all of the following hold:
+- `res.status(400).json({ error: 'SECRET_MATERIAL_REJECTED', message: 'Secret key or recovery phrase material is not accepted.' })` is returned;
+- `next()` is never called;
+- `audit()` is called with `action: 'identity.secret_material.rejected'`;
+- `audit()` `reason` is exactly `'SECRET_MATERIAL_REJECTED'` (the fixed code — not the detected shape);
+- `audit()` `newValues` is exactly `{ endpoint, requestId, detectedShape: <the indicated coarse shape> }` and contains no other fields.
 
 #### Forbidden key name — Pass 1
 
@@ -753,6 +811,7 @@ Mnemonic sequences in tests must be constructed from real BIP39 English wordlist
 | Malformed nsec1 (invalid bech32 chars) | `{ k: 'nsec1INVALID!@@#$' }` | `nsec` |
 | nsec in nested value | `{ payload: { key: 'nsec1zzz...' } }` | `nsec` |
 | nsec in nested array element | `{ data: ['nsec1zzz...'] }` | `nsec` |
+| Top-level array with nsec value | `['nsec1qqqsyqcyq5rq...']` (body is array; element is nsec-prefixed string) | `nsec` |
 
 #### Raw 64-hex value — Pass 3
 
@@ -783,6 +842,7 @@ BIP39 test mnemonics (all words from `@scure/bip39/wordlists/english`; checksum 
 | Mnemonic in `password` value | `{ password: '<12 wordlist words>' }` | `mnemonic` |
 | Mnemonic nested in object | `{ a: { phrase: '<12 wordlist words>' } }` | `mnemonic` |
 | Mnemonic in array element | `{ items: ['<12 wordlist words>'] }` | `mnemonic` |
+| Top-level array with mnemonic value | `['abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about']` (body is array; element is 12-word BIP39-shaped string) | `mnemonic` |
 
 ### 11C. Anti-Falsifiers (guard must NOT do these in any case)
 
@@ -791,7 +851,7 @@ BIP39 test mnemonics (all words from `@scure/bip39/wordlists/english`; checksum 
 | Must not log any body value | Assert no body value appears in captured `console` output |
 | Must not log any field name on detection | Assert mocked `console` calls contain no key names from the body |
 | Must not echo body value in 400 response | Assert 400 response body does not contain the submitted value |
-| Must not store body value or field name in `audit()` call | Assert mocked `audit()` is called with no `newValues`, no `oldValues`, no field from the body |
+| Audit `newValues` contains exactly endpoint, requestId and coarse detectedShape; no submitted or derived body data | Assert mocked `audit()` `newValues` has exactly `{endpoint, requestId, detectedShape}`; no body value, no matched field name, no word count, no hash, no IP, no query string |
 | Must not call `next()` after rejecting | Assert `next` spy is never called when a fail case fires |
 | Must not throw an unhandled exception | Assert no exception propagates from the middleware for any test input |
 | Audit failure must still produce 400, never call `next()` | Mock `audit` to throw; assert 400 still returned, `next` not called |
@@ -853,23 +913,24 @@ the team:
 
 ## 12. Verification Commands and Environment Class
 
-### 12.1 Pre-implementation preconditions (contract phase — run now)
+### 12.1 Pre-implementation preconditions (run immediately on `PROCEED S1B` authorization)
 
 ```bash
-WORKSPACE=/tmp/solaris-s1b   # clean clone at 41b0cf36
+WORKSPACE=<path to clean clone at the authorized implementation starting commit>
 cd "$WORKSPACE"
 
 git branch --show-current
 # → agent/abacus-beta-v1-hardening
 
 git rev-parse HEAD
-# → 41b0cf363a6b43bbb16667b9c4339f322ecca356
+# → <authorized implementation starting commit SHA — supplied in PROCEED S1B; UNASSIGNED until then>
+# NOTE: this is NOT 41b0cf363a6b43bbb16667b9c4339f322ecca356 (historical code-audit base, evidence only)
 
 git cat-file -p HEAD | grep tree
-# → tree 91b68f5ee036489827f8fdea74db0fe69dafdedd
+# → <tree SHA corresponding to the authorized implementation starting commit — UNASSIGNED until then>
 
 git status --porcelain=v1 --untracked-files=all
-# → ?? docs/contracts/S1B-p0-secret-boundary.md
+# → (empty — clean worktree; the corrected contract is already committed and tracked)
 
 git diff --check HEAD
 # → (no output)
@@ -881,7 +942,7 @@ git diff --check HEAD
 
 ```bash
 cd "$WORKSPACE/backend"
-HOME=/tmp npm install @scure/bip39@1.6.0 --save-exact --omit=dev
+HOME=/tmp npm install @scure/bip39@1.6.0 --save-exact
 node -e "const {wordlist}=require('@scure/bip39/wordlists/english'); \
   console.log(wordlist.length, wordlist[0], wordlist[wordlist.length-1])"
 # expected: 2048 abandon zoo
@@ -896,10 +957,11 @@ incompatibility to Majd.
 cd "$WORKSPACE/backend"
 HOME=/tmp npm audit --omit=dev > /tmp/s1b-audit.log 2>&1
 audit_rc=$?
-cat /tmp/s1b-audit.log | tail -10
+cat /tmp/s1b-audit.log
 echo "AUDIT_EXIT=$audit_rc"
-# baseline: 3 vulnerabilities (1 low, 2 high)
-# acceptable: same count or fewer; any increase is a stop condition
+# baseline advisories: brace-expansion (low + high), ip-address (high) — exactly these three
+# STOP if any advisory not in this set appears, even if total count stays at 3
+# STOP if total count increases beyond 3
 ```
 
 **Step 2 — Lint:**
@@ -992,8 +1054,9 @@ Expected output after implementation (exact paths — any additional path is a s
  M backend/src/server.js
 ?? backend/src/middleware/secret-boundary.js
 ?? backend/tests/secret-boundary.test.js
-?? docs/contracts/S1B-p0-secret-boundary.md
 ```
+
+The contract file `docs/contracts/S1B-p0-secret-boundary.md` is already tracked — it must NOT appear in the implementation-phase status. If it appears modified, STOP and treat as a contract amendment requiring a separate review cycle.
 
 A grep over `git diff --stat` is NOT sufficient allowlist validation. Only the full
 porcelain output is authoritative.
@@ -1013,9 +1076,9 @@ Implementation MUST stop and report to Majd if any of the following are true:
 
 | Condition | Action |
 |-----------|--------|
-| `git rev-parse HEAD` ≠ `41b0cf363a6b43bbb16667b9c4339f322ecca356` | STOP — stale workspace |
-| `git cat-file -p HEAD | grep tree` ≠ `tree 91b68f5ee036489827f8fdea74db0fe69dafdedd` | STOP — stale workspace |
-| Starting `git status --porcelain=v1` has any entry other than the contract file | STOP — dirty worktree |
+| `git rev-parse HEAD` ≠ the exact SHA supplied in the `PROCEED S1B` authorization | STOP — wrong commit; implementation starting SHA is UNASSIGNED until that authorization is issued |
+| `git cat-file -p HEAD \| grep tree` ≠ the tree SHA corresponding to the authorized implementation starting commit | STOP — wrong tree |
+| Starting `git status --porcelain=v1 --untracked-files=all` is not empty | STOP — dirty worktree; corrected contract must already be committed and tracked before implementation begins |
 | Git status cannot be obtained (fd exhaustion or other error) | STOP — do not proceed with manual checks |
 | `node -e "require('@scure/bip39/wordlists/english')"` throws after install | STOP — CJS incompatibility |
 | `wordlist.length ≠ 2048` or `wordlist[0] ≠ 'abandon'` or `wordlist[2047] ≠ 'zoo'` | STOP — wrong wordlist |
@@ -1028,23 +1091,51 @@ Implementation MUST stop and report to Majd if any of the following are true:
 | Isolated PostgreSQL unavailable | Mark `BLOCKED BY ISOLATED POSTGRES`; stop before commit authorization |
 | `audit()` interface cannot represent the safe event without prohibited data | STOP — mark `COLLIDES`; do not add `helpers.js` to allowlist |
 | Any allowlisted file was modified since this contract was written | STOP — re-verify |
-| Any implementation path is outside the six-file allowlist | STOP — amend contract first |
+| Any implementation path is outside the five-file allowlist | STOP — amend contract first |
 | Lint exits non-zero | STOP |
 
 ---
 
 ## 14. Rollback
 
-This node creates three new files and modifies three existing files. No migration is applied.
+This node creates two new files and modifies three existing files. No migration is applied.
 No schema changes.
 
-Before commit, rollback is deletion of this clean clone or reversal of the six-path diff.
+### Before commit (partial rollback only — never delete the clone or use `git clean`)
 
-After an accepted commit, rollback is a normal revert of that one commit on
-`agent/abacus-beta-v1-hardening`. The revert removes the middleware registration from
-`server.js`, removes the dependency from `backend/package.json` and `backend/package-lock.json`,
-and leaves the guard file and test file in place as tombstoned untracked files (move them to
-`/tmp` quarantine if required by a subsequent node contract).
+1. Print complete status to confirm what has changed:
+   ```bash
+   git status --porcelain=v1 --untracked-files=all
+   ```
+
+2. Restore only these tracked implementation paths if modified:
+   ```bash
+   git restore --worktree -- backend/package.json
+   git restore --worktree -- backend/package-lock.json
+   git restore --worktree -- backend/src/server.js
+   ```
+
+3. Move only these untracked files to a timestamped `/tmp` quarantine (do not delete them):
+   ```bash
+   STAMP=$(date +%Y%m%d-%H%M%S)
+   mkdir -p /tmp/s1b-quarantine-$STAMP
+   mv backend/src/middleware/secret-boundary.js /tmp/s1b-quarantine-$STAMP/ 2>/dev/null || true
+   mv backend/tests/secret-boundary.test.js     /tmp/s1b-quarantine-$STAMP/ 2>/dev/null || true
+   ```
+
+4. Verify HEAD, tree and status are clean:
+   ```bash
+   git rev-parse HEAD
+   git cat-file -p HEAD | grep tree
+   git status --porcelain=v1 --untracked-files=all
+   # expected: only the contract file remains tracked; status shows no implementation paths
+   ```
+
+Never use `git clean`, `reset --hard`, force-push, directory-wide deletion, or directory-wide move.
+
+### After a reviewed implementation commit
+
+Rollback is a normal revert commit on `agent/abacus-beta-v1-hardening`. A revert of the implementation commit removes the middleware registration from `server.js`, reverses the dependency additions in `backend/package.json` and `backend/package-lock.json`, and removes the tracked additions of `secret-boundary.js` and `secret-boundary.test.js`. After the revert commit both files are absent from the tree — they are not left as untracked tombstones.
 
 Do not force-push.
 
@@ -1055,8 +1146,9 @@ Do not force-push.
 - **Zero database migrations.** `audit_logs` already has `resourceId UUID` and `result_reason TEXT`; both columns accept the values the guard writes. No schema change.
 - **Zero frontend changes.** The guard is purely server-side.
 - **Zero new environment variables.** The guard is unconditionally active.
-- **Zero deployment steps** beyond the normal container rebuild cycle.
-- **No commit, push, PR, merge, or deploy** until `PROCEED S1B` is received and all verification commands pass.
+- **No deployment is authorized by this contract.** Local container rebuilds may be used only as explicitly named verification steps. Production deployment requires a separate authorization.
+- **Permitted pre-implementation commits:** `PROCEED S1B-CONTRACT-CORRECTION` authorizes committing only the corrected contract file (this file) to `agent/abacus-beta-v1-hardening`. `AUTHORIZE S1B CONTRACT PUSH` separately authorizes pushing that commit. These two gates are required prerequisites for implementation and are not prohibited by this section.
+- **No source implementation commit, push, PR, merge, migration, or deploy** until `PROCEED S1B` is received and all §12.2 verification commands pass. `PROCEED S1B` is a separate, later authorization that will supply the exact implementation starting commit SHA.
 
 ---
 
@@ -1064,9 +1156,8 @@ Do not force-push.
 
 | Risk | Severity | Deferred to |
 |------|---------|-------------|
-| **PHI/health context to external AI (P0-01 open).** This node closes P0-03 only. PHI egress from LUCA routes remains blocked on a separate provenance-based classification contract. | High | P0-01 contract (D43) |
+| **PHI/health context to external AI (P0-01 open).** This node targets P0-03 only; P0-03 remains OPEN until implementation is complete and a reviewed commit is merged. PHI egress from LUCA routes remains blocked on a separate provenance-based classification contract. | High | P0-01 contract (D43) |
 | **Practitioner consent gate (P0-02 open).** Unchanged by this node. | High | P0-02 contract |
-| **Top-level array body.** If a client sends a JSON array as the root body (uncommon), `express.json` will populate `req.body` as an Array. The guard traversal handles arrays via `Array.isArray` check; key normalization is skipped for array indices. This is correct behavior and is covered by the array-body acceptance test. | Low | N/A |
 | **Actor ID is null for unauthenticated requests.** The guard runs before `authMiddleware`. `actorId: req.user?.userId ?? null` is correct for unauthenticated requests; audit entry will have null actor. | None | N/A |
 | **Newly introduced body fields.** A future endpoint that legitimately uses a body field whose value happens to be exactly 64 hex characters will be blocked. The 64-hex regression test set (§11H) will catch this at test time. | Low | Per-endpoint contract amendment |
 | **`ip` parameter omitted.** IBC §11 explicitly excludes IP address from the audit event. The `ip_address` column in `audit_logs` will be NULL for S1B rejection events. This is intentional and accepted. | None | N/A |
