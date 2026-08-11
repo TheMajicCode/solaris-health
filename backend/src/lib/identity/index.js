@@ -156,54 +156,81 @@ async function bindNostrKey(userId, npub, pubkeyHex, handle = null) {
   const subjectId = subject.subject_id;
   const hash = sha256hex(npub);
 
-  // Revoke any previous active nostr binding, then insert the new one — replacing
-  // a key never deletes history (A2 §1.3 / §3.2.6).
-  await db.query(
-    `UPDATE solaris_identity_bindings SET status='revoked', revoked_at=NOW()
-     WHERE subject_id=$1 AND binding_type='nostr' AND status='active' AND binding_hash<>$2`,
-    [subjectId, hash]
-  );
-  await db.query(
-    `INSERT INTO solaris_identity_bindings
-       (subject_id, binding_type, binding_value, binding_hash, status, verified_at)
-     VALUES ($1,'nostr',$2,$3,'active',NOW())
-     ON CONFLICT (subject_id, binding_type, binding_hash)
-     DO UPDATE SET status='active', binding_value=EXCLUDED.binding_value, revoked_at=NULL`,
-    [subjectId, npub, hash]
-  );
-
-  // Mirror onto users.nostr_npub for the existing account surfaces.
-  await db.query('UPDATE users SET nostr_npub=$1 WHERE id=$2', [npub, userId]).catch(() => {});
-
-  let savedHandle = null;
+  // Validate the handle BEFORE opening the transaction so we fail fast without
+  // holding a client. Handle uniqueness across members is checked inside the tx.
+  let clean = null;
   if (handle) {
-    const clean = String(handle).trim().toLowerCase();
+    clean = String(handle).trim().toLowerCase();
     if (!/^[a-z0-9._-]{3,32}$/.test(clean)) {
       throw Object.assign(new Error('Handle must be 3–32 chars: letters, numbers, . _ -'), { status: 400 });
     }
-    // One handle per subject; a handle is unique across members.
-    const clash = await db.query(
-      'SELECT subject_id FROM nostr_handles WHERE handle=$1 AND subject_id<>$2',
-      [clean, subjectId]
+  }
+
+  // Binding/replacement is ONE transaction (blocker #3): revoke the prior active
+  // key + insert the new one + mirror users.nostr_npub + optional handle. Any
+  // failure rolls back ALL of it. The partial unique index uq_active_nostr_binding
+  // makes a second subject claiming the same active pubkey raise unique_violation
+  // (23505) → surfaced as 409. Replacing a key never deletes history.
+  const client = await db.pool.connect();
+  let savedHandle = null;
+  try {
+    await client.query('BEGIN');
+
+    await client.query(
+      `UPDATE solaris_identity_bindings SET status='revoked', revoked_at=NOW()
+       WHERE subject_id=$1 AND binding_type='nostr' AND status='active' AND binding_hash<>$2`,
+      [subjectId, hash]
     );
-    if (clash.rows.length) {
-      throw Object.assign(new Error('That handle is already taken.'), { status: 409 });
+    await client.query(
+      `INSERT INTO solaris_identity_bindings
+         (subject_id, binding_type, binding_value, binding_hash, status, verified_at)
+       VALUES ($1,'nostr',$2,$3,'active',NOW())
+       ON CONFLICT (subject_id, binding_type, binding_hash)
+       DO UPDATE SET status='active', binding_value=EXCLUDED.binding_value, revoked_at=NULL`,
+      [subjectId, npub, hash]
+    );
+
+    // Mirror onto users.nostr_npub for the existing account surfaces (compatibility
+    // mirror — the subject/binding is the authoritative spine, not this column).
+    await client.query('UPDATE users SET nostr_npub=$1 WHERE id=$2', [npub, userId]);
+
+    if (clean) {
+      const clash = await client.query(
+        'SELECT subject_id FROM nostr_handles WHERE handle=$1 AND subject_id<>$2',
+        [clean, subjectId]
+      );
+      if (clash.rows.length) {
+        throw Object.assign(new Error('That handle is already taken.'), { status: 409 });
+      }
+      await client.query(
+        `INSERT INTO nostr_handles (subject_id, user_id, handle, npub, pubkey_hex, nip05_verified)
+         VALUES ($1,$2,$3,$4,$5,true)
+         ON CONFLICT (handle) DO UPDATE SET npub=EXCLUDED.npub, pubkey_hex=EXCLUDED.pubkey_hex, user_id=EXCLUDED.user_id`,
+        [subjectId, userId, clean, npub, pubkeyHex]
+      );
+      savedHandle = clean;
+    } else {
+      // Keep any existing handle pointed at the new key.
+      await client.query(
+        'UPDATE nostr_handles SET npub=$1, pubkey_hex=$2 WHERE subject_id=$3',
+        [npub, pubkeyHex, subjectId]
+      );
+      const h = await client.query('SELECT handle FROM nostr_handles WHERE subject_id=$1 LIMIT 1', [subjectId]);
+      savedHandle = h.rows[0]?.handle || null;
     }
-    await db.query(
-      `INSERT INTO nostr_handles (subject_id, user_id, handle, npub, pubkey_hex, nip05_verified)
-       VALUES ($1,$2,$3,$4,$5,true)
-       ON CONFLICT (handle) DO UPDATE SET npub=EXCLUDED.npub, pubkey_hex=EXCLUDED.pubkey_hex, user_id=EXCLUDED.user_id`,
-      [subjectId, userId, clean, npub, pubkeyHex]
-    );
-    savedHandle = clean;
-  } else {
-    // Keep any existing handle pointed at the new key.
-    await db.query(
-      'UPDATE nostr_handles SET npub=$1, pubkey_hex=$2 WHERE subject_id=$3',
-      [npub, pubkeyHex, subjectId]
-    ).catch(() => {});
-    const h = await db.query('SELECT handle FROM nostr_handles WHERE subject_id=$1 LIMIT 1', [subjectId]);
-    savedHandle = h.rows[0]?.handle || null;
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (err && err.code === '23505') {
+      throw Object.assign(
+        new Error('This Identity Key is already linked to another Solaris account.'),
+        { status: 409 }
+      );
+    }
+    throw err;
+  } finally {
+    client.release();
   }
 
   return { subjectId, npub, handle: savedHandle };

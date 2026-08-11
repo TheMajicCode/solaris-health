@@ -4,7 +4,7 @@ import { api } from '../lib/api.js';
 import { readSparkConfig, isSparkDemoFixture } from '../lib/spark/config.js';
 import {
   createSparkWallet, restoreSparkWallet, cleanupConnections, looksLikeMnemonic,
-  pickWordPositions, wordAt, classifySparkAddress, DEMO_FIXTURE_MNEMONIC,
+  classifySparkAddress, DEMO_FIXTURE_MNEMONIC,
 } from '../lib/spark/adapter.js';
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -26,7 +26,7 @@ const SCREEN2_SAFE_COPY =
   + 'Keep them private. Solaris does not store them. Network availability, fees, recovery '
   + 'limits, and service behavior depend on the wallet and network.';
 
-export default function SparkWalletCard() {
+export default function SparkWalletCard({ onWalletReady }) {
   const cfg = useMemo(() => readSparkConfig(), []);
   const demoFixture = useMemo(() => isSparkDemoFixture(), []);
 
@@ -35,8 +35,6 @@ export default function SparkWalletCard() {
   const [mnemonic, setMnemonic] = useState('');     // memory only
   const [reveal, setReveal] = useState(false);
   const [ack, setAck] = useState(false);
-  const [wordPos, setWordPos] = useState([]);
-  const [wordAns, setWordAns] = useState(['', '', '']);
   const [restoreInput, setRestoreInput] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -61,7 +59,6 @@ export default function SparkWalletCard() {
 
   const resetSecretState = () => {
     setMnemonic(''); setReveal(false); setAck(false);
-    setWordPos([]); setWordAns(['', '', '']);
   };
 
   const doGenerate = async () => {
@@ -74,8 +71,6 @@ export default function SparkWalletCard() {
       });
       if (unmounted.current) { await cleanupConnections(); return; }
       setMnemonic(res.mnemonic);
-      setWordPos(pickWordPositions(res.mnemonic, 3));
-      setWordAns(['', '', '']);
       setReveal(false); setAck(false);
       setMode('backup');
     } catch (e) {
@@ -88,17 +83,14 @@ export default function SparkWalletCard() {
     }
   };
 
-  const wordChecksPass = () =>
-    wordPos.length === 3
-    && wordPos.every((p, i) => (wordAns[i] || '').trim().toLowerCase() === wordAt(mnemonic, p).toLowerCase());
-
   const confirmBackup = () => {
-    if (!ack || !wordChecksPass()) {
-      setError('Please confirm your backup and complete the three word checks.');
+    if (!ack) {
+      setError('Please confirm you have saved your recovery words to continue.');
       return;
     }
     setError('');
     setMode('ready');
+    if (onWalletReady) onWalletReady({ backedUp: true });
   };
 
   const doRestore = async () => {
@@ -114,6 +106,7 @@ export default function SparkWalletCard() {
       if (unmounted.current) { await cleanupConnections(); return; }
       setRestoreInput('');
       setMode('ready');
+      if (onWalletReady) onWalletReady({ backedUp: false });
     } catch (e) {
       await cleanupConnections();
       setMode('restore');
@@ -208,28 +201,10 @@ export default function SparkWalletCard() {
 
                 <label className="spk-ack" htmlFor="spk-ack">
                   <input id="spk-ack" type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} />
-                  I have written down my recovery words and stored them safely.
+                  I have saved my recovery words securely and understand that Solaris cannot recover them.
                 </label>
 
-                {ack && wordPos.length === 3 && (
-                  <div className="spk-checks">
-                    <p className="spk-label">Confirm your backup — enter these words:</p>
-                    <div className="spk-checks-row">
-                      {wordPos.map((pos, i) => (
-                        <div key={pos} className="spk-check">
-                          <label htmlFor={`spk-word-${pos}`}>Word #{pos}</label>
-                          <input
-                            id={`spk-word-${pos}`} className="input" value={wordAns[i]}
-                            onChange={(e) => setWordAns((a) => { const n = [...a]; n[i] = e.target.value; return n; })}
-                            autoComplete="off" spellCheck={false}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <button className="spk-btn" onClick={confirmBackup} disabled={!ack || !wordChecksPass()}>
+                <button className="spk-btn" onClick={confirmBackup} disabled={!ack}>
                   Wallet ready
                 </button>
               </div>
@@ -296,48 +271,55 @@ export default function SparkWalletCard() {
       </ul>
 
       <style>{`
-        .spk-card{border:1px solid rgba(10,43,41,0.12);border-radius:14px;padding:16px;margin-bottom:14px;background:#fbfdfc}
-        .spk-card-coming{opacity:0.85}
+        /* Screen 2 "Reclaim Your Wealth" — DARK Solaris surfaces with GOLD accents.
+           Tokens from index.css: surfaces #151b2b/#191f2f/#232a3a, text #dce2f8/
+           #bbcabf/#86948a, gold #ffb95f/#e29100, mint #4edea3 (shared/ready). */
+        .spk-card{border:1px solid var(--outline-variant);border-radius:14px;padding:16px;margin-bottom:14px;background:var(--surface-container-low)}
+        .spk-card-coming{opacity:0.7}
         .spk-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;flex-wrap:wrap}
-        .spk-title{display:inline-flex;align-items:center;gap:7px;font-weight:700;color:#0A2B29;font-size:0.96rem}
+        .spk-title{display:inline-flex;align-items:center;gap:7px;font-weight:700;color:var(--on-surface);font-size:0.96rem}
+        .spk-title svg{color:var(--tertiary)}
         .spk-badge{font-size:0.66rem;font-weight:700;padding:3px 9px;border-radius:99px;letter-spacing:.03em}
-        .spk-badge-spark{background:#0A2B29;color:#ffd27a}
-        .spk-badge-coming{background:#e7ece9;color:#6b807a}
-        .spk-safe{color:#5b706a;font-size:0.8rem;line-height:1.5;margin:0 0 12px}
-        .spk-safe-warn{display:flex;gap:7px;align-items:flex-start;color:#8a5a2b}
-        .spk-net{font-size:0.78rem;color:#0A2B29;margin:0 0 10px}
-        .spk-btn{width:100%;border-radius:11px;padding:12px;font-weight:600;font-size:0.9rem;margin-bottom:8px;
-          background:#2DB584;border:1px solid #2DB584;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px}
-        .spk-btn:disabled{background:#cbd8d3;border-color:#cbd8d3;color:#7d8f89;cursor:not-allowed}
-        .spk-btn-ghost{background:#fff;border:1px solid rgba(45,181,132,0.4);color:#2DB584}
-        .spk-btn-ghost:disabled{background:#f2f5f4;border-color:#dbe4e0;color:#9aa9a4}
+        .spk-badge-spark{background:rgba(255,185,95,0.14);color:var(--tertiary);border:1px solid rgba(255,185,95,0.3)}
+        .spk-badge-coming{background:var(--surface-container-high);color:var(--outline)}
+        .spk-safe{color:var(--on-surface-variant);font-size:0.8rem;line-height:1.5;margin:0 0 12px}
+        .spk-safe-warn{display:flex;gap:7px;align-items:flex-start;color:#ffcf94}
+        .spk-net{font-size:0.78rem;color:var(--on-surface-variant);margin:0 0 10px}
+        .spk-net b{color:var(--tertiary)}
+        .spk-btn{width:100%;border-radius:11px;padding:12px;font-weight:700;font-size:0.9rem;margin-bottom:8px;
+          background:var(--tertiary);border:1px solid var(--tertiary);color:#2b1a00;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px}
+        .spk-btn:hover{background:#ffc879}
+        .spk-btn:disabled{background:var(--surface-container-high);border-color:var(--outline-variant);color:var(--outline);cursor:not-allowed}
+        .spk-btn-ghost{background:transparent;border:1px solid rgba(255,185,95,0.4);color:var(--tertiary)}
+        .spk-btn-ghost:hover{background:rgba(255,185,95,0.08)}
+        .spk-btn-ghost:disabled{background:var(--surface-container);border-color:var(--outline-variant);color:var(--outline)}
         .spk-spin{animation:spkspin 1s linear infinite}
         @keyframes spkspin{to{transform:rotate(360deg)}}
-        .spk-label{display:block;font-size:0.74rem;color:#6b807a;font-weight:600;margin-bottom:5px}
-        .spk-warn{background:rgba(197,138,83,0.1);border:1px solid rgba(197,138,83,0.32);border-radius:10px;padding:10px 12px;margin-bottom:12px}
-        .spk-warn-title{display:flex;align-items:center;gap:6px;font-weight:700;color:#8a5a2b;font-size:0.8rem;margin:0 0 6px}
-        .spk-warn-list{margin:0;padding-left:20px;color:#8a5a2b;font-size:0.78rem;line-height:1.5}
+        .spk-label{display:block;font-size:0.74rem;color:var(--on-surface-variant);font-weight:600;margin-bottom:5px}
+        .spk-warn{background:rgba(255,185,95,0.09);border:1px solid rgba(255,185,95,0.3);border-radius:10px;padding:10px 12px;margin-bottom:12px}
+        .spk-warn-title{display:flex;align-items:center;gap:6px;font-weight:700;color:#ffcf94;font-size:0.8rem;margin:0 0 6px}
+        .spk-warn-list{margin:0;padding-left:20px;color:#ffcf94;font-size:0.78rem;line-height:1.5}
         .spk-words-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}
-        .spk-reveal{display:inline-flex;align-items:center;gap:5px;background:none;border:none;color:#c58a53;font-size:0.76rem;font-weight:600;cursor:pointer}
-        .spk-words{display:block;font-family:monospace;font-size:0.82rem;line-height:1.7;word-break:break-word;
-          background:#fff6f0;border:1px solid rgba(197,138,83,0.35);border-radius:10px;padding:10px 12px;color:#0A2B29;margin-bottom:12px}
-        .spk-ack{display:flex;gap:8px;align-items:flex-start;font-size:0.82rem;color:#5b706a;cursor:pointer;line-height:1.4;margin-bottom:12px}
-        .spk-ack input{margin-top:2px}
-        .spk-checks{background:#f5f9f7;border-radius:12px;padding:12px;margin-bottom:12px}
+        .spk-reveal{display:inline-flex;align-items:center;gap:5px;background:none;border:none;color:var(--tertiary);font-size:0.76rem;font-weight:600;cursor:pointer}
+        .spk-words{display:block;font-family:var(--font-mono,ui-monospace,monospace);font-size:0.82rem;line-height:1.7;word-break:break-word;
+          background:var(--surface-container-lowest);border:1px solid rgba(255,185,95,0.35);border-radius:10px;padding:10px 12px;color:var(--on-surface);margin-bottom:12px}
+        .spk-ack{display:flex;gap:8px;align-items:flex-start;font-size:0.82rem;color:var(--on-surface-variant);cursor:pointer;line-height:1.4;margin-bottom:12px}
+        .spk-ack input{margin-top:2px;accent-color:var(--tertiary)}
+        .spk-checks{background:var(--surface-container);border:1px solid var(--outline-variant);border-radius:12px;padding:12px;margin-bottom:12px}
         .spk-checks-row{display:flex;gap:10px}
         .spk-check{flex:1;text-align:center}
-        .spk-check label{display:block;font-size:0.72rem;color:#6b807a;margin-bottom:4px}
-        .spk-check .input{text-align:center;font-family:monospace;font-size:0.9rem}
-        .spk-ready{background:#eefaf4;border:1px solid rgba(45,181,132,0.35);border-radius:10px;padding:12px;margin-bottom:6px}
-        .spk-ready-msg{display:flex;align-items:center;gap:7px;color:#1c7a56;font-weight:700;font-size:0.9rem;margin:0 0 4px}
-        .spk-hint{color:#6b807a;font-size:0.76rem;margin:0;display:flex;align-items:center;gap:6px}
-        .spk-link{border-top:1px dashed rgba(10,43,41,0.14);margin-top:10px;padding-top:12px}
+        .spk-check label{display:block;font-size:0.72rem;color:var(--on-surface-variant);margin-bottom:4px}
+        .spk-check .input{text-align:center;font-family:var(--font-mono,ui-monospace,monospace);font-size:0.9rem}
+        .spk-ready{background:rgba(78,222,163,0.1);border:1px solid rgba(78,222,163,0.35);border-radius:10px;padding:12px;margin-bottom:6px}
+        .spk-ready-msg{display:flex;align-items:center;gap:7px;color:var(--primary);font-weight:700;font-size:0.9rem;margin:0 0 4px}
+        .spk-hint{color:var(--outline);font-size:0.76rem;margin:0;display:flex;align-items:center;gap:6px}
+        .spk-link{border-top:1px dashed var(--outline-variant);margin-top:10px;padding-top:12px}
         .spk-link-form{margin-top:8px}
         .spk-linked{margin-top:8px}
-        .spk-err{color:#c0392b;font-size:0.8rem;margin:6px 0 0}
+        .spk-err{color:var(--error);font-size:0.8rem;margin:6px 0 0}
         .spk-shared{list-style:none;padding:0;margin:6px 0 16px;display:flex;flex-direction:column;gap:7px}
-        .spk-shared li{display:flex;align-items:flex-start;gap:7px;color:#5b706a;font-size:0.8rem;line-height:1.4}
-        .spk-shared li svg{color:#2DB584;flex-shrink:0;margin-top:2px}
+        .spk-shared li{display:flex;align-items:flex-start;gap:7px;color:var(--on-surface-variant);font-size:0.8rem;line-height:1.4}
+        .spk-shared li svg{color:var(--primary);flex-shrink:0;margin-top:2px}
       `}</style>
     </div>
   );

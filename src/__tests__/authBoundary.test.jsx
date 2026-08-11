@@ -28,7 +28,7 @@ vi.mock('../lib/api.js', () => {
     token: null,
     login: vi.fn(async () => { api.token = 'tok'; return { user: { id: 'm1', role: 'member' } }; }),
     register: vi.fn(async () => { api.token = 'tok'; return { user: { id: 'm1', role: 'member' } }; }),
-    nostrChallenge: vi.fn(async () => ({ nonce: 'NONCE', message: 'sign-this-message' })),
+    nostrChallenge: vi.fn(async () => ({ challengeId: 'CID', nonce: 'NONCE', message: 'sign-this-message' })),
     nostrKeyLogin: vi.fn(async () => { api.token = 'tok'; return {}; }),
     getMe: vi.fn(async () => ({ user: { id: 'm1', role: 'member' }, profile: {} })),
     saveProfile: vi.fn(async () => ({})),
@@ -99,9 +99,10 @@ describe('§3 auth boundary', () => {
     await act(async () => { await ctx.loginWithIdentityKey(id); });
     // Challenge is requested with the PUBLIC npub only.
     expect(api.nostrChallenge).toHaveBeenCalledWith(id.npub);
-    // Key-login carries npub + the server nonce + a signature — nothing else.
-    const [npubArg, nonceArg, sigArg] = api.nostrKeyLogin.mock.calls[0];
+    // Key-login carries npub + the server challengeId + nonce + a signature — nothing else.
+    const [npubArg, cidArg, nonceArg, sigArg] = api.nostrKeyLogin.mock.calls[0];
     expect(npubArg).toBe(id.npub);
+    expect(cidArg).toBe('CID');
     expect(nonceArg).toBe('NONCE');
     expect(typeof sigArg).toBe('string');
     expect(sigArg.length).toBeGreaterThan(0);

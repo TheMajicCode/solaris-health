@@ -67,6 +67,12 @@ class ApiClient {
   }
   skipOnboarding() { return this.request('/auth/skip-onboarding', { method: 'PATCH' }); }
 
+  // Onboarding-experience gate (server-side show-once, per account).
+  onboardingStatus() { return this.request('/onboarding/status'); }
+  ackOnboardingScreen(screen, extra = {}) {
+    return this.request('/onboarding/ack', { method: 'POST', body: JSON.stringify({ screen, ...extra }) });
+  }
+
   // ---- Journal ----
   getJournal() { return this.request('/journal'); }
   createJournalEntry(data) { return this.request('/journal', { method: 'POST', body: JSON.stringify(data) }); }
@@ -416,8 +422,20 @@ class ApiClient {
   // ---- Solaris ID (permanent identity — ADR 001) ----
   getIdentityMe() { return this.request('/identity/me'); }
   setGpsEndAddress(address) { return this.request('/identity/me/end-address', { method: 'PUT', body: JSON.stringify({ address }) }); }
-  // Identity Key (Nostr) — bind the PUBLIC key (npub) + optional NIP-05 handle.
-  bindIdentityKey(npub, handle) { return this.request('/identity/nostr', { method: 'POST', body: JSON.stringify({ npub, handle: handle || undefined }) }); }
+  // Identity Key (Nostr) binding — proof-of-control, two steps (blocker #2).
+  // Step 1: request a short-lived BIND challenge scoped to the authenticated
+  // subject. Step 2: the device signs the returned canonical message locally
+  // and submits { npub, challengeId, nonce, signature } — the secret key (nsec)
+  // never leaves the device. Only the PUBLIC key (npub) + optional handle bind.
+  identityBindChallenge(npub) {
+    return this.request('/identity/nostr/bind-challenge', { method: 'POST', body: JSON.stringify({ npub }) });
+  }
+  bindIdentityKey(npub, { challengeId, nonce, signature, handle } = {}) {
+    return this.request('/identity/nostr', {
+      method: 'POST',
+      body: JSON.stringify({ npub, challengeId, nonce, signature, handle: handle || undefined }),
+    });
+  }
   getGpsTreasury() { return this.request('/gps/treasury'); }
   getGpsTreasuryBreakdown() { return this.request('/gps/treasury/breakdown'); }
   getReferralCode() { return this.request('/gps/referrals/my-code'); }
@@ -429,19 +447,12 @@ class ApiClient {
   getGpsStats() { return this.request('/gps/stats'); }
   getGpsLeaderboard() { return this.request('/gps/leaderboard'); }
 
-  // ---- Solaris: sovereign auth (mock) ----
-  async nostrLogin(npub) {
-    const data = await this.request('/auth/nostr-mock', { method: 'POST', body: JSON.stringify({ npub }) });
-    this.setToken(data.token); return data;
-  }
-  // Identity Key login — real BIP-340 challenge/response (M8).
+  // ---- Solaris: Identity Key login — real BIP-340 challenge/response (M8) ----
+  // A LOGIN challenge is issued only for an npub already linked to an account;
+  // an unknown key returns { mustCreateAccount: true } (404) without a challenge.
   nostrChallenge(npub) { return this.request('/auth/nostr/challenge', { method: 'POST', body: JSON.stringify({ npub }) }); }
-  async nostrKeyLogin(npub, nonce, sig) {
-    const data = await this.request('/auth/nostr/login', { method: 'POST', body: JSON.stringify({ npub, nonce, sig }) });
-    this.setToken(data.token); return data;
-  }
-  async googleMockLogin(payload = {}) {
-    const data = await this.request('/auth/google-mock', { method: 'POST', body: JSON.stringify(payload) });
+  async nostrKeyLogin(npub, challengeId, nonce, sig) {
+    const data = await this.request('/auth/nostr/login', { method: 'POST', body: JSON.stringify({ npub, challengeId, nonce, sig }) });
     this.setToken(data.token); return data;
   }
 

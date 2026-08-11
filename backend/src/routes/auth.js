@@ -48,6 +48,11 @@ function shapeUser(u) {
     createdVia: u.created_via,
     levelPoints: u.level_points,
     homeCommunityId: u.home_community_id,
+    onboardingExperienceVersion: u.onboarding_experience_version || 0,
+    identityBackupAckAt: u.identity_backup_ack_at || null,
+    wealthScreenStatus: u.wealth_screen_status || null,
+    walletBackupAckAt: u.wallet_backup_ack_at || null,
+    sovereigntyAckAt: u.sovereignty_ack_at || null,
   };
 }
 
@@ -156,85 +161,76 @@ router.post('/login', async (req, res) => {
 // with a Schnorr signature, and the server verifies it against the npub. No
 // password, no secret key on the server.
 // ---------------------------------------------------------------------------
-const crypto = require('crypto');
-const { isValidNpub, npubToHex, verifyChallengeSignature } = require('../lib/nostr');
+const { isValidNpub, npubToHex } = require('../lib/nostr');
 const { bindNostrKey } = require('../lib/identity');
+const { createChallenge, consumeAndVerify } = require('../lib/nostr-challenges');
 
-// Short-lived single-use challenge store (nonce -> { npub, pubkeyHex, expiresAt }).
-const challenges = new Map();
-const CHALLENGE_TTL_MS = 5 * 60 * 1000;
-function sweepChallenges() {
-  const now = Date.now();
-  for (const [k, v] of challenges) if (v.expiresAt < now) challenges.delete(k);
+// Is this npub already linked to a live account? (compatibility mirror lookup)
+async function accountForNpub(npub) {
+  const r = await db.query('SELECT * FROM users WHERE nostr_npub = $1 AND deleted_at IS NULL', [npub]);
+  return r.rows[0] || null;
 }
 
 // POST /api/auth/nostr/challenge  { npub }
-router.post('/nostr/challenge', (req, res) => {
+// A LOGIN challenge is issued ONLY for an npub already linked to an account.
+// An unknown key gets the create-account direction WITHOUT a challenge and
+// WITHOUT creating any account (blocker #4).
+router.post('/nostr/challenge', async (req, res) => {
   try {
     const npub = String(req.body?.npub || '').trim();
     if (!isValidNpub(npub)) return res.status(400).json({ error: 'A valid Identity Key (npub1…) is required.' });
-    sweepChallenges();
-    const pubkeyHex = npubToHex(npub);
-    const nonce = crypto.randomBytes(24).toString('hex');
-    const message = `solaris-login:${nonce}`;
-    challenges.set(nonce, { npub, pubkeyHex, expiresAt: Date.now() + CHALLENGE_TTL_MS });
-    res.json({ nonce, message, expiresInMs: CHALLENGE_TTL_MS });
+
+    const user = await accountForNpub(npub);
+    if (!user) {
+      return res.status(404).json({
+        error: 'No Solaris account is linked to this identity key. Please create a Solaris account first, then add this key from your identity setup.',
+        mustCreateAccount: true,
+      });
+    }
+
+    const { challengeId, nonce, message, expiresInMs } = await createChallenge({
+      npub, pubkeyHex: npubToHex(npub), purpose: 'login',
+    });
+    res.json({ challengeId, nonce, message, expiresInMs });
   } catch (err) {
-    console.error('nostr challenge error:', err);
-    res.status(500).json({ error: 'Server error' });
+    const status = err.status || 500;
+    if (status >= 500) console.error('nostr challenge error:', err);
+    res.status(status).json({ error: err.message || 'Server error' });
   }
 });
 
-// POST /api/auth/nostr/login  { npub, nonce, sig }  (sig = hex Schnorr signature of the message)
+// POST /api/auth/nostr/login  { npub, challengeId, nonce, sig }
+// sig = hex BIP-340 Schnorr signature over the server-issued canonical message.
 router.post('/nostr/login', async (req, res) => {
   try {
     const npub = String(req.body?.npub || '').trim();
+    const challengeId = String(req.body?.challengeId || '').trim();
     const nonce = String(req.body?.nonce || '').trim();
     const sig = String(req.body?.sig || '').trim();
-    if (!isValidNpub(npub) || !nonce || !sig) {
-      return res.status(400).json({ error: 'npub, nonce and signature are required.' });
-    }
-    const ch = challenges.get(nonce);
-    if (!ch || ch.expiresAt < Date.now() || ch.npub !== npub) {
-      return res.status(401).json({ error: 'Challenge expired or invalid. Please try again.' });
-    }
-    challenges.delete(nonce); // single-use, regardless of outcome
-
-    const message = `solaris-login:${nonce}`;
-    if (!verifyChallengeSignature({ pubkey: npub, message, sigHex: sig })) {
-      return res.status(401).json({ error: 'Signature did not verify for this Identity Key.' });
+    if (!isValidNpub(npub) || !challengeId || !nonce || !sig) {
+      return res.status(400).json({ error: 'npub, challengeId, nonce and signature are required.' });
     }
 
-    // Proven control of the key. Find or create the account.
-    let result = await db.query('SELECT * FROM users WHERE nostr_npub = $1 AND deleted_at IS NULL', [npub]);
-    let user;
-    let isNew = false;
-    if (result.rows.length) {
-      user = result.rows[0];
-    } else {
-      isNew = true;
-      const syntheticEmail = `${npub.slice(0, 24)}@nostr.solaris`;
-      const passwordHash = await bcrypt.hash('identity-key-' + crypto.randomBytes(8).toString('hex'), 10);
-      const displayName = 'Sovereign ' + npub.slice(5, 11);
-      const ins = await db.query(
-        `INSERT INTO users (email, password_hash, full_name, display_name, role,
-            onboarding_status, nostr_npub, key_custody, created_via, level_points)
-         VALUES ($1,$2,$3,$4,'patient','profile',$5,'self','nostr',0) RETURNING *`,
-        [syntheticEmail, passwordHash, displayName, displayName, npub]
-      );
-      user = ins.rows[0];
-      try { await award(user.id, 'account_created', 10, 'onboarding', 'Welcome to Solaris (Identity Key)'); } catch (e) {}
-      try { await ensureReferralCode(user.id, displayName); } catch (e) {}
-    }
+    // Atomic single-use consume + signature verification (purpose 'login').
+    await consumeAndVerify({ challengeId, purpose: 'login', npub, nonce, sig });
 
-    // Bind (or refresh) the Identity Key on the permanent subject — public key only.
-    try { await bindNostrKey(user.id, npub, npubToHex(npub), null); } catch (e) { /* non-fatal */ }
+    // Proven control of the key. Only EXISTING accounts with this npub linked may
+    // sign in. An unknown identity key must NOT silently create an identity-only
+    // account — every Solaris account is founded on an email/password account.
+    const user = await accountForNpub(npub);
+    if (!user) {
+      return res.status(404).json({
+        error: 'No Solaris account is linked to this identity key. Please create a Solaris account first, then add this key from your identity setup.',
+        mustCreateAccount: true,
+      });
+    }
 
     const token = generateToken(user.id, user.email, user.role, await subjectRef(user.id));
-    res.json({ user: shapeUser(user), token, isNew });
+    res.json({ user: shapeUser(user), token, isNew: false });
   } catch (err) {
-    console.error('nostr login error:', err);
-    res.status(500).json({ error: 'Server error' });
+    const status = err.status || 500;
+    if (status >= 500) console.error('nostr login error:', err);
+    res.status(status).json({ error: err.message || 'Server error' });
   }
 });
 

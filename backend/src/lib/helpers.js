@@ -33,6 +33,14 @@ function shapeUser(u) {
     isProvider: u.is_provider === true,
     providerMode: u.provider_mode === true,
     providerApprovedAt: u.provider_approved_at || null,
+    nostrNpub: u.nostr_npub || null,
+    keyCustody: u.key_custody,
+    createdVia: u.created_via,
+    onboardingExperienceVersion: u.onboarding_experience_version || 0,
+    identityBackupAckAt: u.identity_backup_ack_at || null,
+    wealthScreenStatus: u.wealth_screen_status || null,
+    walletBackupAckAt: u.wallet_backup_ack_at || null,
+    sovereigntyAckAt: u.sovereignty_ack_at || null,
   };
 }
 

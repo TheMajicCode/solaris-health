@@ -85,9 +85,9 @@ export function AppProvider({ children }) {
   // session token) and remembers the key in memory, but does NOT activate the React
   // user — the caller must clear the minimum-profile gate first, then activateUser().
   const identityAuthDeferred = async ({ npub, skHex, pubkeyHex }) => {
-    const ch = await api.nostrChallenge(npub);          // sends ONLY { npub }
-    const sig = signChallenge(skHex, ch.message);       // signs locally on-device
-    await api.nostrKeyLogin(npub, ch.nonce, sig);       // sends ONLY { npub, nonce, sig }
+    const ch = await api.nostrChallenge(npub);                    // sends ONLY { npub }
+    const sig = signChallenge(skHex, ch.message);                 // signs locally on-device
+    await api.nostrKeyLogin(npub, ch.challengeId, ch.nonce, sig); // sends ONLY { npub, challengeId, nonce, sig }
     rememberKeyForSession({ npub, skHex, pubkeyHex });  // in-memory only
     return true;
   };

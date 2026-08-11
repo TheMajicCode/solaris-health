@@ -34,6 +34,7 @@ const providerBookingsRoutes = require('./routes/provider/bookings');
 const providerEarningsRoutes = require('./routes/provider/earnings');
 const passportRoutes = require('./routes/passport');
 const identityRoutes = require('./routes/identity');
+const onboardingRoutes = require('./routes/onboarding');
 const adminBookingsRoutes = require('./routes/admin/bookings');
 const gpsRoutes = require('./routes/gps');
 // --- Solaris sprint routes ---
@@ -170,22 +171,44 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Liveness + readiness probe (checks DB connectivity)
+// Migrations this build's routes REQUIRE. The service must NOT report ready if
+// the schema is behind the code (fail-closed — blocker #6). pgmigrations stores
+// the migration name WITHOUT the .sql extension.
+const REQUIRED_MIGRATIONS = ['037_onboarding_experience', '038_binding_proof_and_challenges'];
+
+// Liveness + readiness probe (checks DB connectivity AND required migrations)
 app.get('/api/health', async (req, res) => {
   const health = {
     status: 'ok',
     service: 'luca-passport-backend',
     timestamp: new Date().toISOString(),
     uptimeSeconds: Math.floor((Date.now() - START_TIME) / 1000),
-    checks: { database: 'unknown' },
+    checks: { database: 'unknown', migrations: 'unknown' },
   };
   try {
     await db.query('SELECT 1');
     health.checks.database = 'ok';
-    res.json(health);
   } catch (err) {
     health.status = 'degraded';
     health.checks.database = 'error';
+    return res.status(503).json(health);
+  }
+  try {
+    const r = await db.query('SELECT name FROM pgmigrations WHERE name = ANY($1)', [REQUIRED_MIGRATIONS]);
+    const present = new Set(r.rows.map((row) => row.name));
+    const missing = REQUIRED_MIGRATIONS.filter((m) => !present.has(m));
+    if (missing.length) {
+      health.status = 'degraded';
+      health.checks.migrations = 'missing';
+      health.missingMigrations = missing;
+      return res.status(503).json(health);
+    }
+    health.checks.migrations = 'ok';
+    res.json(health);
+  } catch (err) {
+    // pgmigrations table absent or unreadable → schema is not ready.
+    health.status = 'degraded';
+    health.checks.migrations = 'error';
     res.status(503).json(health);
   }
 });
@@ -280,6 +303,7 @@ app.use('/api/provider/earnings', providerEarningsRoutes);
 app.use('/api/provider', providerApplicationRoutes);
 app.use('/api/passport', passportRoutes);
 app.use('/api/identity', identityRoutes);
+app.use('/api/onboarding', onboardingRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/gps', gpsRoutes);
 // --- Solaris sprint routes ---
@@ -321,23 +345,13 @@ app.use((err, req, res, next) => {
 
 // Only start the HTTP listener when run directly (not when imported by tests)
 if (require.main === module) {
-  // ---- Run pending database migrations on startup ----
-  // node-pg-migrate is idempotent: already-applied migrations are skipped via
-  // the pgmigrations bookkeeping table, so this is safe on every boot.
-  // cwd is the backend root (__dirname is backend/src), where `migrations/` lives.
-  const { execSync } = require('child_process');
-  try {
-    execSync('npm run migrate', {
-      cwd: __dirname + '/..',
-      stdio: 'inherit',
-      env: process.env,
-    });
-    console.log('✓ Database migrations applied successfully');
-  } catch (err) {
-    // Do NOT exit — migrations may already be current, or the runner may be
-    // unavailable in a minimal runtime. Log and continue serving.
-    console.warn('Migration runner warning:', err.message);
-  }
+  // ---- Migrations are a controlled PRE-START step (fail-closed — blocker #6) ----
+  // The systemd unit runs `npm run migrate` via ExecStartPre and FAILS the unit
+  // on a non-zero exit, so the server never boots against an outdated schema.
+  // The best-effort in-process migrate that used to run here has been removed:
+  // it could leave incompatible code serving against a schema that silently
+  // failed to migrate. Readiness is additionally gated by /api/health, which
+  // returns 503 until the required migrations are recorded in pgmigrations.
 
   // ---- Clean up expired revoked tokens on startup (Gate 6) ----
   // Rows for tokens that would have expired on their own are no longer useful.
