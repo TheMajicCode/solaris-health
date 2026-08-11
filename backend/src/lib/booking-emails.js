@@ -8,154 +8,62 @@
 
 const { query } = require('../db');
 
-const FROM_ADDRESS = 'Solaris Health <no-reply@solaris-health.com>';
+// Booking-only gate (S1B-R2 §3.2.1): outbound email is fully neutralized. Every
+// booking lifecycle event collapses to ONE PHI-free `secure_notification` — the
+// subject and body are fixed constants with NO per-event variation, and the
+// persisted template value is the neutral constant below. Detailed booking
+// information stays available ONLY inside authenticated Solaris (in-app
+// notifications), never in an outbound email or in application logs.
+const NEUTRAL_TEMPLATE = 'secure_notification';
+const NEUTRAL_SUBJECT = 'Secure notification';
+const NEUTRAL_BODY = 'You have a new secure notification. Sign in to Solaris to view it.';
 
-function fmtDate(d) {
-  try {
-    const dt = new Date(`${String(d).slice(0, 10)}T00:00:00`);
-    return dt.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-  } catch { return String(d); }
-}
-function fmtTime(t) {
-  try {
-    const [h, m] = String(t).split(':');
-    const hh = parseInt(h, 10);
-    const ampm = hh >= 12 ? 'PM' : 'AM';
-    const h12 = ((hh + 11) % 12) + 1;
-    return `${h12}:${m} ${ampm}`;
-  } catch { return String(t); }
+// The neutral payload — identical for every event. `vars` is intentionally
+// ignored: no booking/appointment/patient context is ever rendered.
+function neutralPayload() {
+  return { subject: NEUTRAL_SUBJECT, body: NEUTRAL_BODY };
 }
 
+// All six historical templates now render the SAME neutral payload. Retained as
+// keys so callers/tests referencing template names still resolve.
 const TEMPLATES = {
-  // To provider: a patient requested a booking.
-  booking_request: (v) => ({
-    subject: `New booking request from ${v.patientName || 'a patient'}`,
-    body: `You have a new booking request!
-
-Patient:  ${v.patientName || 'A patient'}
-Service:  ${v.serviceName || 'Consultation'}
-Date:     ${fmtDate(v.date)}
-Time:     ${fmtTime(v.startTime)}${v.endTime ? ' – ' + fmtTime(v.endTime) : ''}
-${v.notes ? `Notes:    ${v.notes}\n` : ''}
-Please review and confirm or decline this request from your Solaris Health
-provider dashboard (My Practice → Bookings).
-
-— The Solaris Health Team`,
-  }),
-
-  // To patient: provider confirmed.
-  booking_confirmed: (v) => ({
-    subject: `Appointment confirmed with ${v.businessName || v.providerName || 'your provider'}`,
-    body: `Your appointment is confirmed!
-
-Provider: ${v.providerName || v.businessName || 'Your provider'}${v.businessName && v.providerName ? ' — ' + v.businessName : ''}
-Service:  ${v.serviceName || 'Consultation'}
-Date:     ${fmtDate(v.date)}
-Time:     ${fmtTime(v.startTime)}${v.endTime ? ' – ' + fmtTime(v.endTime) : ''}
-${v.address ? `Location: ${v.address}\n` : ''}
-You can add this appointment to your calendar and view full details from
-"My Bookings" in your Solaris Health account.
-
-Cancellation policy: please give at least 24 hours notice if you need to cancel.
-
-See you soon!
-— The Solaris Health Team`,
-  }),
-
-  // To patient: provider declined / cancelled.
-  booking_declined: (v) => ({
-    subject: `Update on your appointment request`,
-    body: `Hi ${v.patientName || 'there'},
-
-Unfortunately your booking request could not be confirmed.
-
-Service:  ${v.serviceName || 'Consultation'}
-Date:     ${fmtDate(v.date)}
-Time:     ${fmtTime(v.startTime)}
-${v.reason ? `Reason:   ${v.reason}\n` : ''}
-You're welcome to browse other available times or providers from the Explore
-marketplace in your Solaris Health account.
-
-— The Solaris Health Team`,
-  }),
-
-  booking_cancelled: (v) => ({
-    subject: `Appointment cancelled`,
-    body: `Hi ${v.recipientName || 'there'},
-
-The following appointment has been cancelled${v.byWhom ? ` by the ${v.byWhom}` : ''}:
-
-Service:  ${v.serviceName || 'Consultation'}
-Date:     ${fmtDate(v.date)}
-Time:     ${fmtTime(v.startTime)}
-${v.reason ? `Reason:   ${v.reason}\n` : ''}
-— The Solaris Health Team`,
-  }),
-
-  // To patient: 24h reminder.
-  booking_reminder: (v) => ({
-    subject: `Reminder: appointment ${v.when || 'soon'}`,
-    body: `Don't forget your upcoming appointment!
-
-Provider: ${v.providerName || v.businessName || 'Your provider'}
-Service:  ${v.serviceName || 'Consultation'}
-Date:     ${fmtDate(v.date)}
-Time:     ${fmtTime(v.startTime)}
-${v.address ? `Location: ${v.address}\n` : ''}
-See you soon!
-— The Solaris Health Team`,
-  }),
-
-  // To patient: completed, prompt for review.
-  booking_completed: (v) => ({
-    subject: `How was your appointment with ${v.businessName || v.providerName || 'your provider'}?`,
-    body: `Hi ${v.patientName || 'there'},
-
-Thanks for visiting ${v.businessName || v.providerName || 'your provider'} through Solaris Health.
-
-We'd love to hear about your experience. Leaving a review helps other members
-find great care. You can add a review from the provider's profile in Explore.
-
-— The Solaris Health Team`,
-  }),
+  booking_request: neutralPayload,
+  booking_confirmed: neutralPayload,
+  booking_declined: neutralPayload,
+  booking_cancelled: neutralPayload,
+  booking_reminder: neutralPayload,
+  booking_completed: neutralPayload,
 };
 
 /**
- * Render + log + persist a booking email (best-effort).
- * @returns {Promise<{ok:boolean, subject?:string}>}
+ * Render + log + persist a booking email (best-effort). The email is always the
+ * neutral `secure_notification`; any `vars` supplied by a legacy caller is
+ * ignored and never rendered, logged, or persisted.
+ * @returns {Promise<{ok:boolean, subject?:string, template?:string}>}
  */
-async function sendBookingEmail({ userId = null, toEmail, template, vars = {} }) {
-  let subject = '(no subject)';
-  let body = '';
+async function sendBookingEmail({ userId = null, toEmail } = {}) {
   try {
-    const tpl = TEMPLATES[template];
-    if (!tpl) {
-      console.warn(`[booking-email] unknown template "${template}" — skipping`);
-      return { ok: false };
-    }
-    const rendered = tpl(vars);
-    subject = rendered.subject;
-    body = rendered.body;
+    const { subject, body } = neutralPayload();
 
-    console.log(
-      `\n=== BOOKING EMAIL (logged, not delivered) ===\n` +
-        `From: ${FROM_ADDRESS}\n` +
-        `To:   ${toEmail || '(unknown)'}\n` +
-        `Subj: ${subject}\n` +
-        `----------------------------------------\n${body}\n` +
-        `=====================================\n`
-    );
+    // Neutral status line only — no recipient, user id, event/template name,
+    // subject, body, booking id, or any other booking detail may be logged.
+    console.log('[booking-email] secure notification queued (logged, not delivered)');
 
+    // Persist the neutral notification. The stored template is the fixed neutral
+    // constant, NOT the requested booking_* event name; the body/subject carry
+    // no PHI. `toEmail` is the delivery address, not booking content.
     await query(
       `INSERT INTO email_notifications (user_id, to_email, template, subject, body, status)
        VALUES ($1, $2, $3, $4, $5, 'logged')`,
-      [userId, toEmail || null, template, subject, body]
+      [userId, toEmail || null, NEUTRAL_TEMPLATE, subject, body]
     );
-    return { ok: true, subject };
-  } catch (err) {
-    console.error('[booking-email] sendBookingEmail failed (non-fatal):', err.message);
+    return { ok: true, subject, template: NEUTRAL_TEMPLATE };
+  } catch {
+    // Redacted: never print provider/database error detail that could carry
+    // payload data. Fixed neutral text only.
+    console.error('[booking-email] send failed (non-fatal)');
     return { ok: false };
   }
 }
 
-module.exports = { sendBookingEmail, TEMPLATES };
+module.exports = { sendBookingEmail, TEMPLATES, NEUTRAL_TEMPLATE, NEUTRAL_SUBJECT, NEUTRAL_BODY };

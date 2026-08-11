@@ -1,7 +1,7 @@
 /**
- * MemberPayments.jsx — the member's own payment history ("My Payments").
+ * MemberPayments.jsx — the member's own simulated value receipts.
  *
- * Lists every payment intent the member has made (Wompi sandbox), with the GPS
+ * Lists every simulated payment intent the member has, with the GPS
  * split for each: how much went to earned value (the practitioner) vs. the
  * regenerative envelope. A one-click CSV export lets the member take their
  * financial record with them — sovereign data ownership.
@@ -70,9 +70,9 @@ export default function MemberPayments() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.head, fontWeight: 700, fontSize: 16 }}>
-            <Receipt size={18} color={C.green} /> My Payments
+            <Receipt size={18} color={C.green} /> Simulated Value Receipts
           </div>
-          <div style={{ color: C.body, fontSize: 13, marginTop: 3 }}>Your payment history and how GPS split each one. Simulated — no funds have moved.</div>
+          <div style={{ color: C.body, fontSize: 13, marginTop: 3 }}>Simulated value receipts showing how GPS would split each one. Simulated — no funds have moved and no online payment is collected this release.</div>
         </div>
         <button onClick={exportCsv} disabled={loading || !(intents && intents.length)}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 15px', borderRadius: 10, border: `1px solid ${C.green}`, cursor: (intents && intents.length) ? 'pointer' : 'default', background: C.greenSoft, color: '#1c7a5c', fontWeight: 600, fontSize: 13, fontFamily: 'inherit', opacity: (intents && intents.length) ? 1 : 0.5 }}>
@@ -123,7 +123,7 @@ export default function MemberPayments() {
       ) : (
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, color: C.body, fontSize: 13.5, padding: '16px 0' }}>
           <Info size={15} color={C.body} style={{ marginTop: 1 }} />
-          <span>No payments yet. When you book and pay for care, each payment and its GPS split will appear here — ready to export anytime.</span>
+          <span>No simulated receipts yet. Online payment is not collected in this release — when a simulated value receipt is generated, its GPS split will appear here, ready to export anytime.</span>
         </div>
       )}
     </div>

@@ -76,7 +76,7 @@ export default function AdminSettings() {
             <InfoRow label="Environment" value="Demo / Sandbox" tone={C.amber} />
             <InfoRow label="AI model" value="gpt-5.4-mini" />
             <InfoRow label="AI role" value="Guide — never diagnoses" tone={C.green} />
-            <InfoRow label="Payments" value="Wompi sandbox (simulated)" tone={C.amber} />
+            <InfoRow label="Payments" value="Disabled (booking-only)" tone={C.amber} />
             <InfoRow label="GPS settlement" value="Shadow ledger (simulated)" tone={C.amber} />
           </div>
         )}

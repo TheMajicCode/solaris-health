@@ -92,8 +92,9 @@ export default function ContributionLedger({ user }) {
             {lv.nextThreshold ? `${lv.pointsToNext.toLocaleString()} points to next band` : 'Highest band reached'}
           </div>
           <div className="ctl-level-gps">
-            Contributions are the currency GPS recognises: the same attested record the regenerative
-            envelope (up to 10% of every payment) rewards when it routes value back to builders.
+            Contributions are the currency GPS recognises. <b>Simulated this release:</b> the attested
+            record shown here is a demonstration — the regenerative envelope that would route value back
+            to builders is not live yet, and no online payment is collected or distributed.
           </div>
         </div>
 

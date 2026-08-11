@@ -218,7 +218,6 @@ router.post('/request', authMiddleware, async (req, res) => {
       );
       await sendBookingEmail({
         userId: provider.user_id, toEmail: null, template: 'booking_request',
-        vars: { patientName, serviceName, date, startTime, endTime, notes: booking.patient_notes },
       });
     }
 
@@ -230,7 +229,6 @@ router.post('/request', authMiddleware, async (req, res) => {
       );
       await sendBookingEmail({
         userId: req.user.userId, toEmail: patient.rows[0]?.email, template: 'booking_confirmed',
-        vars: { businessName: provider.business_name, serviceName, date, startTime, endTime, address: provider.address },
       });
     }
 
@@ -346,7 +344,6 @@ router.put('/:id/cancel', authMiddleware, async (req, res) => {
       );
       await sendBookingEmail({
         userId: booking.provider_user_id, toEmail: null, template: 'booking_cancelled',
-        vars: { recipientName: booking.business_name, byWhom: 'patient', serviceName: booking.service_name, date: booking.booking_date, startTime: booking.start_time, reason },
       });
     }
 

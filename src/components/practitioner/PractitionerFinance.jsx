@@ -143,7 +143,6 @@ export default function PractitionerFinance() {
             <select value={payout.method} onChange={(e) => { setPayout((p) => ({ ...p, method: e.target.value })); setPayoutSaved(false); }}
               style={{ display: 'block', width: '100%', marginTop: 5, padding: '9px 11px', borderRadius: 10, border: `1px solid ${C.line}`, fontSize: 13.5, color: C.head, fontFamily: 'inherit' }}>
               <option value="bank">Bank transfer</option>
-              <option value="wompi">Wompi wallet</option>
               <option value="lightning">Bitcoin (Lightning)</option>
             </select>
           </label>

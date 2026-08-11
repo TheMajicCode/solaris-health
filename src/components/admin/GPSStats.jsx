@@ -3,7 +3,8 @@
  *
  * Surfaces platform-wide value flow: gross volume, how it split across the six
  * buckets, the regenerative treasury balance, the top ecosystem builders, and a
- * live feed of recent GPS settlements.
+ * feed of recent simulated GPS settlements. All figures are simulated this
+ * release — no online payment is collected and no real money moves.
  */
 
 import React, { useEffect, useState } from 'react';
@@ -62,11 +63,12 @@ export default function GPSStats() {
       <header className="ags-hero">
         <div>
           <div className="ags-kicker"><Activity size={14} /> GPS Economy</div>
+          <span className="ags-sim-badge">Simulated</span>
           <h2>The living economy, at a glance</h2>
           <p>
-            Every completed session routes value through GPS — the Global Prosperous Split. This is the
-            platform-wide picture — value created, value returned to providers, and value seeded back
-            into the commons.
+            This is a <strong>simulated</strong> platform-wide picture of GPS — the Global Prosperous
+            Split. No online payment is collected and no real money moves this release; the figures show
+            how value is intended to flow to providers and the commons once settlement goes live.
           </p>
         </div>
         <div className="ags-hero-metrics">
@@ -137,9 +139,9 @@ export default function GPSStats() {
             </section>
 
             <section className="ags-sec">
-              <h3 className="ags-sec-title"><TrendingUp size={16} /> Recent settlements</h3>
+              <h3 className="ags-sec-title"><TrendingUp size={16} /> Recent simulated settlements</h3>
               {recent.length === 0 ? (
-                <div className="ags-empty">No GPS settlements yet. Completed bookings will appear here.</div>
+                <div className="ags-empty">No simulated GPS settlements yet. Completed bookings will appear here.</div>
               ) : (
                 <div className="ags-feed">
                   {recent.map((r) => (
@@ -191,6 +193,9 @@ const CSS = `
 .luca .ags-hero-metric-lbl { font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:rgba(255,255,255,.7); }
 .luca .ags-hero-metric-val { font-family:'Space Grotesk',sans-serif; font-size:26px; font-weight:700; line-height:1.15; }
 .luca .ags-gold { color:var(--gold); }
+.luca .ags-sim-badge { display:inline-block; margin-top:10px; font-size:11px; font-weight:700;
+  padding:4px 10px; border-radius:999px; background:rgba(255,255,255,.14); color:var(--gold);
+  border:1px solid rgba(255,255,255,.25); letter-spacing:.04em; }
 
 .luca .ags-err { background:#fdeeee; color:var(--danger); border:1px solid #f3c9c9; padding:12px 14px; border-radius:var(--r-sm); font-size:13px; }
 .luca .ags-loading { color:var(--muted); font-size:14px; padding:14px 2px; }

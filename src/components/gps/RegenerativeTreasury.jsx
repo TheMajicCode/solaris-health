@@ -58,9 +58,12 @@ export default function RegenerativeTreasury() {
   return (
     <div className="rgt">
       <div className="rgt-hero">
-        <div className="rgt-hero-badge"><Sprout size={13} /> The Regenerative Commons</div>
+        <div className="rgt-hero-badges">
+          <span className="rgt-hero-badge"><Sprout size={13} /> The Regenerative Commons</span>
+          <span className="rgt-hero-badge rgt-sim">Simulated</span>
+        </div>
         <h2 className="rgt-hero-h">The Solaris Community Treasury</h2>
-        <p className="rgt-hero-sub">A shared fund that grows with every booking. 2.5% of each transaction is planted here — regenerating health, food, education, and resilience for all.</p>
+        <p className="rgt-hero-sub">A simulated preview of the shared commons fund. No online payment is collected and no real money moves this release; the figures show how 2.5% of each transaction is intended to be planted here — regenerating health, food, education, and resilience for all — once settlement goes live.</p>
         <div className="rgt-balance">
           <span className="rgt-balance-lbl">Total commons balance</span>
           <span className="rgt-balance-val">{money(tre?.balance)}</span>
@@ -112,7 +115,7 @@ export default function RegenerativeTreasury() {
           <div className="rgt-card">
             <h3 className="rgt-card-h"><Info size={15} /> How it works</h3>
             <ValueFlowViz total={100} compact />
-            <p className="rgt-how-note">Under GPS — the Global Prosperous Split — 90% of every payment goes to the practitioner and up to 10% flows through a regenerative envelope. The Regenerative Treasury (2.5% of each payment) is the community's shared endowment — owned by no one, growing for everyone. <b>Every transaction plants a seed.</b></p>
+            <p className="rgt-how-note">Under GPS — the Global Prosperous Split — 90% of every payment is intended for the practitioner and up to 10% would flow through a regenerative envelope. The Regenerative Treasury (2.5% of each payment) is the community's shared endowment — owned by no one, growing for everyone. <b>These figures are simulated this release — no online payment is collected and no real money moves.</b></p>
           </div>
         </div>
 
@@ -153,8 +156,10 @@ export default function RegenerativeTreasury() {
           padding:28px;box-shadow:var(--shadow);position:relative;overflow:hidden}
         .luca .rgt-hero::after{content:'';position:absolute;left:-40px;top:-60px;width:220px;height:220px;border-radius:50%;
           background:radial-gradient(circle,rgba(127,174,75,.3),transparent 70%)}
+        .luca .rgt-hero-badges{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
         .luca .rgt-hero-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;
           background:rgba(255,255,255,.15);padding:4px 10px;border-radius:99px}
+        .luca .rgt-hero-badge.rgt-sim{background:rgba(246,214,122,.22);color:#F6D67A;font-weight:700}
         .luca .rgt-hero-h{font-family:'Space Grotesk',sans-serif;font-size:28px;font-weight:700;margin:12px 0 6px}
         .luca .rgt-hero-sub{font-size:14px;opacity:.9;max-width:600px;margin:0}
         .luca .rgt-balance{margin-top:20px;display:flex;flex-direction:column;gap:2px}

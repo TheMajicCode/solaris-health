@@ -141,8 +141,7 @@ router.put('/:id/confirm', authMiddleware, providerOnly, (req, res) => transitio
     await createNotification(b.patient_id, 'booking', '✅ Appointment Confirmed',
       `Your ${b.service_name || 'appointment'} with ${b.business_name} on ${String(b.booking_date).slice(0, 10)} at ${b.start_time} is confirmed.`,
       { bookingId: b.id, role: 'patient' });
-    await sendBookingEmail({ userId: b.patient_id, toEmail: b.patient_email, template: 'booking_confirmed',
-      vars: { businessName: b.business_name, serviceName: b.service_name, date: b.booking_date, startTime: b.start_time, endTime: b.end_time, address: b.address } });
+    await sendBookingEmail({ userId: b.patient_id, toEmail: b.patient_email, template: 'booking_confirmed' });
     // Solaris inbox: confirmation message + first-booking intake request.
     await onBookingConfirmed(b);
   },
@@ -159,8 +158,7 @@ router.put('/:id/cancel', authMiddleware, providerOnly, (req, res) => transition
       `Your ${b.service_name || 'appointment'} on ${String(b.booking_date).slice(0, 10)} was ${declined ? 'declined' : 'cancelled'} by ${b.business_name}.${reason ? ' Reason: ' + reason : ''}`,
       { bookingId: b.id, role: 'patient' });
     await sendBookingEmail({ userId: b.patient_id, toEmail: b.patient_email,
-      template: declined ? 'booking_declined' : 'booking_cancelled',
-      vars: { patientName: b.patient_name, recipientName: b.patient_name, byWhom: 'provider', serviceName: b.service_name, date: b.booking_date, startTime: b.start_time, reason } });
+      template: declined ? 'booking_declined' : 'booking_cancelled' });
   },
 }));
 
@@ -171,8 +169,7 @@ router.put('/:id/complete', authMiddleware, providerOnly, (req, res) => transiti
     await createNotification(b.patient_id, 'booking', '🌿 Appointment Completed',
       `Your ${b.service_name || 'appointment'} with ${b.business_name} is complete. We'd love your review!`,
       { bookingId: b.id, role: 'patient', providerId: b.provider_id, prompt: 'review' });
-    await sendBookingEmail({ userId: b.patient_id, toEmail: b.patient_email, template: 'booking_completed',
-      vars: { patientName: b.patient_name, businessName: b.business_name, serviceName: b.service_name } });
+    await sendBookingEmail({ userId: b.patient_id, toEmail: b.patient_email, template: 'booking_completed' });
   },
 }));
 

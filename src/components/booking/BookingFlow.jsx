@@ -15,12 +15,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   X, Loader2, Check, ChevronRight, ChevronLeft, Calendar, Clock, Tag,
-  MapPin, FileText, ShieldCheck, CalendarPlus, PartyPopper, CreditCard, ExternalLink,
+  MapPin, FileText, ShieldCheck, CalendarPlus, PartyPopper,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '../../lib/api.js';
 import TimeSlotPicker from './TimeSlotPicker.jsx';
-import ValueFlowViz from '../gps/ValueFlowViz.jsx';
 import { fmtTime, fmtDateLong, downloadICS, tzLabel } from '../../lib/calendar-utils.js';
 
 const STEPS = ['Service', 'Date & Time', 'Details', 'Review', 'Done'];
@@ -39,8 +38,6 @@ export default function BookingFlow({ providerId, provider: provIn, services: sv
   const [phone, setPhone] = useState(user?.phone || '');
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
-  const [paying, setPaying] = useState(false);
-  const [payStatus, setPayStatus] = useState(null); // null | 'pending' | 'paid' | 'failed'
   const tz = tzLabel();
 
   // Load provider + services if not supplied.
@@ -111,34 +108,6 @@ export default function BookingFlow({ providerId, provider: provIn, services: sv
   };
 
   const price = service?.price != null ? Number(service.price) : 0;
-  const fee = Math.round(price * 10) / 100;
-
-  // Wompi hosted checkout — create a PaymentIntent for this booking and open the
-  // sandbox checkout in a new tab. The webhook confirms; here we only surface intent.
-  const payNow = async () => {
-    if (!result?.booking?.id) return;
-    setPaying(true);
-    try {
-      const r = await api.createCheckout({
-        bookingId: result.booking.id,
-        purpose: 'consultation',
-        description: `${service?.service_name || 'Consultation'} · ${provider?.business_name || 'Solaris'}`,
-      });
-      if (r.checkoutUrl) {
-        window.open(r.checkoutUrl, '_blank', 'noopener');
-        setPayStatus('pending');
-        toast.success('Opening secure checkout — complete payment in the new tab.');
-      } else {
-        setPayStatus('pending');
-        toast('Payment initiated. Status will update once confirmed.');
-      }
-    } catch (e) {
-      setPayStatus('failed');
-      toast.error(e.message || 'Could not start payment');
-    } finally {
-      setPaying(false);
-    }
-  };
 
   const canNext = (step === 0 && service) || (step === 1 && slot) || step === 2 || step === 3;
 
@@ -233,22 +202,13 @@ export default function BookingFlow({ providerId, provider: provIn, services: sv
                   <Row label="Date" value={slot ? fmtDateLong(slot.date) : ''} />
                   <Row label="Time" value={slot ? `${fmtTime(slot.start)} – ${fmtTime(slot.end)} (${tz})` : ''} />
                   <div className="bkf-divider" />
-                  <Row label="Service price" value={`$${price.toFixed(2)}`} />
-                  <Row label="Total" value={`$${price.toFixed(2)}`} strong />
-                </div>
-                <div className="bkf-gps">
-                  <div className="bkf-gps-head">🌱 How your payment flows</div>
-                  <p className="bkf-gps-sub">
-                    No hidden platform cut. Through GPS — the Global Prosperous Split — 90% goes to your practitioner, always, and every dollar is
-                    transparently shared — and you earn LOVE rewards while seeding the community commons.
-                  </p>
-                  <ValueFlowViz total={price} compact />
+                  <Row label="Listed price" value={`$${price.toFixed(2)}`} />
                 </div>
                 <p className="bkf-policy">
+                  <ShieldCheck size={13} /> Solaris does not collect online payment in this release. Any payment arrangements happen separately with the practitioner.
+                </p>
+                <p className="bkf-policy">
                   <ShieldCheck size={13} /> Cancellation policy: 24 hours notice required.
-                  {price > 0
-                    ? ' After you request, you can pay securely online to confirm — or settle in person.'
-                    : ' No payment needed to request this session.'}
                 </p>
               </div>
             )}
@@ -270,29 +230,8 @@ export default function BookingFlow({ providerId, provider: provIn, services: sv
                   <div><Tag size={14} /> {service?.service_name} · {provider?.business_name}</div>
                 </div>
                 <p className="bkf-done-gps">
-                  🌱 When this session completes, {price ? `$${(price * 0.02).toFixed(2)}` : 'your'} LOVE rewards land in your
-                  Economic Passport and a share seeds the Community Treasury. Value flows to where value was created.
+                  Solaris does not collect online payment in this release. Any payment arrangements happen separately with the practitioner.
                 </p>
-                {price > 0 && (
-                  <div className="bkf-pay">
-                    {payStatus === 'paid' ? (
-                      <div className="bkf-pay-badge paid"><Check size={14} /> Payment confirmed</div>
-                    ) : payStatus === 'pending' ? (
-                      <div className="bkf-pay-badge pending">
-                        <Loader2 className="bkf-spin" size={14} /> Payment pending — finish in the checkout tab. This booking confirms automatically once payment clears.
-                      </div>
-                    ) : payStatus === 'failed' ? (
-                      <div className="bkf-pay-badge failed">Payment didn't start. You can retry below or settle in person.</div>
-                    ) : null}
-                    {payStatus !== 'paid' && (
-                      <button className="bkf-btn pay" disabled={paying} onClick={payNow}>
-                        {paying ? <><Loader2 className="bkf-spin" size={15} /> Starting…</>
-                          : <><CreditCard size={15} /> {payStatus === 'pending' ? 'Reopen checkout' : `Pay $${price.toFixed(2)} to confirm`} <ExternalLink size={13} /></>}
-                      </button>
-                    )}
-                    <p className="bkf-pay-note">Secure sandbox checkout via Wompi. Solaris never stores your card.</p>
-                  </div>
-                )}
                 <div className="bkf-done-actions">
                   <button className="bkf-btn ghost" onClick={() => downloadICS({ ...result.booking, service_name: service?.service_name, business_name: provider?.business_name, address: provider?.address, city: provider?.city })}>
                     <CalendarPlus size={15} /> Add to Calendar

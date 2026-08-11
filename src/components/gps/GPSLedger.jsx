@@ -55,9 +55,12 @@ export default function GPSLedger() {
   return (
     <div className="gpl">
       <div className="gpl-hero">
-        <div className="gpl-hero-badge"><Leaf size={13} /> GPS — Global Prosperous Split</div>
+        <div className="gpl-hero-badges">
+          <span className="gpl-hero-badge"><Leaf size={13} /> GPS — Global Prosperous Split</span>
+          <span className="gpl-hero-badge gpl-sim">Simulated</span>
+        </div>
         <h2 className="gpl-hero-h">Your Value Trail</h2>
-        <p className="gpl-hero-sub">90% of every payment goes to your practitioner, always — and up to 10% flows through the regenerative envelope, building the ecosystem around you.</p>
+        <p className="gpl-hero-sub">These figures are a simulated preview — no online payment is collected and no real money moves this release. Under GPS, 90% of every payment is intended to go to your practitioner, with up to 10% through the regenerative envelope, once settlement goes live.</p>
         <button className="gpl-how-link" onClick={() => setShowHow((v) => !v)}>
           <Info size={13} /> How GPS works {showHow ? '▲' : '▼'}
         </button>
@@ -71,7 +74,7 @@ export default function GPSLedger() {
 
       <div className="gpl-cards">
         <SummaryCard icon={Coins} tone="teal" label="Total spent" value={money(s.total_spent)} sub={`${s.tx_count || 0} transactions`} />
-        <SummaryCard icon={Heart} tone="gold" label="LOVE earned" value={`${lovePoints}`} sub="Reciprocity credits (1% back)" />
+        <SummaryCard icon={Heart} tone="gold" label="LOVE (simulated)" value={`${lovePoints}`} sub="Simulated reciprocity credits" />
         <SummaryCard icon={Sprout} tone="green" label="Treasury contributed" value={money(s.treasury_contributed)} sub="To the regenerative commons" />
         <SummaryCard icon={TrendingUp} tone="mint" label="Ecosystem impact" value={`${s.impact_score || 0}`} sub="Your regenerative footprint" />
       </div>
@@ -132,8 +135,10 @@ export default function GPSLedger() {
           border-radius:var(--r-lg);padding:22px 24px;box-shadow:var(--shadow);position:relative;overflow:hidden}
         .luca .gpl-hero::after{content:'';position:absolute;right:-40px;top:-40px;width:180px;height:180px;border-radius:50%;
           background:radial-gradient(circle,rgba(159,231,214,.22),transparent 70%)}
+        .luca .gpl-hero-badges{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
         .luca .gpl-hero-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;
           background:rgba(255,255,255,.14);padding:4px 10px;border-radius:99px;letter-spacing:.04em}
+        .luca .gpl-hero-badge.gpl-sim{background:rgba(246,214,122,.22);color:#F6D67A;font-weight:700}
         .luca .gpl-hero-h{font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:700;margin:10px 0 4px}
         .luca .gpl-hero-sub{font-size:13.5px;opacity:.9;max-width:560px;margin:0}
         .luca .gpl-how-link{margin-top:12px;display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.12);

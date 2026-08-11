@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { api } from '../lib/api.js';
-import { signChallenge, rememberKeyForSession } from '../lib/identity-key.js';
+import { signChallenge, rememberKeyForSession, forgetSessionKey } from '../lib/identity-key.js';
 
 const AppContext = createContext(null);
 export const useApp = () => useContext(AppContext);
@@ -79,23 +79,47 @@ export function AppProvider({ children }) {
     await loadUser();
     return user;
   };
-  // Identity Key login — real BIP-340 challenge/response (M8). The secret key never
-  // leaves the device: we fetch a challenge, sign it locally, and send only the signature.
+  // Identity Key AUTH — real BIP-340 challenge/response (M8). The secret key never
+  // leaves the device: we fetch a challenge (npub only), sign it locally, and send
+  // only npub + nonce + signature. Deferred variant: it authenticates (sets the
+  // session token) and remembers the key in memory, but does NOT activate the React
+  // user — the caller must clear the minimum-profile gate first, then activateUser().
+  const identityAuthDeferred = async ({ npub, skHex, pubkeyHex }) => {
+    const ch = await api.nostrChallenge(npub);          // sends ONLY { npub }
+    const sig = signChallenge(skHex, ch.message);       // signs locally on-device
+    await api.nostrKeyLogin(npub, ch.nonce, sig);       // sends ONLY { npub, nonce, sig }
+    rememberKeyForSession({ npub, skHex, pubkeyHex });  // in-memory only
+    return true;
+  };
+  // Identity Key login — deferred auth + immediate activation (returning members /
+  // existing-nsec / legacy restore, who already have a profile + onboarding state).
   const loginWithIdentityKey = async ({ npub, skHex, pubkeyHex }) => {
-    const ch = await api.nostrChallenge(npub);
-    const sig = signChallenge(skHex, ch.message);
-    await api.nostrKeyLogin(npub, ch.nonce, sig);
-    rememberKeyForSession({ npub, skHex, pubkeyHex });
+    await identityAuthDeferred({ npub, skHex, pubkeyHex });
     await loadUser();
     return true;
   };
+  // New-account registration — DEFERRED. Sets the session token but does NOT
+  // activate the React user, so onboarding can gate on required profile persistence
+  // (spec §3.5) before Root routes into the Assessment.
+  const registerAccountDeferred = async (payload) => {
+    await api.register(payload); // sets the auth token; user activated later
+    return true;
+  };
+  // Legacy immediate register (kept for compatibility; not used by onboarding).
   const register = async (payload) => {
     const { user } = await api.register(payload);
     setUser(user);
     return user;
   };
+  // Activate the authenticated user in React state — call ONLY after the required
+  // minimum-profile save has succeeded (spec §3.5). Root then routes to Assessment.
+  const activateUser = async () => {
+    await loadUser();
+    return true;
+  };
   const logout = () => {
     api.logout();
+    forgetSessionKey(); // clear the in-memory identity secret (spec §3 logout/forget)
     setUser(null); setProfile(null); setTab('home'); setAuthView('intro'); setDemoRole(null);
     setNostrBanner({ show: false, npub: '' });
     setLucaMessages([]); setLucaLoaded(false);
@@ -114,7 +138,8 @@ export function AppProvider({ children }) {
   return (
     <AppContext.Provider value={{
       user, profile, loading, tab, setTab, authView, setAuthView,
-      login, loginWithIdentityKey, register, logout, refreshUser, setUser, setProfile,
+      login, loginWithIdentityKey, identityAuthDeferred, register, registerAccountDeferred,
+      activateUser, logout, refreshUser, setUser, setProfile,
       demoRole, setDemoRole, nostrBanner, setNostrBanner,
       lucaMessages, setLucaMessages, lucaLoaded, loadLucaHistory,
       currentTrack, setCurrentTrack, isPlaying, setIsPlaying, audioQueue, setAudioQueue,

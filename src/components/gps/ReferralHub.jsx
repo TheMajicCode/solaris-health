@@ -61,9 +61,12 @@ export default function ReferralHub() {
   return (
     <div className="rfh">
       <div className="rfh-hero">
-        <div className="rfh-hero-badge"><Sprout size={13} /> Ecosystem Builder</div>
+        <div className="rfh-hero-badges">
+          <span className="rfh-hero-badge"><Sprout size={13} /> Ecosystem Builder</span>
+          <span className="rfh-hero-badge rfh-sim">Simulated · rewards coming soon</span>
+        </div>
         <h2 className="rfh-hero-h">Become an Ecosystem Builder</h2>
-        <p className="rfh-hero-sub">Share Solaris Health. Earn <b>1%</b> of any booking from someone you refer — value flows to where value was created.</p>
+        <p className="rfh-hero-sub">Share Solaris Health. Referral rewards are simulated this release — no online payment is collected and no real money moves. Once settlement goes live, referrers are intended to earn <b>1%</b> of any booking from someone they refer.</p>
 
         <div className="rfh-code-wrap">
           <div className="rfh-code-block">
@@ -85,16 +88,16 @@ export default function ReferralHub() {
 
       <div className="rfh-stats">
         <Stat icon={Users} label="People joined" value={referrals.length} />
-        <Stat icon={Gift} label="Rewards earned" value={sum.reward_count || 0} />
-        <Stat icon={Coins} label="Total earned" value={money(sum.total_earned)} />
-        <Stat icon={Coins} label="Pending" value={money(sum.pending)} tone="muted" />
+        <Stat icon={Gift} label="Rewards (simulated)" value={sum.reward_count || 0} />
+        <Stat icon={Coins} label="Total (simulated)" value={money(sum.total_earned)} />
+        <Stat icon={Coins} label="Pending (simulated)" value={money(sum.pending)} tone="muted" />
       </div>
 
       <div className="rfh-grid">
         <div className="rfh-panel">
           <h3 className="rfh-panel-h"><Users size={15} /> Who you've brought in</h3>
           {referrals.length === 0 ? (
-            <p className="rfh-empty">No one yet — share your code to start growing the regenerative economy. You earn 1% every time they book care.</p>
+            <p className="rfh-empty">No one yet — share your code to start growing the regenerative economy. Referral rewards are simulated this release; once settlement goes live you are intended to earn 1% every time they book care.</p>
           ) : (
             <div className="rfh-ref-list">
               {referrals.map((r, i) => (
@@ -139,8 +142,10 @@ export default function ReferralHub() {
           padding:24px;box-shadow:var(--shadow);position:relative;overflow:hidden}
         .luca .rfh-hero::after{content:'';position:absolute;right:-30px;bottom:-50px;width:180px;height:180px;border-radius:50%;
           background:radial-gradient(circle,rgba(227,172,70,.25),transparent 70%)}
+        .luca .rfh-hero-badges{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
         .luca .rfh-hero-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;
           background:rgba(255,255,255,.15);padding:4px 10px;border-radius:99px}
+        .luca .rfh-hero-badge.rfh-sim{background:rgba(227,172,70,.28);color:#F6D67A;font-weight:700}
         .luca .rfh-hero-h{font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:700;margin:10px 0 4px}
         .luca .rfh-hero-sub{font-size:13.5px;opacity:.92;max-width:540px;margin:0 0 16px}
         .luca .rfh-code-wrap{display:flex;align-items:stretch;gap:10px;flex-wrap:wrap}

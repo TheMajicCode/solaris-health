@@ -9,8 +9,8 @@
  * shapes, THIS TEST GOES RED — which is exactly the early-warning you want while running A and B
  * in parallel.
  *
- * Run:  node tests/roundtrip.js
- * Optionally point at the A-stack:  LUCA_NODE_DIR=/path/to/luca-node node tests/roundtrip.js
+ * Run:  node tests/roundtrip.cjs
+ * Optionally point at the A-stack:  LUCA_NODE_DIR=/path/to/luca-node node tests/roundtrip.cjs
  * If luca-node isn't found, structural assertions still run (and clearly say the full loop was skipped).
  */
 const fs = require('fs');

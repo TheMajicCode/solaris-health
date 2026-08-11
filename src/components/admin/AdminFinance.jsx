@@ -2,7 +2,7 @@
  * AdminFinance.jsx — platform finance reconciliation + GPS settlement queue.
  *
  * Two panels:
- *  1. Reconciliation — every payment intent on the platform (Wompi sandbox),
+ *  1. Reconciliation — every simulated payment intent on the platform,
  *     with the member and provider it belongs to. Read-only.
  *  2. GPS settlement queue — the shadow receipts awaiting settlement. The admin
  *     can "Mark as settled" to demonstrate the settlement flow.
@@ -92,7 +92,7 @@ export default function AdminFinance() {
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#FBF3EA', border: `1px solid ${C.amber}44`, color: '#7A5A34', borderRadius: 12, padding: '10px 14px', fontSize: 13, marginBottom: 16 }}>
         <Info size={15} color={C.amber} />
-        <span><strong>Simulated finance.</strong> Payments run against the Wompi sandbox and GPS settlement is a shadow ledger — no real money moves.</span>
+        <span><strong>Simulated finance.</strong> Online payment is disabled this release; GPS settlement is a shadow ledger — no real money moves.</span>
       </div>
 
       {err && <div style={{ background: '#FDECEC', color: '#B23B3B', borderRadius: 10, padding: '9px 12px', fontSize: 13, marginBottom: 12 }}>{err}</div>}

@@ -63,7 +63,7 @@ export default function PaymentModal({
   const pay = async () => {
     setStatus('paying'); setError('');
     try {
-      const r = await api.simulatePayment({ orgId, amountSats, description: `${orgName} — ${planLabel}` });
+      const r = await api.simulatePayment({ orgId, amountSats });
       setReceipt(r.receipt); setPayment(r.payment);
       setEducationCredit(r.educationCreditSats || 0);
       setStatus('done');
@@ -81,7 +81,7 @@ export default function PaymentModal({
         <button className="paym-close" onClick={onClose}><X size={18} /></button>
 
         <div className="paym-head">
-          <div className="paym-plan-eyebrow">Treatment plan</div>
+          <div className="paym-plan-eyebrow">Simulated demonstration</div>
           <h3 className="paym-plan">{orgName} — {planLabel}</h3>
           <div className="paym-amt">{fmtSats(amountSats)} <span className="paym-sim">(simulated)</span></div>
         </div>
@@ -89,12 +89,12 @@ export default function PaymentModal({
         {status === 'idle' && (
           <div className="paym-body">
             <p className="paym-intro">
-              Paying this plan triggers <strong>GPS — the Global Prosperous Split</strong>: 90% goes to the provider, always, and the rest is split
-              across everyone who created value — the provider, your onboarder, the local node, the commons,
-              and more. Watch it happen.
+              This is a <strong>simulated demonstration</strong> of GPS — the Global Prosperous Split. No online payment is
+              collected in this release and no real funds move. Generating a receipt shows how value would be split
+              across everyone who created it — the provider, your onboarder, the local node, the commons, and more.
             </p>
             <button className="paym-pay" onClick={pay}>
-              <Zap size={16} /> Pay {fmtSats(amountSats)}
+              <Zap size={16} /> Generate simulated receipt
             </button>
             <div className="paym-foot"><Lock size={11} /> All values simulated — no real funds move.</div>
           </div>
@@ -103,7 +103,7 @@ export default function PaymentModal({
         {status === 'paying' && (
           <div className="paym-body paym-center">
             <Loader2 size={30} className="paym-spin" />
-            <div className="paym-paying">Signing invoice & computing value split…</div>
+            <div className="paym-paying">Generating demonstration…</div>
           </div>
         )}
 
@@ -117,7 +117,7 @@ export default function PaymentModal({
         {status === 'done' && (
           <div className="paym-body">
             <div className="paym-success">
-              <CheckCircle2 size={16} /> Payment settled — value distributed
+              <CheckCircle2 size={16} /> Simulated receipt generated — value split shown
             </div>
 
             <div className="paym-receipt-h">

@@ -57,11 +57,12 @@ export default function GPSEarnings() {
       <header className="gpe-hero">
         <div className="gpe-hero-txt">
           <div className="gpe-kicker"><Coins size={14} /> Sovereign Income</div>
+          <span className="gpe-sim-badge"><Sparkles size={12} /> Simulated</span>
           <h2>Your value, in full view</h2>
           <p>
-            Every completed session flows <strong>90% straight to you, always</strong> — no opaque platform
-            cut. The remaining value is transparently seeded across the people and commons that make
-            your practice possible. This is what you've grown so far.
+            These figures are a <strong>simulated</strong> preview of the Global Prosperous Split — no
+            online payment is collected and no real funds move this release. The split below shows how
+            value is intended to flow to you and the commons once settlement goes live.
           </p>
         </div>
         <div className="gpe-hero-amt">
@@ -81,7 +82,7 @@ export default function GPSEarnings() {
               <div className="gpe-card-ico" style={{ background: '#0E7C66' }}><CheckCircle2 size={16} /></div>
               <span className="gpe-card-lbl">Settled</span>
               <span className="gpe-card-val">{money(provider.settled)}</span>
-              <span className="gpe-card-sub">Paid & reconciled</span>
+              <span className="gpe-card-sub">Simulated (demonstration)</span>
             </div>
             <div className="gpe-card">
               <div className="gpe-card-ico" style={{ background: '#E3AC46' }}><Clock size={16} /></div>
@@ -208,10 +209,10 @@ export default function GPSEarnings() {
 
           <div className="gpe-payout">
             <div className="gpe-payout-txt">
-              <strong>Direct payouts</strong>
-              <span>Sovereign wallet withdrawals settle continuously. Scheduled payout requests are arriving soon.</span>
+              <strong>Direct payouts — coming soon</strong>
+              <span>Payouts are simulated this release. Live wallet withdrawals are not enabled yet — no real money moves.</span>
             </div>
-            <button className="gpe-payout-btn" disabled>Request payout — soon</button>
+            <button className="gpe-payout-btn" disabled>Request payout — coming soon</button>
           </div>
         </>
       )}

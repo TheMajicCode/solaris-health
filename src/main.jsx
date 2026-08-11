@@ -8,6 +8,7 @@ import Assessment from './flows/Assessment.jsx'
 import LucaPassport from './components/LucaPassport.jsx'
 import FindPractitioner from './pages/FindPractitioner.jsx'
 import IntakeForm from './components/IntakeForm.jsx'
+import PWAInstallInvitation from './components/PWAInstallInvitation.jsx'
 import { Toaster } from 'react-hot-toast'
 import './index.css'
 
@@ -100,6 +101,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <RootErrorBoundary>
     <AppProvider>
       <Root />
+      <PWAInstallInvitation />
       <Toaster
         position="top-right"
         gutter={10}

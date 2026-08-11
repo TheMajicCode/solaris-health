@@ -1,11 +1,18 @@
 'use strict';
 /**
  * Simulated payments + GPS split (Solaris sprint).
- *   POST /api/payments/simulate  { orgId, amountSats, description?, treatmentPlanId? }
+ *   POST /api/payments/simulate  { orgId, amountSats }
  *     -> creates a simulated payment, executes the data-driven split policy,
  *        records a split_receipt with per-leg amounts + recipient identity +
  *        mock proof hashes, credits the patient-education leg to the payer's
  *        wallet, and returns animated-receipt-ready data.
+ *
+ * Booking-only gate (S1B-R2): this endpoint accepts ONLY `orgId` + `amountSats`.
+ * It never accepts a caller-supplied description or treatment-plan id, always
+ * stores + returns the fixed neutral string `Simulated GPS demonstration`, and
+ * never mutates a booking, appointment, or treatment plan. The payment +
+ * receipt + payment-receipt link + simulated wallet credit are written inside
+ * ONE db.pool client transaction (all-or-nothing).
  *
  * All values are simulated. No real money moves.
  */
@@ -16,6 +23,43 @@ const { authMiddleware } = require('../middleware/auth');
 const { getSplitPolicy, computePolicyLegs } = require('../lib/gps-engine');
 
 const router = express.Router();
+
+// Fixed neutral description for every simulated demonstration payment. The
+// endpoint never stores or echoes a caller-supplied value (booking-only gate).
+const SIMULATED_DESCRIPTION = 'Simulated GPS demonstration';
+
+// Strict bounded positive-integer parser for amountSats. Rejects partial
+// parses ("10abc"), decimals, NaN/Infinity, zero, negatives, non-string/
+// non-number types, and out-of-range values. Returns the integer or null.
+function parseBoundedPositiveIntSats(raw) {
+  let n;
+  if (typeof raw === 'number') {
+    if (!Number.isInteger(raw)) return null; // reject decimals / NaN / Infinity
+    n = raw;
+  } else if (typeof raw === 'string') {
+    if (!/^[0-9]+$/.test(raw.trim())) return null; // reject "10abc", "1.5", "", "-1"
+    n = Number(raw.trim());
+  } else {
+    return null; // reject null/undefined/array/object/boolean
+  }
+  if (!Number.isInteger(n) || n <= 0 || n > Number.MAX_SAFE_INTEGER) return null;
+  return n;
+}
+
+// Opaque, non-PHI simulated wallet identifier. Deterministic per user id, but
+// never derived from email, name, npub, phone, or any personal data.
+function opaqueSimWalletAddress(userId) {
+  const fp = crypto.createHash('sha256').update('sim-wallet:' + String(userId)).digest('hex').slice(0, 16);
+  return 'sim_' + fp + '@solaris.mock';
+}
+
+// Redacted logger: emit only a fixed label + the non-sensitive pg/error code.
+// Never log request bodies, emails, secrets, wallet material, health data, or
+// the full error object.
+function logRedacted(label, err) {
+  const code = err && typeof err === 'object' && err.code ? String(err.code) : 'unspecified';
+  console.error(label, { code });
+}
 
 // Resolve each split leg's recipient to a human-readable identity (mock).
 async function resolveRecipients(legs, ctx) {
@@ -61,12 +105,16 @@ async function resolveRecipients(legs, ctx) {
 
 // POST /api/payments/simulate
 router.post('/simulate', authMiddleware, async (req, res) => {
-  try {
-    const { orgId, amountSats, description, treatmentPlanId } = req.body || {};
-    const amount = parseInt(amountSats, 10);
-    if (!orgId) return res.status(400).json({ error: 'orgId is required' });
-    if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'amountSats must be a positive integer' });
+  // Booking-only gate: accept ONLY orgId + amountSats. Any legacy fields
+  // (description, treatmentPlanId, …) in the body are ignored, never stored.
+  const { orgId, amountSats } = req.body || {};
+  const amount = parseBoundedPositiveIntSats(amountSats);
+  if (!orgId) return res.status(400).json({ error: 'orgId is required' });
+  if (amount === null) return res.status(400).json({ error: 'amountSats must be a positive integer' });
 
+  let client;
+  try {
+    // Read-only context (SELECTs) resolved before the write transaction opens.
     const orgRes = await db.query('SELECT * FROM organizations WHERE id = $1', [orgId]);
     if (!orgRes.rows.length) return res.status(404).json({ error: 'Organization not found' });
     const org = orgRes.rows[0];
@@ -90,51 +138,66 @@ router.post('/simulate', authMiddleware, async (req, res) => {
     const policy = await getSplitPolicy(orgId);
     const legs = computePolicyLegs(amount, policy.recipients);
 
-    // Create the payment
     const invoiceMock = 'lnbc_mock_' + crypto.randomBytes(8).toString('hex');
-    const payIns = await db.query(
-      `INSERT INTO payments (payer_user_id, org_id, amount_sats, status, invoice_mock, description)
-       VALUES ($1,$2,$3,'simulated_settled',$4,$5) RETURNING id, created_at`,
-      [payer.id, orgId, amount, invoiceMock, description || 'Simulated payment']
-    );
-    const paymentId = payIns.rows[0].id;
-
-    // Receipt hash (mock, deterministic-ish)
-    const receiptHash = 'rcpt_' + crypto.createHash('sha256')
-      .update(paymentId + ':' + amount + ':' + Date.now()).digest('hex').slice(0, 32);
-
-    const recIns = await db.query(
-      `INSERT INTO split_receipts (payment_id, policy_id, payer_user_id, org_id, amount_sats, legs, receipt_hash_mock)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, created_at`,
-      [paymentId, policy.policyId, payer.id, orgId, amount, JSON.stringify(legs), receiptHash]
-    );
-    const receiptId = recIns.rows[0].id;
-    await db.query('UPDATE payments SET split_receipt_id = $1 WHERE id = $2', [receiptId, paymentId]);
-
-    // Credit the patient-education leg to the payer's simulated wallet
     const eduLeg = legs.find((l) => l.role === 'patient_education');
     let educationCreditSats = 0;
-    if (eduLeg) {
-      educationCreditSats = eduLeg.amount_sats;
-      const w = await db.query(
-        `UPDATE wallets SET balance_sats_simulated = balance_sats_simulated + $1, updated_at = NOW()
-         WHERE owner_type = 'user' AND owner_id = $2 RETURNING id`,
-        [educationCreditSats, payer.id]
+
+    // ── Atomic simulated write set: payment + receipt + payment-receipt link +
+    //    simulated wallet credit succeed together or roll back together. One
+    //    db.pool client, BEGIN/COMMIT-all-or-ROLLBACK, release() in finally.
+    client = await db.pool.connect();
+    let paymentId, receiptId, payCreatedAt, recCreatedAt, receiptHash;
+    try {
+      await client.query('BEGIN');
+
+      const payIns = await client.query(
+        `INSERT INTO payments (payer_user_id, org_id, amount_sats, status, invoice_mock, description)
+         VALUES ($1,$2,$3,'simulated_settled',$4,$5) RETURNING id, created_at`,
+        [payer.id, orgId, amount, invoiceMock, SIMULATED_DESCRIPTION]
       );
-      if (!w.rows.length) {
-        await db.query(
-          `INSERT INTO wallets (owner_type, owner_id, balance_sats_simulated, lightning_address_mock)
-           VALUES ('user',$1,$2,$3)`,
-          [payer.id, educationCreditSats, (payer.email || 'user').split('@')[0] + '@solaris.mock']
+      paymentId = payIns.rows[0].id;
+      payCreatedAt = payIns.rows[0].created_at;
+
+      // Receipt hash (mock, deterministic-ish)
+      receiptHash = 'rcpt_' + crypto.createHash('sha256')
+        .update(paymentId + ':' + amount + ':' + Date.now()).digest('hex').slice(0, 32);
+
+      const recIns = await client.query(
+        `INSERT INTO split_receipts (payment_id, policy_id, payer_user_id, org_id, amount_sats, legs, receipt_hash_mock)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, created_at`,
+        [paymentId, policy.policyId, payer.id, orgId, amount, JSON.stringify(legs), receiptHash]
+      );
+      receiptId = recIns.rows[0].id;
+      recCreatedAt = recIns.rows[0].created_at;
+
+      await client.query('UPDATE payments SET split_receipt_id = $1 WHERE id = $2', [receiptId, paymentId]);
+
+      // Credit the patient-education leg to the payer's simulated wallet
+      if (eduLeg) {
+        educationCreditSats = eduLeg.amount_sats;
+        const w = await client.query(
+          `UPDATE wallets SET balance_sats_simulated = balance_sats_simulated + $1, updated_at = NOW()
+           WHERE owner_type = 'user' AND owner_id = $2 RETURNING id`,
+          [educationCreditSats, payer.id]
         );
+        if (!w.rows.length) {
+          await client.query(
+            `INSERT INTO wallets (owner_type, owner_id, balance_sats_simulated, lightning_address_mock)
+             VALUES ('user',$1,$2,$3)`,
+            [payer.id, educationCreditSats, opaqueSimWalletAddress(payer.id)]
+          );
+        }
       }
+
+      await client.query('COMMIT');
+    } catch (txErr) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw txErr;
+    } finally {
+      client.release();
     }
 
-    // Optionally mark a treatment plan as paid
-    if (treatmentPlanId) {
-      await db.query(`UPDATE treatment_plans SET status='paid', updated_at=NOW() WHERE id=$1 AND patient_id=$2`,
-        [treatmentPlanId, payer.id]);
-    }
+    // Never mutate a booking, appointment, or treatment plan (booking-only gate).
 
     const resolved = await resolveRecipients(legs, { org, payer, onboarder, community });
 
@@ -146,8 +209,8 @@ router.post('/simulate', authMiddleware, async (req, res) => {
         amountSats: amount,
         status: 'simulated_settled',
         invoiceMock,
-        description: description || 'Simulated payment',
-        createdAt: payIns.rows[0].created_at,
+        description: SIMULATED_DESCRIPTION,
+        createdAt: payCreatedAt,
       },
       receipt: {
         id: receiptId,
@@ -156,14 +219,14 @@ router.post('/simulate', authMiddleware, async (req, res) => {
         amountSats: amount,
         receiptHashMock: receiptHash,
         legs: resolved,
-        createdAt: recIns.rows[0].created_at,
+        createdAt: recCreatedAt,
       },
       educationCreditSats,
       simulated: true,
       message: 'Simulated payment settled. Value routed to everyone who created it.',
     });
   } catch (err) {
-    console.error('payment simulate error:', err);
+    logRedacted('payment simulate error', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -186,7 +249,7 @@ router.get('/mine', authMiddleware, async (req, res) => {
         orgName: p.org_name,
         amountSats: p.amount_sats,
         status: p.status,
-        description: p.description,
+        description: SIMULATED_DESCRIPTION,
         receiptId: p.receipt_id,
         receiptHashMock: p.receipt_hash_mock,
         legs: typeof p.legs === 'string' ? JSON.parse(p.legs) : (p.legs || []),
@@ -194,7 +257,7 @@ router.get('/mine', authMiddleware, async (req, res) => {
       })),
     });
   } catch (err) {
-    console.error('payments mine error:', err);
+    logRedacted('payments mine error', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

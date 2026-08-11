@@ -25,15 +25,29 @@ const { createNotification } = require('../lib/notifications');
 const { subjectIdForUser } = require('../lib/identity');
 const { getPaymentProvider } = require('../adapters');
 const { computeAllocations, POLICY_ID } = require('../lib/payments/allocation-policy');
+const { onlinePaymentsEnabled } = require('../lib/release-gate');
 
 const router = express.Router();
 
 const money = (cents) => `$${(Number(cents || 0) / 100).toFixed(2)}`;
 
+// Beta booking-only gate (S1B-R2): online payments are hard-disabled. The typed
+// disabled response is returned before any provider call or DB write. Shape is
+// fixed by the contract (§5) and MUST NOT leak provider/PHI/secret detail.
+const ONLINE_PAYMENTS_DISABLED_BODY = {
+  error: 'Online payments are disabled for this release.',
+  code: 'ONLINE_PAYMENTS_DISABLED',
+  enabled: false,
+};
+
 // ---------------------------------------------------------------------------
 // POST /checkout — create a PaymentIntent and a hosted-checkout URL.
 // ---------------------------------------------------------------------------
 router.post('/checkout', authMiddleware, async (req, res) => {
+  // Booking-only gate: refuse before any DB write or provider.createCheckout.
+  if (!onlinePaymentsEnabled()) {
+    return res.status(403).json(ONLINE_PAYMENTS_DISABLED_BODY);
+  }
   try {
     const userId = req.user.userId;
     const {
@@ -230,6 +244,11 @@ async function confirmPaidIntent(intent, providerFeeCents = null) {
 // POST /webhook — Wompi TRANSACTION.UPDATED. Public + signature-verified.
 // ---------------------------------------------------------------------------
 router.post('/webhook', async (req, res) => {
+  // Booking-only gate: refuse before verifyWebhook, any DB write, or
+  // confirmPaidIntent. 200 so a misconfigured provider stops retrying.
+  if (!onlinePaymentsEnabled()) {
+    return res.status(200).json(ONLINE_PAYMENTS_DISABLED_BODY);
+  }
   const provider = getPaymentProvider();
   let verification;
   try {

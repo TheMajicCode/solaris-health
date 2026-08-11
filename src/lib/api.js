@@ -456,8 +456,7 @@ class ApiClient {
   simulatePayment(payload) { return this.request('/payments/simulate', { method: 'POST', body: JSON.stringify(payload) }); }
   getMyPayments() { return this.request('/payments/mine'); }
 
-  // ---- Solaris: Wompi hosted checkout (M6) ----
-  createCheckout(payload) { return this.request('/payments/checkout', { method: 'POST', body: JSON.stringify(payload) }); }
+  // ---- Solaris: payment intents (read-only; online checkout disabled this release) ----
   getPaymentIntents() { return this.request('/payments/intents'); }
   getPaymentIntent(id) { return this.request(`/payments/intents/${id}`); }
 

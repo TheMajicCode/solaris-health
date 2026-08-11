@@ -11,11 +11,20 @@
  */
 const { WompiAdapter } = require('./WompiAdapter');
 const { MockPaymentAdapter } = require('./MockPaymentAdapter');
+const { onlinePaymentsEnabled } = require('../lib/release-gate');
 
 let cached = null;
 
 function getPaymentProvider(env = process.env) {
   if (cached && !env.__forceRebuild) return cached;
+  // Beta booking-only gate (S1B-R2): online payments are hard-disabled. The
+  // Wompi branch below is code-unreachable while the shared release gate is
+  // false — even with Wompi credentials, PAYMENT_PROVIDER='wompi', and
+  // ONLINE_PAYMENTS_ENABLED=true the factory always returns the Mock adapter.
+  if (!onlinePaymentsEnabled()) {
+    cached = new MockPaymentAdapter({ eventsSecret: env.WOMPI_EVENTS_SECRET });
+    return cached;
+  }
   const choice = (env.PAYMENT_PROVIDER || '').toLowerCase();
   if (choice === 'mock') {
     cached = new MockPaymentAdapter({ eventsSecret: env.WOMPI_EVENTS_SECRET });

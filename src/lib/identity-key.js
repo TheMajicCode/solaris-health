@@ -1,16 +1,26 @@
 /**
  * identity-key.js — client-side Identity Key (Nostr) crypto (M8; spec A2 §3).
  *
- * SOVEREIGNTY RULE: the secret key and the BIP-39 mnemonic are created and used
- * ENTIRELY on the member's device. They are NEVER sent to Solaris and NEVER
- * written to durable storage — the nsec lives in `sessionStorage` only (cleared
- * when the tab closes). Solaris only ever receives the PUBLIC key (npub).
+ * SOVEREIGNTY RULE: the secret key is created and used ENTIRELY on the member's
+ * device. It is NEVER sent to Solaris and NEVER written to durable storage.
+ * A new standalone identity's nsec/skHex live ONLY in an in-memory, module-scoped
+ * variable for the lifetime of the tab's JS context (see `rememberKeyForSession`);
+ * they are NOT placed in sessionStorage, localStorage, cookies, or any cache. A
+ * page refresh intentionally clears the key — the member re-authenticates or
+ * restores. Solaris only ever receives the PUBLIC key (npub).
  *
- * One seed, two paths (A2 §3.1): the same 12-word mnemonic can later derive a
- * Bitcoin key at BIP-86 — but ONLY when the member opts into a wallet. We do
- * not create a wallet here.
+ * TWO INDEPENDENT SECRETS — never combined:
+ *   1. The Nostr identity secret (nsec/skHex). For a new Beta V1 identity this is
+ *      raw CSPRNG entropy (`createStandaloneIdentity`), NOT a BIP-39 mnemonic.
+ *   2. A Spark wallet's BIP-39 recovery words. These are created independently by
+ *      the enabled Spark wallet software and are NEVER derived from — nor used to
+ *      derive — the Nostr identity secret. The two key systems stay separate.
  *
- *   BIP-39 mnemonic ──NIP-06 (m/44'/1237'/0'/0/0)──▶ nsec / npub  (identity)
+ * LEGACY ONLY: the 12-word mnemonic path below (`createIdentity` /
+ * `deriveFromMnemonic`, NIP-06 m/44'/1237'/0'/0/0) is retained solely for the
+ * "Restore legacy 12-word Solaris identity" option. New identities do not use it.
+ *
+ *   BIP-39 mnemonic ──NIP-06 (m/44'/1237'/0'/0/0)──▶ nsec / npub  (LEGACY identity)
  */
 import { generateMnemonic, mnemonicToSeedSync, validateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
@@ -20,7 +30,6 @@ import { sha256 } from '@noble/hashes/sha256';
 import { bech32 } from '@scure/base';
 
 const NIP06_PATH = "m/44'/1237'/0'/0/0"; // Nostr's registered coin type (1237)
-const SS_KEY = 'solaris.identityKey.v1'; // sessionStorage only — never localStorage
 
 const toHex = (b) => Array.from(b).map((x) => x.toString(16).padStart(2, '0')).join('');
 const fromHex = (h) => Uint8Array.from(h.match(/.{1,2}/g).map((b) => parseInt(b, 16)));
@@ -71,6 +80,57 @@ export function createIdentity() {
 }
 
 /**
+ * Create a brand-new STANDALONE identity (Beta V1 §4/§5): a real,
+ * client-generated `nsec`/`npub` produced directly from 32 bytes of CSPRNG
+ * entropy — NOT derived from a BIP-39 mnemonic. This keeps the new identity
+ * key deliberately separate from any wallet mnemonic (the two must never be
+ * combined). The 12-word mnemonic path (`createIdentity`/`deriveFromMnemonic`)
+ * is retained only as the "Restore legacy 12-word Solaris identity" option.
+ *
+ * SECRET DISCIPLINE: `nsec`/`skHex` are secrets — keep them in memory only for
+ * the session (see `rememberKeyForSession`). Solaris only ever receives `npub`.
+ * @returns {{ npub, nsec, pubkeyHex, skHex }}
+ */
+export function createStandaloneIdentity() {
+  const sk = schnorr.utils.randomPrivateKey(); // 32 bytes of secure entropy
+  const pub = schnorr.getPublicKey(sk);        // 32-byte x-only public key
+  return {
+    npub: encodeNpub(pub),
+    nsec: encodeNsec(sk),
+    pubkeyHex: toHex(pub),
+    skHex: toHex(sk),
+  };
+}
+
+/**
+ * Decode an EXISTING nsec (bech32) entered by a returning member and derive its
+ * public key — all on-device. Used by the "Use an existing nsec" sign-in path.
+ * The nsec/skHex are secrets: keep them in memory only; Solaris receives npub only.
+ * @param {string} nsecInput
+ * @returns {{ npub, nsec, pubkeyHex, skHex }}
+ */
+export function identityFromNsec(nsecInput) {
+  const raw = String(nsecInput || '').trim();
+  let decoded;
+  try {
+    decoded = bech32.decode(raw, 1000);
+  } catch {
+    throw new Error('That does not look like a valid nsec key.');
+  }
+  if (decoded.prefix !== 'nsec') throw new Error('That is not an nsec key. It must start with "nsec1".');
+  const sk = bech32.fromWords(decoded.words);
+  if (!sk || sk.length !== 32) throw new Error('That nsec key is malformed.');
+  const skBytes = Uint8Array.from(sk);
+  const pub = schnorr.getPublicKey(skBytes); // 32-byte x-only public key
+  return {
+    npub: encodeNpub(pub),
+    nsec: encodeNsec(skBytes),
+    pubkeyHex: toHex(pub),
+    skHex: toHex(skBytes),
+  };
+}
+
+/**
  * Sign a login challenge message with the secret key (BIP-340 Schnorr over the
  * SHA-256 digest of the message) — matches the server's verification.
  * @returns {string} hex signature
@@ -80,20 +140,21 @@ export function signChallenge(skHex, message) {
   return toHex(schnorr.sign(digest, fromHex(skHex)));
 }
 
-/* --------- session-only key custody (never durable, never sent up) --------- */
+/* --------- in-memory-only key custody (Beta V1 §4) ---------
+ * SECRET DISCIPLINE: new-identity secrets (nsec/skHex) are held ONLY in a
+ * module-scoped in-memory variable for the lifetime of the tab's JS context.
+ * They are NEVER written to localStorage, sessionStorage, cookies, logs,
+ * analytics, URLs, the server, or the database. A page refresh intentionally
+ * clears the key — the member re-authenticates (or restores) as designed. */
+let _inMemoryKey = null;
 export function rememberKeyForSession({ npub, skHex, pubkeyHex }) {
-  try {
-    sessionStorage.setItem(SS_KEY, JSON.stringify({ npub, skHex, pubkeyHex }));
-  } catch { /* private mode / disabled storage — fine, key just isn't remembered */ }
+  _inMemoryKey = { npub, skHex, pubkeyHex };
 }
 export function getSessionKey() {
-  try {
-    const raw = sessionStorage.getItem(SS_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
+  return _inMemoryKey;
 }
 export function forgetSessionKey() {
-  try { sessionStorage.removeItem(SS_KEY); } catch { /* noop */ }
+  _inMemoryKey = null;
 }
 
 /** The exact member-facing explainer copy for the Identity Key (info popover). */
@@ -103,8 +164,8 @@ export const IDENTITY_KEY_INFO = {
     'This is an identity key instead of a traditional account, used to help create your Solaris account. '
       + 'It\u2019s created on your device and represents you whenever you use Solaris.',
     'Your identity belongs to you, not Solaris. There\u2019s no password to reset, and Solaris can\u2019t recover '
-      + 'your key if you lose it. Keep a backup somewhere safe and never share it. For best practices, save it '
-      + 'with 3\u20135 family or friends. Anyone with your key can act as you or help restore your account.',
+      + 'your key if you lose it. Keep a backup somewhere safe. Never share this secret. Anyone who has it can '
+      + 'act as you.',
     'If you\u2019re new to Solaris, create a new identity key. If you already have an identity key, use your existing key.',
   ],
 };

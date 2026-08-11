@@ -31,14 +31,6 @@ const STATUS = {
   no_show:   { label: 'No-show',    cls: 'noshow' },
 };
 
-// Payment status pills (patient view only). 'unpaid' is intentionally omitted —
-// no pill until a charge is actually initiated.
-const PAY_STATUS = {
-  pending: { label: '⏳ Payment pending', cls: 'pay-pending' },
-  paid:    { label: '✓ Paid',            cls: 'pay-paid' },
-  failed:  { label: '⚠ Payment failed',  cls: 'pay-failed' },
-};
-
 function initials(name) {
   if (!name) return '?';
   return name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('');
@@ -121,14 +113,7 @@ export default function BookingCard({
         <div className="bkc-price">
           {b.total_price != null && Number(b.total_price) > 0 && (
             <span><DollarSign size={12} />{Number(b.total_price).toFixed(2)}
-              {!isPatient && b.provider_payout != null && (
-                <em> · you earn ${Number(b.provider_payout).toFixed(2)}</em>
-              )}
-            </span>
-          )}
-          {isPatient && Number(b.total_price) > 0 && PAY_STATUS[b.payment_status] && (
-            <span className={`bkc-pay ${PAY_STATUS[b.payment_status].cls}`} title="Payment status">
-              {PAY_STATUS[b.payment_status].label}
+              <em> · listed price</em>
             </span>
           )}
         </div>
