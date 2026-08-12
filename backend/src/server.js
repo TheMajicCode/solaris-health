@@ -77,13 +77,18 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-// CORS — allowlist known origins only (comma-separated ALLOWED_ORIGINS env override).
-// Env is the source of truth (12-factor); the default lists exactly the app
-// origins we control so a fresh deploy is safe even before the env is set.
-const ALLOWED_ORIGINS = (
-  process.env.ALLOWED_ORIGINS ||
-  'https://solarishealth.app,https://demo.solarishealth.app,https://preview.solarishealth.app,https://solaris-beta-demo.abacusai.cloud'
-).split(',').map((o) => o.trim()).filter(Boolean);
+// CORS — allowlist known origins only (comma-separated ALLOWED_ORIGINS env).
+// Env is the SOLE source of truth for production origins (12-factor). If the
+// var is absent in production we FAIL CLOSED: the allowlist is empty, so no
+// browser origin is ever permitted — we never fall back to a hardcoded list, a
+// wildcard, or origin reflection. Only non-production (dev/test) gets a default,
+// and that default is limited to explicit local test origins.
+const DEFAULT_ORIGINS =
+  process.env.NODE_ENV === 'production'
+    ? '' // fail closed — production origins MUST come from ALLOWED_ORIGINS
+    : 'http://localhost:3000,http://localhost:5173';
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? DEFAULT_ORIGINS)
+  .split(',').map((o) => o.trim()).filter(Boolean);
 app.use(cors({
   origin: (origin, cb) => {
     // Allow same-origin/non-browser requests (no Origin header: curl, health

@@ -2,11 +2,13 @@
 Description=Solaris Beta V1 investor-demo backend (ISOLATED non-production)
 After=network-online.target
 Wants=network-online.target
-RequiresMountsFor=/tmp
+# Durable release tree (survives /tmp cleanup + reboots).
+RequiresMountsFor=/opt/solaris-beta
 
 [Service]
 User=ubuntu
-WorkingDirectory=/tmp/solaris-beta-v1-investor-demo/backend
+# Runs from the atomic release symlink, never from /tmp.
+WorkingDirectory=/opt/solaris-beta/current/backend
 # Secrets live OUTSIDE the repo in a root-owned, 0600 EnvironmentFile
 # (DATABASE_URL, JWT_SECRET, PORT, ALLOWED_ORIGINS, NODE_ENV). This TRACKED unit
 # intentionally contains NO credentials — see /etc/solaris-beta-demo/backend.env.
