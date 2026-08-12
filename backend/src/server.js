@@ -78,15 +78,21 @@ app.use(helmet({
 }));
 
 // CORS — allowlist known origins only (comma-separated ALLOWED_ORIGINS env override).
+// Env is the source of truth (12-factor); the default lists exactly the app
+// origins we control so a fresh deploy is safe even before the env is set.
 const ALLOWED_ORIGINS = (
   process.env.ALLOWED_ORIGINS ||
-  'https://solaris-health.abacusai.cloud,http://localhost:3000'
+  'https://solarishealth.app,https://demo.solarishealth.app,https://preview.solarishealth.app,https://solaris-beta-demo.abacusai.cloud'
 ).split(',').map((o) => o.trim()).filter(Boolean);
 app.use(cors({
   origin: (origin, cb) => {
-    // Allow same-origin/non-browser requests (no Origin header) and allowlisted origins.
+    // Allow same-origin/non-browser requests (no Origin header: curl, health
+    // checks, server-to-server, local tests) and explicitly allowlisted origins.
     if (!origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
-    cb(new Error('Not allowed by CORS'));
+    // Disallowed origin: deny CLEANLY. Returning `false` (not an Error) makes the
+    // cors middleware simply omit the Access-Control-Allow-Origin header — the
+    // browser blocks the response and the server never 500s or leaks internals.
+    cb(null, false);
   },
   credentials: true,
 }));

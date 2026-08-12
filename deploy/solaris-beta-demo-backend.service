@@ -1,0 +1,23 @@
+[Unit]
+Description=Solaris Beta V1 investor-demo backend (ISOLATED non-production)
+After=network-online.target
+Wants=network-online.target
+RequiresMountsFor=/tmp
+
+[Service]
+User=ubuntu
+WorkingDirectory=/tmp/solaris-beta-v1-investor-demo/backend
+# Secrets live OUTSIDE the repo in a root-owned, 0600 EnvironmentFile
+# (DATABASE_URL, JWT_SECRET, PORT, ALLOWED_ORIGINS, NODE_ENV). This TRACKED unit
+# intentionally contains NO credentials — see /etc/solaris-beta-demo/backend.env.
+EnvironmentFile=/etc/solaris-beta-demo/backend.env
+# Fail-closed migrations (blocker #6): apply pending migrations as a pre-start
+# step. A non-zero exit aborts startup, so new routes can never run against an
+# un-migrated schema. The in-process execSync migrate was removed from server.js.
+ExecStartPre=/usr/local/bin/npm run migrate
+ExecStart=/usr/local/bin/node src/server.js
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
