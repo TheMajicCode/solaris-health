@@ -474,7 +474,7 @@ function JourneyPreviewModal({ plan, starting, onBegin, onClose }) {
 }
 
 const CSS = `
-.luca .exm{display:flex;flex-direction:column;height:calc(100vh - 132px);min-height:560px}
+.luca .exm{display:flex;flex-direction:column;min-height:calc(100vh - 132px)}
 .luca .exm-journeys{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;
   margin-bottom:14px;box-shadow:var(--shadow-sm)}
 .luca .exm-journeys.compact{box-shadow:none;background:transparent;border:none;padding:0;margin-top:18px;text-align:left;width:100%;max-width:640px}
@@ -559,7 +559,7 @@ const CSS = `
 .luca .exm-treasury strong{font-family:'IBM Plex Mono',monospace;color:var(--teal-d)}
 .luca .exm-treasury span{color:var(--mint-ink)}
 @media (max-width:720px){.luca .exm-treasury span{display:none}}
-.luca .exm-body{flex:1;display:grid;grid-template-columns:262px 1fr 1fr;gap:16px;min-height:0}
+.luca .exm-body{flex:1;display:grid;grid-template-columns:262px 1fr 1fr;gap:16px;min-height:520px}
 .luca .exm-rail{overflow-y:auto;padding-right:2px}
 .luca .exm-list{overflow-y:auto;padding-right:4px}
 .luca .exm-cards{display:flex;flex-direction:column;gap:12px;padding-bottom:10px}
@@ -618,7 +618,7 @@ const CSS = `
   .luca .exm-map.mshow{display:block;position:fixed;inset:64px 0 0;z-index:2500;border-radius:0}
 }
 @media(max-width:760px){
-  .luca .exm{height:calc(100vh - 120px)}
+  .luca .exm{min-height:calc(100vh - 120px)}
   .luca .exm-filterbtn{display:inline-flex}
   .luca .exm-body{grid-template-columns:1fr;position:relative}
   .luca .exm-rail{position:fixed;inset:0;z-index:3000;background:rgba(2,18,24,.4);display:none;padding:40px 16px;overflow-y:auto}

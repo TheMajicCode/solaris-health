@@ -13,6 +13,7 @@
  *   onBooked     (booking)=>void  — fired after a successful request
  */
 import React, { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X, Loader2, Check, ChevronRight, ChevronLeft, Calendar, Clock, Tag,
   MapPin, FileText, ShieldCheck, CalendarPlus, PartyPopper,
@@ -111,7 +112,12 @@ export default function BookingFlow({ providerId, provider: provIn, services: sv
 
   const canNext = (step === 0 && service) || (step === 1 && slot) || step === 2 || step === 3;
 
-  return (
+  // Render into <body> via a portal so the `position:fixed` scrim is pinned to
+  // the viewport. The app's `.page` route wrapper carries a `transform`, which
+  // would otherwise become the containing block and center this overlay far
+  // down the (tall) page, out of view.
+  return createPortal(
+    <div className="luca">
     <div className="bkf-scrim" onClick={onClose}>
       <div className="bkf" onClick={(e) => e.stopPropagation()}>
         <button className="bkf-x" onClick={onClose} aria-label="Close"><X size={18} /></button>
@@ -263,6 +269,8 @@ export default function BookingFlow({ providerId, provider: provIn, services: sv
       </div>
       <style>{CSS}</style>
     </div>
+    </div>,
+    document.body
   );
 }
 

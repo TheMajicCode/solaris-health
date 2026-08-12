@@ -35,6 +35,7 @@ import HealthNFT from './wallet/HealthNFT.jsx';
 import ExploreMarketplace from './marketplace/ExploreMarketplace.jsx';
 import ProviderApplication from './provider/ProviderApplication.jsx';
 import MyPractice from './provider/MyPractice.jsx';
+import ProviderBookings from './provider/ProviderBookings.jsx';
 import ProviderApprovals from './admin/ProviderApprovals.jsx';
 import MyBookings from './booking/MyBookings.jsx';
 import BookingManagement from './admin/BookingManagement.jsx';
@@ -5793,7 +5794,7 @@ function TabPage({ tab, sub, user, go, effectiveRole, onUnread, onInboxUnread, o
     case 'my-practice': return <MyPractice user={user} onBookings={onBookings} />;
     // ---- Practitioner Portal (Sprint F) ----
     case 'prac-clients': return <ErrorBoundary><PatientsPage /></ErrorBoundary>;
-    case 'prac-bookings': return <ErrorBoundary><SchedulePage /></ErrorBoundary>;
+    case 'prac-bookings': return <ErrorBoundary><ProviderBookings onBookings={onBookings} /></ErrorBoundary>;
     case 'prac-availability': return <ErrorBoundary><AvailabilityManager /></ErrorBoundary>;
     case 'prac-messages': return <ErrorBoundary><SecureChat user={user} onUnread={onUnread} /></ErrorBoundary>;
     case 'prac-finance': return <ErrorBoundary><PractitionerFinance /></ErrorBoundary>;

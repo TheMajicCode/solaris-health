@@ -108,6 +108,11 @@ export default function ProviderDetailModal({ providerId, user, onClose, onUpdat
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
+    // Reset the page scroll before locking it so the fixed overlay (whose
+    // containing block is the transformed `.page` wrapper) is pinned to the
+    // top of the viewport instead of opening above the fold when the user had
+    // scrolled down the results list.
+    try { window.scrollTo(0, 0); if (document.scrollingElement) document.scrollingElement.scrollTop = 0; } catch { /* noop */ }
     document.body.style.overflow = 'hidden';
     return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = ''; };
   }, [onClose]);

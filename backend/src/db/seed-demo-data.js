@@ -25,6 +25,8 @@
  */
 const db = require('../db');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+const fs = require('fs');
 const { seedIntakeTemplates } = require('./intake-templates');
 const { insertMessage } = require('../lib/intake-messages');
 
@@ -37,6 +39,7 @@ const DEMO_PASSWORD = 'demo123';
 // ---- CLI args ----
 const ARGV = process.argv.slice(2);
 const RESET = ARGV.includes('--reset');
+const BETA = ARGV.includes('--beta');
 const EMAIL_ARG = (ARGV.find((a) => a.startsWith('--email=')) || '').split('=')[1] || null;
 
 // ---- helpers ----
@@ -572,6 +575,459 @@ async function seedDemoPair() {
   await seedIntakeDemo(sofia, alejandro);
 }
 
+// ===========================================================================
+// SOLARIS BETA V1 — Investor demo scenario (marketplace booking loop).
+// ---------------------------------------------------------------------------
+// Entirely synthetic, namespaced to the @example.test fixture set. Uses the
+// LIVE marketplace booking system (provider_profiles + provider_services +
+// provider_availability + bookings) — the same one the app UI drives — so the
+// closed booking loop can be exercised end-to-end through the rendered UI.
+//
+// Guarded, transactional, idempotent and namespaced:
+//   • GUARD   — refuses unless current_database() is NOT 'luca_passport' AND
+//               ALLOW_BETA_DEMO_SEED is set. Never runs against production.
+//   • TXN     — everything runs in one BEGIN/COMMIT; any error rolls back.
+//   • NAMESPACE — only ever touches the @example.test fixture rows (and the
+//               practitioner's own provider_profiles cascade). Never deletes
+//               unrelated users or their data.
+//   • IDEMPOTENT — re-running yields identical fixture counts and no dupes:
+//               fixture users are upserted by stable email, the practitioner's
+//               provider_profiles row is deleted+recreated (cascading its
+//               services/availability/bookings), and each member's generated
+//               activity is cleared before reseeding.
+//
+// Run:
+//   ALLOW_BETA_DEMO_SEED=1 node src/db/seed-demo-data.js --beta
+// Reset (same command — it is idempotent and wipes any walkthrough additions):
+//   cd backend && sudo bash -c 'set -a; . /etc/solaris-beta-demo/backend.env; \
+//     set +a; ALLOW_BETA_DEMO_SEED=1 node src/db/seed-demo-data.js --beta'
+// ===========================================================================
+
+const BETA_MEMBER_EMAIL = 'maria.member@example.test';
+const BETA_PRACTITIONER_EMAIL = 'dr.reyes@example.test';
+const BETA_SUPPORTING = [
+  { email: 'carlos.demo@example.test', firstName: 'Carlos', lastName: 'Nunez' },
+  { email: 'lucia.demo@example.test', firstName: 'Lucia', lastName: 'Flores' },
+  { email: 'diego.demo@example.test', firstName: 'Diego', lastName: 'Ramirez' },
+  { email: 'ana.demo@example.test', firstName: 'Ana', lastName: 'Villalta' },
+  { email: 'pablo.demo@example.test', firstName: 'Pablo', lastName: 'Menendez' },
+];
+const BETA_CREDS_PATH = '/home/ubuntu/SOLARIS-BETA-DEMO-CREDENTIALS.txt';
+
+// All fixture emails this scenario owns — used only for namespaced cleanup.
+const BETA_ALL_EMAILS = [
+  BETA_MEMBER_EMAIL,
+  BETA_PRACTITIONER_EMAIL,
+  ...BETA_SUPPORTING.map((s) => s.email),
+];
+
+// Generate (or reuse) strong random passwords for the two PRINCIPAL logins.
+// Reused from the local credentials file when present so logins stay stable
+// and re-running the seed produces the same accounts. The file lives OUTSIDE
+// the repo, is written 0600, and passwords are NEVER printed to stdout.
+function ensurePrincipalPasswords() {
+  const creds = {};
+  try {
+    if (fs.existsSync(BETA_CREDS_PATH)) {
+      const txt = fs.readFileSync(BETA_CREDS_PATH, 'utf8');
+      for (const line of txt.split('\n')) {
+        const m = line.match(/^\s*([\w.+-]+@example\.test)\s*[:=]\s*(\S+)\s*$/);
+        if (m) creds[m[1]] = m[2];
+      }
+    }
+  } catch (e) {
+    console.warn(`  ! could not read existing credentials file: ${e.message}`);
+  }
+  const genPw = () => crypto.randomBytes(18).toString('base64url'); // ~24 chars
+  if (!creds[BETA_MEMBER_EMAIL]) creds[BETA_MEMBER_EMAIL] = genPw();
+  if (!creds[BETA_PRACTITIONER_EMAIL]) creds[BETA_PRACTITIONER_EMAIL] = genPw();
+
+  const body =
+    'Solaris Beta V1 — investor demo principal credentials (SYNTHETIC, rotate after recording)\n' +
+    'Environment: https://solaris-beta-demo.abacusai.cloud\n' +
+    `Generated / last confirmed: ${new Date().toISOString()}\n` +
+    '\n' +
+    `MEMBER        ${BETA_MEMBER_EMAIL} : ${creds[BETA_MEMBER_EMAIL]}\n` +
+    `PRACTITIONER  ${BETA_PRACTITIONER_EMAIL} : ${creds[BETA_PRACTITIONER_EMAIL]}\n` +
+    '\n' +
+    'Supporting members use the shared demo password: demo123\n';
+  try {
+    fs.writeFileSync(BETA_CREDS_PATH, body, { mode: 0o600 });
+    fs.chmodSync(BETA_CREDS_PATH, 0o600);
+  } catch (e) {
+    console.warn(`  ! could not write credentials file: ${e.message}`);
+  }
+  return creds;
+}
+
+// Upsert a fixture user on the transaction client. Keeps the id stable across
+// runs (upsert by email). password_hash is only overwritten when provided
+// (principals); supporting members keep the shared demo password.
+async function betaUpsertUser(client, email, opts, passwordHash) {
+  const {
+    firstName = 'Member', lastName = '', role = 'patient', country = 'El Salvador',
+    language = 'English', lovePoints = 0, onboardingStatus = 'complete', isProvider = false,
+  } = opts;
+  const fullName = [firstName, lastName].filter(Boolean).join(' ') || email.split('@')[0];
+  const existing = await client.query('SELECT id FROM users WHERE email=$1', [email]);
+  if (existing.rows.length) {
+    const id = existing.rows[0].id;
+    await client.query(
+      `UPDATE users SET first_name=$1, last_name=$2, full_name=$3, role=$4, country=$5, language=$6,
+         love_points=$7, onboarding_status=$8, is_provider=$9,
+         provider_approved_at = CASE WHEN $9 THEN COALESCE(provider_approved_at, NOW()) ELSE provider_approved_at END,
+         password_hash = COALESCE($10, password_hash), updated_at=NOW()
+       WHERE id=$11`,
+      [firstName, lastName, fullName, role, country, language, lovePoints, onboardingStatus, isProvider, passwordHash, id]
+    );
+    return id;
+  }
+  const ph = passwordHash || (await bcrypt.hash(DEMO_PASSWORD, 10));
+  const { rows } = await client.query(
+    `INSERT INTO users (email, password_hash, full_name, first_name, last_name, role, country, language,
+       onboarding_status, love_points, is_provider, provider_approved_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, CASE WHEN $11 THEN NOW() ELSE NULL END)
+     RETURNING id`,
+    [email, ph, fullName, firstName, lastName, role, country, language, onboardingStatus, lovePoints, isProvider]
+  );
+  return rows[0].id;
+}
+
+// Clear a fixture member's generated activity (namespaced to this user id only).
+async function betaClearMember(client, userId) {
+  const tables = [
+    'daily_checkins', 'journal_entries', 'user_audio', 'habit_ticks', 'member_habits',
+    'reward_events', 'member_journeys', 'assessment_responses', 'notifications',
+  ];
+  for (const t of tables) {
+    await client.query(`DELETE FROM ${t} WHERE user_id=$1`, [userId]).catch((e) => {
+      console.warn(`  ! could not clear ${t} for fixture user: ${e.message}`);
+    });
+  }
+}
+
+async function betaSeedCheckins(client, userId, days) {
+  for (let i = days - 1; i >= 0; i--) {
+    const progress = (days - 1 - i) / (days - 1);
+    const energy = Math.min(100, rand(52, 66) + Math.round(progress * 22) + rand(-4, 4));
+    const mood = Math.min(100, rand(55, 68) + Math.round(progress * 20) + rand(-4, 4));
+    const sleep = randf(6.2 + progress * 1.0, 7.4 + progress * 0.8, 1);
+    const hydration = rand(4, 8);
+    const movement = rand(10, 45) + Math.round(progress * 15);
+    const mind = Math.min(100, rand(54, 66) + Math.round(progress * 20) + rand(-4, 4));
+    const body = Math.min(100, rand(52, 64) + Math.round(progress * 22) + rand(-4, 4));
+    const heart = Math.min(100, rand(56, 68) + Math.round(progress * 18) + rand(-4, 4));
+    const spirit = Math.min(100, rand(50, 62) + Math.round(progress * 24) + rand(-4, 4));
+    const dt = daysAgo(i);
+    await client.query(
+      `INSERT INTO daily_checkins
+         (user_id, checkin_date, energy_score, mood_score, sleep_hours, hydration_glasses, movement_minutes,
+          mind_score, body_score, heart_score, spirit_score, notes, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+      [userId, dt.toISOString().slice(0, 10), energy, mood, sleep, hydration, movement,
+       mind, body, heart, spirit, null, dt]
+    );
+  }
+}
+
+async function betaAssessment(client, userId, focus, opts = {}) {
+  const {
+    vitality = 68, mental = 71, emotional = 66, physical = 62, spiritual = 70, raw = 64,
+    headline = 'A strong foundation with room to restore energy and calm.',
+  } = opts;
+  const dt = daysAgo(29);
+  await client.query(
+    `INSERT INTO assessment_responses
+       (user_id, started_at, completed_at, raw_score, vitality_score, mental_score, emotional_score, physical_score, spiritual_score, summary_json, top_focus_areas_json, created_at)
+     VALUES ($1,$2,$2,$3,$4,$5,$6,$7,$8,$9,$10,$2)`,
+    [userId, dt, raw, vitality, mental, emotional, physical, spiritual,
+     JSON.stringify({ headline }), JSON.stringify(focus)]
+  );
+}
+
+async function betaJournal(client, userId, entries) {
+  for (const e of entries) {
+    const dt = daysAgo(e.daysBack);
+    await client.query(
+      `INSERT INTO journal_entries (user_id, mood, content, created_at) VALUES ($1,$2,$3,$4)`,
+      [userId, e.mood, e.content, dt]
+    );
+  }
+}
+
+async function betaHabits(client, userId, habits) {
+  for (const h of habits) {
+    const created = daysAgo(h.days || 14);
+    const { rows } = await client.query(
+      `INSERT INTO member_habits (user_id, name, icon, active, created_at)
+       VALUES ($1,$2,$3,true,$4) RETURNING id`,
+      [userId, h.name, h.icon, created]
+    );
+    const habitId = rows[0].id;
+    const days = h.days || 14;
+    const rate = typeof h.completionRate === 'number' ? h.completionRate : 0.7;
+    for (let i = days - 1; i >= 0; i--) {
+      if (Math.random() <= rate) {
+        const dt = daysAgo(i);
+        await client.query(
+          `INSERT INTO habit_ticks (user_id, habit_id, tick_date, created_at) VALUES ($1,$2,$3,$4)`,
+          [userId, habitId, dt.toISOString().slice(0, 10), dt]
+        );
+      }
+    }
+  }
+}
+
+async function betaJourney(client, userId, journeyType, { daysAgo: dAgo = 0, milestones = [] } = {}) {
+  const started = new Date();
+  started.setDate(started.getDate() - dAgo);
+  const json = milestones.map((key) => ({ key, completed: true, completed_at: started.toISOString() }));
+  await client.query(
+    `INSERT INTO member_journeys (user_id, journey_type, status, started_at, milestones_json)
+     VALUES ($1,$2,'active',$3,$4)
+     ON CONFLICT (user_id, journey_type)
+     DO UPDATE SET status='active', started_at=EXCLUDED.started_at, milestones_json=EXCLUDED.milestones_json`,
+    [userId, journeyType, started, JSON.stringify(json)]
+  );
+}
+
+async function betaNotification(client, userId, { type, title, message, data = null, daysAgo: dAgo = 0, read = false }) {
+  const created = new Date();
+  created.setDate(created.getDate() - dAgo);
+  await client.query(
+    `INSERT INTO notifications (user_id, type, title, message, data, read, created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+    [userId, type, title, message, data ? JSON.stringify(data) : null, read, created]
+  );
+}
+
+// Insert a marketplace booking (member ↔ practitioner). Times are chosen per
+// call so fixtures never overlap on the same provider/day.
+async function betaInsertBooking(client, opts) {
+  const {
+    patientId, providerId, serviceId, price = 0, currency = 'USD',
+    dayOffset, startHour, durationMin = 60, status, cancellationReason = null,
+    patientNotes = null,
+  } = opts;
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() + dayOffset);
+  const bookingDate = date.toISOString().slice(0, 10);
+  const start = `${String(startHour).padStart(2, '0')}:00:00`;
+  const endHourTotal = startHour * 60 + durationMin;
+  const end = `${String(Math.floor(endHourTotal / 60)).padStart(2, '0')}:${String(endHourTotal % 60).padStart(2, '0')}:00`;
+
+  // Coherent timestamps for the lifecycle.
+  const createdAt = new Date(date);
+  createdAt.setDate(createdAt.getDate() - 3);
+  const confirmedAt = ['confirmed', 'completed'].includes(status)
+    ? new Date(createdAt.getTime() + 3600 * 1000) : null;
+  const completedAt = status === 'completed' ? new Date(date.getTime() + endHourTotal * 60 * 1000) : null;
+  const cancelledAt = status === 'cancelled' ? new Date(createdAt.getTime() + 7200 * 1000) : null;
+
+  const { rows } = await client.query(
+    `INSERT INTO bookings
+       (patient_id, provider_id, service_id, booking_date, start_time, end_time, status,
+        total_price, platform_fee, provider_payout, currency, patient_notes, cancellation_reason,
+        confirmed_at, completed_at, cancelled_at, payment_status, created_at, updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,0,$8,$9,$10,$11,$12,$13,$14,'unpaid',$15,NOW())
+     RETURNING id`,
+    [patientId, providerId, serviceId, bookingDate, start, end, status,
+     price, currency, patientNotes, cancellationReason, confirmedAt, completedAt, cancelledAt, createdAt]
+  );
+  const bookingId = rows[0].id;
+  // One status-history row reflecting the final state (cascades on booking delete).
+  await client.query(
+    `INSERT INTO booking_status_history (booking_id, status, changed_by, reason, created_at)
+     VALUES ($1,$2,$3,$4,$5)`,
+    [bookingId, status, patientId, cancellationReason, createdAt]
+  );
+  return bookingId;
+}
+
+const BETA_MARIA_JOURNAL = [
+  { daysBack: 2, mood: 'good', content: "Kept up my morning walk three days running now. Small, but it's the first routine that's actually stuck this year." },
+  { daysBack: 6, mood: 'okay', content: "Busy stretch at work. Used the breathing practice between calls and it genuinely took the edge off. Noting it so I remember it works." },
+  { daysBack: 12, mood: 'great', content: "Slept a full night for the first time in ages and the difference in my energy is night and day. Excited to keep building on this." },
+];
+
+async function seedBetaScenario() {
+  // ---- GUARD: never run against production, and require explicit opt-in. ----
+  const { rows: dbRows } = await db.query('SELECT current_database() AS db');
+  const dbName = dbRows[0] && dbRows[0].db;
+  if (dbName === 'luca_passport') {
+    throw new Error(`Refusing to seed: target database is '${dbName}' (production). The beta demo seed only runs against the synthetic beta-demo database.`);
+  }
+  if (!process.env.ALLOW_BETA_DEMO_SEED) {
+    throw new Error('Refusing to seed: set ALLOW_BETA_DEMO_SEED=1 to run the beta demo scenario (safety guard).');
+  }
+  console.log(`✓ safety guard passed (database='${dbName}', ALLOW_BETA_DEMO_SEED set)`);
+
+  const creds = ensurePrincipalPasswords();
+  const memberPwHash = await bcrypt.hash(creds[BETA_MEMBER_EMAIL], 10);
+  const practitionerPwHash = await bcrypt.hash(creds[BETA_PRACTITIONER_EMAIL], 10);
+
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // --- Practitioner principal: Dr. Mateo Reyes (member + approved provider) ---
+    const reyesId = await betaUpsertUser(client, BETA_PRACTITIONER_EMAIL, {
+      firstName: 'Mateo', lastName: 'Reyes', role: 'practitioner', country: 'El Salvador',
+      lovePoints: 80, onboardingStatus: 'complete', isProvider: true,
+    }, practitionerPwHash);
+
+    // Idempotent: drop the practitioner's provider_profiles row — this cascades
+    // to provider_services, provider_availability, provider_time_slots and ALL
+    // fixture bookings (bookings.provider_id ON DELETE CASCADE), so re-running
+    // yields identical counts with no orphans.
+    await client.query('DELETE FROM provider_profiles WHERE user_id=$1', [reyesId]);
+
+    const profRes = await client.query(
+      `INSERT INTO provider_profiles
+         (user_id, provider_type, business_name, description, address, city, country,
+          phone, email, specialties, price_range, rating, review_count, verified, vtv_certified,
+          featured, status, claimed, approval_status, hidden, auto_confirm_bookings, booking_buffer_minutes)
+       VALUES ($1,'doctor',$2,$3,$4,$5,'El Salvador',$6,$7,$8,'$$',4.9,27,true,true,true,
+               'active',true,'approved',false,false,15)
+       RETURNING id`,
+      [
+        reyesId,
+        'Dr. Mateo Reyes — Integrative Wellness',
+        'Root-cause, whole-person care blending functional medicine with nervous-system and lifestyle work. Helping members calm stress, restore sleep, and rebuild lasting vitality.',
+        'Calle La Reforma 123, Colonia San Benito',
+        'San Salvador',
+        '+503 2200 1234',
+        BETA_PRACTITIONER_EMAIL,
+        JSON.stringify(['Stress & Anxiety', 'Sleep', 'Optimal Health', 'Energy & Vitality']),
+      ]
+    );
+    const profileId = profRes.rows[0].id;
+
+    // Two bookable services.
+    const svcConsult = (await client.query(
+      `INSERT INTO provider_services (provider_id, service_name, description, price, currency, duration_minutes, category)
+       VALUES ($1,$2,$3,$4,'USD',$5,$6) RETURNING id`,
+      [profileId, 'Integrative Wellness Consultation',
+       'A comprehensive 60-minute session to map your stress, sleep and energy and build a personalised plan.',
+       120, 60, 'Consultation']
+    )).rows[0].id;
+    const svcFollowUp = (await client.query(
+      `INSERT INTO provider_services (provider_id, service_name, description, price, currency, duration_minutes, category)
+       VALUES ($1,$2,$3,$4,'USD',$5,$6) RETURNING id`,
+      [profileId, 'Follow-up Session',
+       'A focused 30-minute check-in to review progress and adjust your plan.',
+       75, 30, 'Follow-up']
+    )).rows[0].id;
+
+    // Weekly availability: Mon–Fri, 09:00–17:00.
+    for (let dow = 1; dow <= 5; dow++) {
+      await client.query(
+        `INSERT INTO provider_availability (provider_id, day_of_week, start_time, end_time, is_available)
+         VALUES ($1,$2,'09:00:00','17:00:00',true)`,
+        [profileId, dow]
+      );
+    }
+
+    // The practitioner is also a member: give his own member view a little life.
+    await betaClearMember(client, reyesId);
+    await betaAssessment(client, reyesId, ['Optimal Health', 'Energy & Vitality'],
+      { vitality: 78, mental: 80, emotional: 74, physical: 76, spiritual: 79, raw: 77,
+        headline: 'Thriving and steady — modelling the balance he coaches.' });
+    await betaSeedCheckins(client, reyesId, 10);
+    await betaNotification(client, reyesId, {
+      type: 'welcome', title: 'Welcome to your practitioner portal',
+      message: 'Your provider profile is live in the marketplace. New booking requests will appear here for you to confirm or decline.',
+      data: { tab: 'provider' }, daysAgo: 2, read: false,
+    });
+
+    // --- Member principal: Maria Elena Campos ---
+    const mariaId = await betaUpsertUser(client, BETA_MEMBER_EMAIL, {
+      firstName: 'Maria', lastName: 'Campos', role: 'patient', country: 'El Salvador',
+      lovePoints: 140, onboardingStatus: 'complete', isProvider: false,
+    }, memberPwHash);
+    await betaClearMember(client, mariaId);
+    await betaAssessment(client, mariaId, ['Stress & Anxiety', 'Sleep', 'Optimal Health'],
+      { vitality: 70, mental: 66, emotional: 64, physical: 72, spiritual: 68, raw: 68,
+        headline: 'Capable and motivated, with a clear invitation to protect sleep and soften stress.' });
+    await betaSeedCheckins(client, mariaId, 14);
+    await betaJournal(client, mariaId, BETA_MARIA_JOURNAL);
+    await betaHabits(client, mariaId, [
+      { name: 'Morning walk', icon: '🚶', completionRate: 0.8, days: 14 },
+      { name: 'Evening wind-down', icon: '🌙', completionRate: 0.6, days: 14 },
+    ]);
+    await betaJourney(client, mariaId, 'optimal_health', { daysAgo: 14, milestones: ['intake', 'streak7'] });
+    await betaNotification(client, mariaId, {
+      type: 'welcome', title: 'Your Optimal Health journey is underway',
+      message: "Beautiful start, Maria — you've completed your intake and a check-in streak. Your next milestone is your first practitioner session.",
+      data: { tab: 'dashboard' }, daysAgo: 10, read: true,
+    });
+    await betaNotification(client, mariaId, {
+      type: 'tip', title: 'A tip for steadier sleep',
+      message: 'Try the evening wind-down practice tonight — a few minutes of slow breathing before bed can make tomorrow feel very different.',
+      data: { tab: 'dashboard' }, daysAgo: 3, read: false,
+    });
+
+    // Maria's booking history with Dr. Reyes: exactly one completed, one
+    // cancelled, one confirmed-upcoming. She adds a fresh request via the UI.
+    await betaInsertBooking(client, {
+      patientId: mariaId, providerId: profileId, serviceId: svcConsult, price: 120,
+      dayOffset: -18, startHour: 10, durationMin: 60, status: 'completed',
+      patientNotes: "Looking forward to getting started on my stress and sleep.",
+    });
+    await betaInsertBooking(client, {
+      patientId: mariaId, providerId: profileId, serviceId: svcFollowUp, price: 75,
+      dayOffset: -8, startHour: 11, durationMin: 30, status: 'cancelled',
+      cancellationReason: 'Schedule conflict — rebooked for a later date.',
+    });
+    await betaInsertBooking(client, {
+      patientId: mariaId, providerId: profileId, serviceId: svcFollowUp, price: 75,
+      dayOffset: 5, startHour: 10, durationMin: 30, status: 'confirmed',
+      patientNotes: "Checking in on how the new routine is going.",
+    });
+
+    // --- Supporting members + a spread of booking states for the roster ---
+    const supporting = {};
+    for (const s of BETA_SUPPORTING) {
+      const uid = await betaUpsertUser(client, s.email, {
+        firstName: s.firstName, lastName: s.lastName, role: 'patient', country: 'El Salvador',
+        lovePoints: rand(20, 90), onboardingStatus: 'complete', isProvider: false,
+      });
+      await betaClearMember(client, uid);
+      await betaAssessment(client, uid, ['Optimal Health', 'Energy & Vitality']);
+      await betaSeedCheckins(client, uid, 7);
+      supporting[s.email] = uid;
+    }
+    // carlos → confirmed upcoming; lucia → completed; diego → pending (gives the
+    // practitioner an existing incoming request); ana → cancelled; pablo → completed.
+    await betaInsertBooking(client, { patientId: supporting['carlos.demo@example.test'], providerId: profileId, serviceId: svcConsult, price: 120, dayOffset: 3, startHour: 14, durationMin: 60, status: 'confirmed' });
+    await betaInsertBooking(client, { patientId: supporting['lucia.demo@example.test'], providerId: profileId, serviceId: svcConsult, price: 120, dayOffset: -20, startHour: 9, durationMin: 60, status: 'completed' });
+    await betaInsertBooking(client, { patientId: supporting['diego.demo@example.test'], providerId: profileId, serviceId: svcFollowUp, price: 75, dayOffset: 6, startHour: 15, durationMin: 30, status: 'pending', patientNotes: 'First time booking — would love some guidance on energy levels.' });
+    await betaInsertBooking(client, { patientId: supporting['ana.demo@example.test'], providerId: profileId, serviceId: svcFollowUp, price: 75, dayOffset: -15, startHour: 13, durationMin: 30, status: 'cancelled', cancellationReason: 'Unable to attend — will rebook.' });
+    await betaInsertBooking(client, { patientId: supporting['pablo.demo@example.test'], providerId: profileId, serviceId: svcConsult, price: 120, dayOffset: -25, startHour: 16, durationMin: 60, status: 'completed' });
+
+    await client.query('COMMIT');
+    console.log('✓ beta scenario committed');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+
+  // ---- Verification counts (read-only, after commit) ----
+  const counts = {};
+  counts.fixture_users = (await db.query('SELECT COUNT(*)::int c FROM users WHERE email = ANY($1)', [BETA_ALL_EMAILS])).rows[0].c;
+  counts.provider_profiles = (await db.query('SELECT COUNT(*)::int c FROM provider_profiles WHERE user_id = (SELECT id FROM users WHERE email=$1)', [BETA_PRACTITIONER_EMAIL])).rows[0].c;
+  counts.provider_services = (await db.query('SELECT COUNT(*)::int c FROM provider_services WHERE provider_id = (SELECT id FROM provider_profiles WHERE user_id=(SELECT id FROM users WHERE email=$1))', [BETA_PRACTITIONER_EMAIL])).rows[0].c;
+  counts.provider_availability = (await db.query('SELECT COUNT(*)::int c FROM provider_availability WHERE provider_id = (SELECT id FROM provider_profiles WHERE user_id=(SELECT id FROM users WHERE email=$1))', [BETA_PRACTITIONER_EMAIL])).rows[0].c;
+  counts.bookings = (await db.query('SELECT COUNT(*)::int c FROM bookings WHERE provider_id = (SELECT id FROM provider_profiles WHERE user_id=(SELECT id FROM users WHERE email=$1))', [BETA_PRACTITIONER_EMAIL])).rows[0].c;
+  counts.notifications = (await db.query('SELECT COUNT(*)::int c FROM notifications WHERE user_id = ANY(SELECT id FROM users WHERE email = ANY($1))', [BETA_ALL_EMAILS])).rows[0].c;
+  console.log('✓ Beta scenario fixture counts:', JSON.stringify(counts));
+  console.log(`✓ Principal credentials written to ${BETA_CREDS_PATH} (0600, not printed here).`);
+  console.log('✓ Member principal:', BETA_MEMBER_EMAIL, '| Practitioner principal:', BETA_PRACTITIONER_EMAIL);
+}
+
 const SEEDERS = { [SARAH_EMAIL]: seedSarah, [CARO_EMAIL]: seedCaro };
 const PAIR_EMAILS = new Set([SOFIA_EMAIL, ALEJANDRO_EMAIL]);
 
@@ -583,6 +1039,15 @@ async function seedOne(email) {
 }
 
 async function main() {
+  // --beta: run ONLY the guarded, self-contained Solaris Beta V1 investor
+  // scenario (marketplace booking loop). It never touches the legacy showcase
+  // seeders and requires the ALLOW_BETA_DEMO_SEED safety flag.
+  if (BETA) {
+    console.log('Seeding Solaris Beta V1 investor scenario…');
+    await seedBetaScenario();
+    console.log('Done.');
+    return;
+  }
   // Ensure the system intake templates exist before seeding any intake demo data.
   try {
     await seedIntakeTemplates(db);
