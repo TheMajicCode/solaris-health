@@ -17,9 +17,46 @@ import SearchFilters from './SearchFilters.jsx';
 import ProviderListingCard from './ProviderListingCard.jsx';
 import ProviderDetailModal from './ProviderDetailModal.jsx';
 
+// Isolates Leaflet/tile failures so a map crash never takes down the usable
+// results list. On error it renders a compact fallback with a "browse the list"
+// action; the list beside/under it keeps working normally.
+class MapErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { failed: false }; }
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(err) { try { console.warn('Map failed to render; falling back to list.', err); } catch { /* noop */ } }
+  render() {
+    if (this.state.failed) {
+      return (
+        <div className="em-map-fallback" role="status">
+          <MapIcon size={28} strokeWidth={1.5} />
+          <p className="em-map-fallback-title">Map unavailable</p>
+          <p className="em-map-fallback-sub">The map couldn’t load right now. You can still browse every result in the list.</p>
+          {this.props.onSwitchToList && (
+            <button type="button" className="em-map-fallback-btn" onClick={this.props.onSwitchToList}>
+              <ListIcon size={16} /> Browse the list
+            </button>
+          )}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const DEFAULT_FILTERS = {
   types: [], minRating: 0, vtv: false, verified: false, price: [], radius: 25, sort: 'rating',
+  city: '', languages: [], modality: '', availability: 'any',
 };
+
+// Non-schema attributes (languages / modality / availability days / licensed)
+// are stored by the InvestorDemoV1 seed in provider_profiles.hours_of_operation
+// under a { meta:{…} } key. Read them defensively (jsonb may arrive parsed or
+// as a string) — absent meta simply means the provider opts out of these filters.
+function providerMeta(p) {
+  let obj = p?.hours_of_operation;
+  if (typeof obj === 'string') { try { obj = JSON.parse(obj); } catch { obj = null; } }
+  return (obj && typeof obj === 'object' && obj.meta) ? obj.meta : {};
+}
 
 // Step-kind → icon + human label, used in the plan preview.
 const STEP_KIND = {
@@ -162,20 +199,60 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
         params.radius = filters.radius;
       }
       const d = await api.getProviders(params);
-      let rows = d.providers || [];
-      // client-side price filter (denormalized price_range is a simple string)
-      if (filters.price.length) {
-        rows = rows.filter((p) => p.price_range && filters.price.includes(p.price_range));
-      }
-      setProviders(rows);
+      // Keep the raw server-filtered set; price/city/language/modality/availability
+      // are applied client-side (see visibleProviders) so they combine freely.
+      setProviders(d.providers || []);
     } catch (e) {
       setProviders([]);
     } finally {
       setLoading(false);
     }
-  }, [debouncedQ, filters, userLocation]);
+    // Note: price/city/language/modality/availability are NOT in the deps because
+    // they are applied client-side; only server-side params trigger a refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedQ, filters.types, filters.minRating, filters.vtv, filters.verified, filters.sort, userLocation, filters.radius]);
 
   useEffect(() => { fetchProviders(); }, [fetchProviders]);
+
+  // City/language dropdown options derived from the server-filtered set.
+  const cityOptions = useMemo(
+    () => Array.from(new Set(providers.map((p) => p.city).filter(Boolean))).sort(),
+    [providers]
+  );
+  const languageOptions = useMemo(() => {
+    const set = new Set();
+    for (const p of providers) for (const l of (providerMeta(p).languages || [])) set.add(l);
+    return Array.from(set).sort();
+  }, [providers]);
+
+  // Client-side combined filters: price, location (city), language, modality
+  // (virtual/in-person, hybrid counts for both), and near-term availability.
+  const visibleProviders = useMemo(() => {
+    let rows = providers;
+    if (filters.price.length) rows = rows.filter((p) => p.price_range && filters.price.includes(p.price_range));
+    if (filters.city) rows = rows.filter((p) => p.city === filters.city);
+    if (filters.languages.length) {
+      rows = rows.filter((p) => {
+        const langs = providerMeta(p).languages || [];
+        return filters.languages.some((l) => langs.includes(l));
+      });
+    }
+    if (filters.modality) {
+      rows = rows.filter((p) => {
+        const m = providerMeta(p).modality;
+        return m === filters.modality || m === 'hybrid';
+      });
+    }
+    if (filters.availability && filters.availability !== 'any') {
+      rows = rows.filter((p) => {
+        const days = providerMeta(p).days || [];
+        if (filters.availability === 'weekday') return days.some((d) => d >= 1 && d <= 5);
+        if (filters.availability === 'weekend') return days.some((d) => d === 0 || d === 6);
+        return true;
+      });
+    }
+    return rows;
+  }, [providers, filters]);
 
   const patch = (p) => setFilters((f) => ({ ...f, ...p }));
   const reset = () => { setFilters(DEFAULT_FILTERS); setQuery(''); };
@@ -189,8 +266,10 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
 
   const hasLocation = !!userLocation;
   const activeFilterCount =
-    filters.types.length + filters.price.length +
-    (filters.minRating ? 1 : 0) + (filters.vtv ? 1 : 0) + (filters.verified ? 1 : 0);
+    filters.types.length + filters.price.length + filters.languages.length +
+    (filters.minRating ? 1 : 0) + (filters.vtv ? 1 : 0) + (filters.verified ? 1 : 0) +
+    (filters.city ? 1 : 0) + (filters.modality ? 1 : 0) +
+    (filters.availability && filters.availability !== 'any' ? 1 : 0);
 
   return (
     <div className="exm">
@@ -296,7 +375,9 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
             categories={categories}
             hasLocation={hasLocation}
             onReset={reset}
-            resultCount={providers.length}
+            resultCount={visibleProviders.length}
+            cityOptions={cityOptions}
+            languageOptions={languageOptions}
           />
         </div>
 
@@ -304,7 +385,7 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
         <div className={`exm-list ${mobileView === 'list' ? 'mshow' : 'mhide'}`} ref={listRef}>
           {loading ? (
             <div className="exm-loading"><Loader2 className="exm-spin" size={26} /> Finding providers…</div>
-          ) : providers.length === 0 ? (
+          ) : visibleProviders.length === 0 ? (
             <div className="exm-empty">
               <Store size={34} />
               <h4>No providers match your filters</h4>
@@ -314,7 +395,7 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
             </div>
           ) : (
             <div className="exm-cards">
-              {providers.map((p) => (
+              {visibleProviders.map((p) => (
                 <div key={p.id} data-pid={p.id}>
                   <ProviderListingCard
                     provider={p}
@@ -328,17 +409,19 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
           )}
         </div>
 
-        {/* Map */}
+        {/* Map — wrapped so a tile/render failure never takes down the usable list */}
         <div className={`exm-map ${mobileView === 'map' ? 'mshow' : 'mhide'}`}>
-          <MapView
-            providers={providers}
-            activeId={activeId || hoverId}
-            onSelect={onSelect}
-            onHover={setHoverId}
-            userLocation={userLocation}
-            onLocate={(loc) => setUserLocation(loc)}
-            radiusKm={hasLocation ? filters.radius : null}
-          />
+          <MapErrorBoundary onSwitchToList={() => setMobileView('list')}>
+            <MapView
+              providers={visibleProviders}
+              activeId={activeId || hoverId}
+              onSelect={onSelect}
+              onHover={setHoverId}
+              userLocation={userLocation}
+              onLocate={(loc) => setUserLocation(loc)}
+              radiusKm={hasLocation ? filters.radius : null}
+            />
+          </MapErrorBoundary>
         </div>
       </div>
 
@@ -564,6 +647,14 @@ const CSS = `
 .luca .exm-list{overflow-y:auto;padding-right:4px}
 .luca .exm-cards{display:flex;flex-direction:column;gap:12px;padding-bottom:10px}
 .luca .exm-map{position:sticky;top:0;height:100%;min-height:0}
+.luca .em-map-fallback{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
+  height:100%;min-height:280px;padding:30px;text-align:center;color:var(--muted);
+  background:var(--surface,#f7f7f5);border-radius:16px}
+.luca .em-map-fallback-title{font-family:'Space Grotesk',sans-serif;font-size:16px;color:var(--ink);margin:6px 0 0;font-weight:600}
+.luca .em-map-fallback-sub{font-size:13px;max-width:280px;margin:0}
+.luca .em-map-fallback-btn{display:inline-flex;align-items:center;gap:6px;margin-top:6px;padding:8px 14px;
+  border:1px solid var(--line,#e2e2dd);border-radius:10px;background:#fff;color:var(--ink);font-size:13px;cursor:pointer}
+.luca .em-map-fallback-btn:hover{background:var(--surface,#f2f2ef)}
 .luca .exm-loading,.luca .exm-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:12px;height:100%;color:var(--muted);text-align:center;padding:30px}
 .luca .exm-empty h4{font-family:'Space Grotesk',sans-serif;font-size:17px;color:var(--ink);margin:4px 0 0}

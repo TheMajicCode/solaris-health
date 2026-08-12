@@ -14,9 +14,11 @@
  *   hasLocation bool — enables the distance slider
  *   onReset     ()=>void
  *   resultCount number
+ *   cityOptions      string[] — locations present in the current result set
+ *   languageOptions  string[] — languages present in the current result set
  */
 import React from 'react';
-import { SlidersHorizontal, ShieldCheck, BadgeCheck, RotateCcw } from 'lucide-react';
+import { SlidersHorizontal, ShieldCheck, BadgeCheck, RotateCcw, MapPin, Languages, Video } from 'lucide-react';
 import { PROVIDER_TYPES } from './ProviderBadges.jsx';
 
 const PRICES = ['$', '$$', '$$$', '$$$$'];
@@ -26,9 +28,21 @@ const SORTS = [
   { id: 'distance', label: 'Nearest' },
   { id: 'newest', label: 'Newest' },
 ];
+const MODALITIES = [
+  { id: '', label: 'Any' },
+  { id: 'virtual', label: 'Virtual' },
+  { id: 'in_person', label: 'In-person' },
+  { id: 'hybrid', label: 'Hybrid' },
+];
+const AVAILABILITY = [
+  { id: 'any', label: 'Any time' },
+  { id: 'weekday', label: 'Weekdays' },
+  { id: 'weekend', label: 'Weekends' },
+];
 
 export default function SearchFilters({
   filters, onChange, categories = [], hasLocation, onReset, resultCount,
+  cityOptions = [], languageOptions = [],
 }) {
   const countOf = (id) => {
     const c = categories.find((x) => x.id === id);
@@ -45,6 +59,12 @@ export default function SearchFilters({
     const set = new Set(filters.price || []);
     if (set.has(p)) set.delete(p); else set.add(p);
     onChange({ price: Array.from(set) });
+  };
+
+  const toggleLanguage = (l) => {
+    const set = new Set(filters.languages || []);
+    if (set.has(l)) set.delete(l); else set.add(l);
+    onChange({ languages: Array.from(set) });
   };
 
   return (
@@ -92,6 +112,68 @@ export default function SearchFilters({
               </button>
             );
           })}
+        </div>
+      </div>
+
+      {/* Location */}
+      {cityOptions.length > 0 && (
+        <div className="sf-group">
+          <label className="sf-label"><MapPin size={12} style={{ marginRight: 4, verticalAlign: '-1px' }} />Location</label>
+          <select
+            className="sf-select"
+            value={filters.city || ''}
+            onChange={(e) => onChange({ city: e.target.value })}
+          >
+            <option value="">All locations</option>
+            {cityOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+      )}
+
+      {/* Language */}
+      {languageOptions.length > 0 && (
+        <div className="sf-group">
+          <label className="sf-label"><Languages size={12} style={{ marginRight: 4, verticalAlign: '-1px' }} />Language</label>
+          <div className="sf-prices">
+            {languageOptions.map((l) => (
+              <button
+                key={l}
+                type="button"
+                className={`sf-price${(filters.languages || []).includes(l) ? ' on' : ''}`}
+                onClick={() => toggleLanguage(l)}
+              >{l}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Modality */}
+      <div className="sf-group">
+        <label className="sf-label"><Video size={12} style={{ marginRight: 4, verticalAlign: '-1px' }} />Session type</label>
+        <div className="sf-sorts">
+          {MODALITIES.map((m) => (
+            <button
+              key={m.id || 'any'}
+              type="button"
+              className={`sf-sort${(filters.modality || '') === m.id ? ' on' : ''}`}
+              onClick={() => onChange({ modality: m.id })}
+            >{m.label}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Availability */}
+      <div className="sf-group">
+        <label className="sf-label">Availability</label>
+        <div className="sf-sorts">
+          {AVAILABILITY.map((a) => (
+            <button
+              key={a.id}
+              type="button"
+              className={`sf-sort${(filters.availability || 'any') === a.id ? ' on' : ''}`}
+              onClick={() => onChange({ availability: a.id })}
+            >{a.label}</button>
+          ))}
         </div>
       </div>
 
@@ -186,6 +268,10 @@ const CSS = `
 .luca .sf-type-l{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--ink)}
 .luca .sf-type.on .sf-type-l{color:var(--teal-d)}
 .luca .sf-type-n{font-size:11px;font-weight:700;color:var(--muted);background:var(--surface);border-radius:999px;padding:1px 8px;min-width:24px;text-align:center}
+.luca .sf-select{width:100%;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);
+  font-size:13px;font-weight:600;font-family:inherit;padding:8px 11px;border-radius:10px;cursor:pointer}
+.luca .sf-select:hover{border-color:var(--mint)}
+.luca .sf-select:focus{outline:none;border-color:var(--teal-d)}
 .luca .sf-range{width:100%;accent-color:var(--teal-d);cursor:pointer}
 .luca .sf-hint{font-size:12px;color:var(--muted);margin:0;line-height:1.4}
 .luca .sf-toggle{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);

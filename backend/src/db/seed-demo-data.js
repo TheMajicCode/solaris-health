@@ -612,13 +612,200 @@ const BETA_SUPPORTING = [
   { email: 'ana.demo@example.test', firstName: 'Ana', lastName: 'Villalta' },
   { email: 'pablo.demo@example.test', firstName: 'Pablo', lastName: 'Menendez' },
 ];
-const BETA_CREDS_PATH = '/home/ubuntu/SOLARIS-BETA-DEMO-CREDENTIALS.txt';
+const BETA_CREDS_PATH = '/home/ubuntu/SOLARIS-INVESTOR-DEMO-CREDENTIALS.txt';
+
+// ---------------------------------------------------------------------------
+// InvestorDemoV1 marketplace catalog — a synthetic directory of fictional
+// practitioners so the marketplace + map show real breadth. Every row is
+// entirely made up: business names, PUBLIC street addresses, phone numbers and
+// coordinates are invented and never reference a real person or clinic. Owner
+// logins are namespaced @example.test and are NOT principal accounts (they use
+// the shared demo password and are never signed into for the demo).
+//
+// Non-schema attributes the marketplace filters on — languages, modality
+// (virtual / in_person / hybrid) and the licensed-clinical vs wellness
+// distinction — are stored in the existing provider_profiles.hours_of_operation
+// jsonb column under a { meta: { … } } key. No migration is introduced; the
+// frontend reads provider.hours_of_operation.meta for these filters, and the
+// weekly availability template remains the source of truth for hours.
+const INVESTOR_PROVIDERS = [
+  // ---- Licensed / clinical ----
+  { key: 'p01', type: 'doctor', licensed: true, firstName: 'Sofía', lastName: 'Herrera',
+    business: 'Clínica Vida Integral', city: 'Santa Ana', country: 'El Salvador',
+    lat: 13.9942, lng: -89.5597, address: 'Avenida Independencia 210, Centro', phone: '+503 2447 3300',
+    specialties: ['Optimal Health', 'Preventive Care', 'Energy & Vitality'],
+    languages: ['Spanish', 'English'], modality: 'hybrid', priceRange: '$$', rating: 4.8, reviewCount: 34,
+    verified: true, vtv: true, featured: false, days: [1, 2, 3, 4, 5],
+    description: 'Functional-medicine family practice focused on preventive, root-cause care for the whole household.',
+    services: [{ name: 'New Patient Consultation', description: '60-minute functional-medicine intake and plan.', price: 95, duration: 60, category: 'Consultation' },
+               { name: 'Preventive Check-up', description: '30-minute preventive review and labs guidance.', price: 55, duration: 30, category: 'Follow-up' }] },
+  { key: 'p02', type: 'doctor', licensed: true, firstName: 'Javier', lastName: 'Morales',
+    business: 'Centro Médico Aurora', city: 'San Miguel', country: 'El Salvador',
+    lat: 13.4833, lng: -88.1833, address: 'Calle Chaparrastique 45, Barrio El Centro', phone: '+503 2661 8890',
+    specialties: ['Stress & Anxiety', 'Sleep', 'Optimal Health'],
+    languages: ['Spanish'], modality: 'in_person', priceRange: '$$', rating: 4.6, reviewCount: 21,
+    verified: true, vtv: false, featured: false, days: [1, 2, 3, 4, 5, 6],
+    description: 'Integrative internal medicine helping patients restore sleep and steady energy after burnout.',
+    services: [{ name: 'Integrative Consultation', description: '50-minute whole-person medical consultation.', price: 80, duration: 50, category: 'Consultation' }] },
+  { key: 'p03', type: 'dentist', licensed: true, firstName: 'Camila', lastName: 'Ortiz',
+    business: 'Sonrisa Dental Studio', city: 'San Salvador', country: 'El Salvador',
+    lat: 13.7010, lng: -89.2240, address: 'Boulevard del Hipódromo 320, Colonia San Benito', phone: '+503 2223 5567',
+    specialties: ['Dental Health', 'Preventive Care'],
+    languages: ['Spanish', 'English'], modality: 'in_person', priceRange: '$$$', rating: 4.9, reviewCount: 58,
+    verified: true, vtv: true, featured: true, days: [1, 2, 3, 4, 5],
+    description: 'Modern preventive and cosmetic dentistry with a calm, low-anxiety patient experience.',
+    services: [{ name: 'Dental Cleaning & Check-up', description: '45-minute cleaning and oral-health review.', price: 60, duration: 45, category: 'Preventive' },
+               { name: 'Cosmetic Consultation', description: '30-minute smile-design consultation.', price: 40, duration: 30, category: 'Consultation' }] },
+  { key: 'p04', type: 'dentist', licensed: true, firstName: 'Luis', lastName: 'Paredes',
+    business: 'DentalCare Antigua', city: 'Antigua Guatemala', country: 'Guatemala',
+    lat: 14.5586, lng: -90.7295, address: '5a Avenida Norte 12, Antigua', phone: '+502 7832 4410',
+    specialties: ['Dental Health'],
+    languages: ['Spanish', 'English'], modality: 'in_person', priceRange: '$$', rating: 4.7, reviewCount: 29,
+    verified: true, vtv: false, featured: false, days: [1, 2, 3, 4, 5],
+    description: 'Family and restorative dentistry serving Antigua and surrounding towns.',
+    services: [{ name: 'Comprehensive Exam', description: '40-minute full dental exam.', price: 50, duration: 40, category: 'Preventive' }] },
+  { key: 'p05', type: 'nutritionist', licensed: true, firstName: 'Andrea', lastName: 'Gómez',
+    business: 'Nutrir Vida', city: 'Guatemala City', country: 'Guatemala',
+    lat: 14.6349, lng: -90.5069, address: 'Zona 10, 4a Calle 2-15', phone: '+502 2360 7788',
+    specialties: ['Nutrition', 'Energy & Vitality', 'Women\u2019s Health'],
+    languages: ['Spanish', 'English'], modality: 'virtual', priceRange: '$$', rating: 4.8, reviewCount: 41,
+    verified: true, vtv: true, featured: false, days: [1, 2, 3, 4, 5],
+    description: 'Registered dietitian offering evidence-based nutrition plans, fully online.',
+    services: [{ name: 'Nutrition Assessment', description: '60-minute nutrition intake and plan.', price: 70, duration: 60, category: 'Consultation' },
+               { name: 'Nutrition Follow-up', description: '30-minute progress review.', price: 40, duration: 30, category: 'Follow-up' }] },
+  { key: 'p06', type: 'nutritionist', licensed: true, firstName: 'Ricardo', lastName: 'Fuentes',
+    business: 'Balance Nutrición', city: 'San José', country: 'Costa Rica',
+    lat: 9.9281, lng: -84.0907, address: 'Barrio Escalante, Calle 33', phone: '+506 2253 9010',
+    specialties: ['Nutrition', 'Optimal Health'],
+    languages: ['Spanish'], modality: 'hybrid', priceRange: '$$', rating: 4.5, reviewCount: 18,
+    verified: false, vtv: false, featured: false, days: [2, 3, 4, 5, 6],
+    description: 'Sports and metabolic nutrition for sustainable energy and body composition.',
+    services: [{ name: 'Metabolic Consultation', description: '55-minute metabolic nutrition consultation.', price: 65, duration: 55, category: 'Consultation' }] },
+  { key: 'p07', type: 'therapist', licensed: true, firstName: 'Valentina', lastName: 'Cruz',
+    business: 'Espacio Calma Psicología', city: 'San Salvador', country: 'El Salvador',
+    lat: 13.6960, lng: -89.2400, address: 'Colonia Escalón, Paseo General Escalón 4820', phone: '+503 2263 1120',
+    specialties: ['Stress & Anxiety', 'Emotional Wellbeing', 'Mindfulness'],
+    languages: ['Spanish', 'English'], modality: 'hybrid', priceRange: '$$', rating: 4.9, reviewCount: 47,
+    verified: true, vtv: true, featured: true, days: [1, 2, 3, 4, 5],
+    description: 'Licensed clinical psychology for anxiety, stress and life transitions, in person or online.',
+    services: [{ name: 'Therapy Session', description: '50-minute individual psychotherapy session.', price: 60, duration: 50, category: 'Therapy' }] },
+  { key: 'p08', type: 'therapist', licensed: true, firstName: 'Daniel', lastName: 'Rivas',
+    business: 'Mindful Therapy Collective', city: 'Panama City', country: 'Panama',
+    lat: 8.9824, lng: -79.5199, address: 'Bella Vista, Calle 50', phone: '+507 396 4501',
+    specialties: ['Emotional Wellbeing', 'Stress & Anxiety'],
+    languages: ['English', 'Spanish'], modality: 'virtual', priceRange: '$$$', rating: 4.7, reviewCount: 33,
+    verified: true, vtv: false, featured: false, days: [1, 2, 3, 4, 5],
+    description: 'Bilingual psychotherapy practice specialising in stress, relationships and burnout — online.',
+    services: [{ name: 'Individual Therapy', description: '50-minute online therapy session.', price: 85, duration: 50, category: 'Therapy' }] },
+  { key: 'p09', type: 'clinic', licensed: true, firstName: 'Holística', lastName: 'Amanecer',
+    business: 'Clínica Holística Amanecer', city: 'San Salvador', country: 'El Salvador',
+    lat: 13.6890, lng: -89.2050, address: 'Colonia Médica, Avenida Dr. Max Bloch 15', phone: '+503 2225 7700',
+    specialties: ['Optimal Health', 'Preventive Care', 'Detox & Cleanse'],
+    languages: ['Spanish', 'English'], modality: 'in_person', priceRange: '$$$', rating: 4.6, reviewCount: 52,
+    verified: true, vtv: true, featured: false, days: [1, 2, 3, 4, 5, 6],
+    description: 'Multi-disciplinary integrative clinic combining medical, nutrition and mind-body services.',
+    services: [{ name: 'Integrative Intake', description: '60-minute multi-disciplinary intake.', price: 90, duration: 60, category: 'Consultation' }] },
+  { key: 'p10', type: 'clinic', licensed: true, firstName: 'Ceiba', lastName: 'Salud',
+    business: 'Centro de Salud Integral Ceiba', city: 'Tegucigalpa', country: 'Honduras',
+    lat: 14.0723, lng: -87.1921, address: 'Colonia Palmira, Avenida República de Chile', phone: '+504 2232 5566',
+    specialties: ['Preventive Care', 'Women\u2019s Health', 'Optimal Health'],
+    languages: ['Spanish'], modality: 'in_person', priceRange: '$$', rating: 4.4, reviewCount: 19,
+    verified: false, vtv: false, featured: false, days: [1, 2, 3, 4, 5],
+    description: 'Community integrative health centre with preventive and women\u2019s-health programmes.',
+    services: [{ name: 'Wellness Check-up', description: '45-minute preventive health visit.', price: 45, duration: 45, category: 'Preventive' }] },
+  // ---- Wellness (non-clinical) ----
+  { key: 'p11', type: 'wellness', licensed: false, firstName: 'Raíces', lastName: 'Studio',
+    business: 'Raíces Wellness Studio', city: 'Antigua Guatemala', country: 'Guatemala',
+    lat: 14.5620, lng: -90.7340, address: '6a Calle Poniente 30, Antigua', phone: '+502 7955 2210',
+    specialties: ['Mindfulness', 'Stress & Anxiety', 'Movement & Fitness'],
+    languages: ['Spanish', 'English'], modality: 'hybrid', priceRange: '$$', rating: 4.8, reviewCount: 62,
+    verified: true, vtv: false, featured: true, days: [1, 2, 3, 4, 5, 6],
+    description: 'Yoga, meditation and breathwork studio for stress relief and gentle movement.',
+    services: [{ name: 'Private Yoga Session', description: '60-minute private guided yoga session.', price: 35, duration: 60, category: 'Movement' },
+               { name: 'Guided Meditation', description: '30-minute guided meditation session.', price: 20, duration: 30, category: 'Mindfulness' }] },
+  { key: 'p12', type: 'wellness', licensed: false, firstName: 'Pura', lastName: 'Vida',
+    business: 'Pura Vida Wellness', city: 'San José', country: 'Costa Rica',
+    lat: 9.9350, lng: -84.0800, address: 'Santa Ana, Centro Comercial Vistas', phone: '+506 2282 4400',
+    specialties: ['Mindfulness', 'Emotional Wellbeing'],
+    languages: ['English', 'Spanish'], modality: 'virtual', priceRange: '$', rating: 4.6, reviewCount: 27,
+    verified: false, vtv: false, featured: false, days: [1, 2, 3, 4, 5],
+    description: 'Online mindfulness coaching and stress-resilience programmes.',
+    services: [{ name: 'Mindfulness Coaching', description: '45-minute online mindfulness coaching call.', price: 30, duration: 45, category: 'Coaching' }] },
+  { key: 'p13', type: 'gym', licensed: false, firstName: 'Fuerza', lastName: 'Funcional',
+    business: 'Fuerza Funcional Gym', city: 'San Salvador', country: 'El Salvador',
+    lat: 13.7050, lng: -89.2300, address: 'Colonia San Benito, Calle La Mascota 540', phone: '+503 2245 9900',
+    specialties: ['Movement & Fitness', 'Energy & Vitality'],
+    languages: ['Spanish'], modality: 'in_person', priceRange: '$$', rating: 4.7, reviewCount: 44,
+    verified: true, vtv: false, featured: false, days: [1, 2, 3, 4, 5, 6],
+    description: 'Functional-training gym with small-group coaching for strength and mobility.',
+    services: [{ name: 'Personal Training', description: '60-minute one-on-one functional training.', price: 40, duration: 60, category: 'Fitness' }] },
+  { key: 'p14', type: 'gym', licensed: false, firstName: 'Movimiento', lastName: 'Studio',
+    business: 'Movimiento Studio', city: 'Guatemala City', country: 'Guatemala',
+    lat: 14.6000, lng: -90.5140, address: 'Zona 14, Avenida Las Américas 18-40', phone: '+502 2385 1120',
+    specialties: ['Movement & Fitness', 'Optimal Health'],
+    languages: ['Spanish', 'English'], modality: 'hybrid', priceRange: '$$', rating: 4.5, reviewCount: 22,
+    verified: false, vtv: false, featured: false, days: [1, 2, 3, 4, 5],
+    description: 'Movement and mobility studio blending Pilates, strength and recovery.',
+    services: [{ name: 'Reformer Pilates', description: '50-minute reformer Pilates class.', price: 28, duration: 50, category: 'Fitness' }] },
+  { key: 'p15', type: 'spa', licensed: false, firstName: 'Serenidad', lastName: 'Spa',
+    business: 'Serenidad Spa & Baños', city: 'Santa Ana', country: 'El Salvador',
+    lat: 13.9900, lng: -89.5560, address: 'Calle Libertad Poniente 88', phone: '+503 2440 6677',
+    specialties: ['Detox & Cleanse', 'Stress & Anxiety'],
+    languages: ['Spanish'], modality: 'in_person', priceRange: '$$$', rating: 4.8, reviewCount: 39,
+    verified: true, vtv: false, featured: false, days: [3, 4, 5, 6, 0],
+    description: 'Thermal-bath spa offering massage, hydrotherapy and deep-relaxation rituals.',
+    services: [{ name: 'Relaxation Massage', description: '60-minute full-body relaxation massage.', price: 45, duration: 60, category: 'Spa' }] },
+  { key: 'p16', type: 'spa', licensed: false, firstName: 'Aguas', lastName: 'Termales',
+    business: 'Aguas Termales Spa', city: 'Panama City', country: 'Panama',
+    lat: 8.9900, lng: -79.5100, address: 'Punta Pacífica, Boulevard Pacífica', phone: '+507 302 7788',
+    specialties: ['Detox & Cleanse', 'Emotional Wellbeing'],
+    languages: ['English', 'Spanish'], modality: 'in_person', priceRange: '$$$$', rating: 4.9, reviewCount: 71,
+    verified: true, vtv: true, featured: true, days: [1, 2, 3, 4, 5, 6, 0],
+    description: 'Luxury hydrotherapy spa with detox and restorative wellness packages.',
+    services: [{ name: 'Detox Ritual', description: '90-minute hydrotherapy and detox ritual.', price: 120, duration: 90, category: 'Spa' }] },
+  { key: 'p17', type: 'farm', licensed: false, firstName: 'Finca', lastName: 'Roble',
+    business: 'Finca Orgánica El Roble', city: 'Antigua Guatemala', country: 'Guatemala',
+    lat: 14.5500, lng: -90.7200, address: 'Aldea San Juan del Obispo, km 3', phone: '+502 7830 9911',
+    specialties: ['Nutrition', 'Detox & Cleanse', 'Optimal Health'],
+    languages: ['Spanish', 'English'], modality: 'in_person', priceRange: '$', rating: 4.7, reviewCount: 25,
+    verified: false, vtv: false, featured: false, days: [4, 5, 6, 0],
+    description: 'Regenerative organic farm offering farm-to-table nutrition and wellness day visits.',
+    services: [{ name: 'Farm Wellness Day', description: 'Half-day farm-to-table nutrition experience.', price: 35, duration: 240, category: 'Experience' }] },
+  { key: 'p18', type: 'farm', licensed: false, firstName: 'Granja', lastName: 'Cosecha',
+    business: 'Granja Regenerativa La Cosecha', city: 'San Miguel', country: 'El Salvador',
+    lat: 13.4900, lng: -88.1900, address: 'Cantón El Jocotal, carretera Litoral', phone: '+503 2669 3300',
+    specialties: ['Nutrition', 'Preventive Care'],
+    languages: ['Spanish'], modality: 'in_person', priceRange: '$', rating: 4.4, reviewCount: 12,
+    verified: false, vtv: false, featured: false, days: [5, 6, 0],
+    description: 'Regenerative farm running seasonal nutrition and healthy-cooking visits.',
+    services: [{ name: 'Seasonal Harvest Visit', description: '3-hour harvest and cooking session.', price: 25, duration: 180, category: 'Experience' }] },
+  { key: 'p19', type: 'workshop', licensed: false, firstName: 'Taller', lastName: 'Respira',
+    business: 'Taller Respira — Breathwork', city: 'San Salvador', country: 'El Salvador',
+    lat: 13.6940, lng: -89.2150, address: 'Colonia Escalón, 87 Avenida Norte 220', phone: '+503 2264 5588',
+    specialties: ['Mindfulness', 'Stress & Anxiety', 'Emotional Wellbeing'],
+    languages: ['Spanish', 'English'], modality: 'virtual', priceRange: '$', rating: 4.8, reviewCount: 36,
+    verified: false, vtv: false, featured: false, days: [1, 3, 5],
+    description: 'Live online breathwork and nervous-system regulation workshops.',
+    services: [{ name: 'Breathwork Workshop', description: '75-minute live online breathwork workshop.', price: 18, duration: 75, category: 'Workshop' }] },
+  { key: 'p20', type: 'workshop', licensed: false, firstName: 'Cocina', lastName: 'Consciente',
+    business: 'Cocina Consciente Workshop', city: 'Guatemala City', country: 'Guatemala',
+    lat: 14.6100, lng: -90.5200, address: 'Zona 4, 4 Grados Norte', phone: '+502 2334 7799',
+    specialties: ['Nutrition', 'Movement & Fitness'],
+    languages: ['Spanish', 'English'], modality: 'hybrid', priceRange: '$$', rating: 4.6, reviewCount: 20,
+    verified: false, vtv: false, featured: false, days: [2, 4, 6],
+    description: 'Hands-on healthy-cooking and mindful-eating workshops, in studio or online.',
+    services: [{ name: 'Healthy Cooking Class', description: '2-hour hands-on healthy cooking class.', price: 30, duration: 120, category: 'Workshop' }] },
+];
+
+// Owner logins for the catalog providers (namespaced, non-principal).
+const INVESTOR_PROVIDER_EMAILS = INVESTOR_PROVIDERS.map((p) => `${p.key}.provider@example.test`);
 
 // All fixture emails this scenario owns — used only for namespaced cleanup.
 const BETA_ALL_EMAILS = [
   BETA_MEMBER_EMAIL,
   BETA_PRACTITIONER_EMAIL,
   ...BETA_SUPPORTING.map((s) => s.email),
+  ...INVESTOR_PROVIDER_EMAILS,
 ];
 
 // Generate (or reuse) strong random passwords for the two PRINCIPAL logins.
@@ -851,6 +1038,59 @@ const BETA_MARIA_JOURNAL = [
   { daysBack: 12, mood: 'great', content: "Slept a full night for the first time in ages and the difference in my energy is night and day. Excited to keep building on this." },
 ];
 
+// Insert one synthetic catalog provider (owner user + profile + services +
+// weekly availability). Namespaced + idempotent: the owner is upserted by a
+// stable email and its provider_profiles row is deleted (cascading services /
+// availability) before re-insert, so re-running yields identical counts.
+async function betaInsertCatalogProvider(client, prov) {
+  const email = `${prov.key}.provider@example.test`;
+  const ownerLanguage = prov.languages.includes('English') && !prov.languages.includes('Spanish')
+    ? 'English' : 'Spanish';
+  const ownerId = await betaUpsertUser(client, email, {
+    firstName: prov.firstName, lastName: prov.lastName, role: 'practitioner',
+    country: prov.country, language: ownerLanguage, lovePoints: 0,
+    onboardingStatus: 'complete', isProvider: true,
+  });
+  // Detach non-cascading FK refs (recommendations) before dropping the profile.
+  await client.query(
+    'UPDATE recommendations SET linked_provider_id=NULL WHERE linked_provider_id IN (SELECT id FROM provider_profiles WHERE user_id=$1)',
+    [ownerId]
+  );
+  await client.query('DELETE FROM provider_profiles WHERE user_id=$1', [ownerId]);
+
+  const meta = { meta: { languages: prov.languages, modality: prov.modality, licensed: prov.licensed, days: prov.days } };
+  const { rows } = await client.query(
+    `INSERT INTO provider_profiles
+       (user_id, provider_type, business_name, description, address, city, country,
+        latitude, longitude, phone, email, hours_of_operation, specialties, price_range,
+        rating, review_count, verified, vtv_certified, featured, status, claimed,
+        approval_status, hidden, auto_confirm_bookings, booking_buffer_minutes)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,
+             'active',true,'approved',false,false,15)
+     RETURNING id`,
+    [ownerId, prov.type, prov.business, prov.description, prov.address, prov.city, prov.country,
+     prov.lat, prov.lng, prov.phone, email, JSON.stringify(meta), JSON.stringify(prov.specialties),
+     prov.priceRange, prov.rating, prov.reviewCount, prov.verified, prov.vtv, prov.featured]
+  );
+  const profileId = rows[0].id;
+
+  for (const s of prov.services) {
+    await client.query(
+      `INSERT INTO provider_services (provider_id, service_name, description, price, currency, duration_minutes, category)
+       VALUES ($1,$2,$3,$4,'USD',$5,$6)`,
+      [profileId, s.name, s.description, s.price, s.duration, s.category]
+    );
+  }
+  for (const dow of prov.days) {
+    await client.query(
+      `INSERT INTO provider_availability (provider_id, day_of_week, start_time, end_time, is_available)
+       VALUES ($1,$2,'09:00:00','17:00:00',true)`,
+      [profileId, dow]
+    );
+  }
+  return profileId;
+}
+
 async function seedBetaScenario() {
   // ---- GUARD: never run against production, and require explicit opt-in. ----
   const { rows: dbRows } = await db.query('SELECT current_database() AS db');
@@ -881,14 +1121,19 @@ async function seedBetaScenario() {
     // to provider_services, provider_availability, provider_time_slots and ALL
     // fixture bookings (bookings.provider_id ON DELETE CASCADE), so re-running
     // yields identical counts with no orphans.
+    await client.query(
+      'UPDATE recommendations SET linked_provider_id=NULL WHERE linked_provider_id IN (SELECT id FROM provider_profiles WHERE user_id=$1)',
+      [reyesId]
+    );
     await client.query('DELETE FROM provider_profiles WHERE user_id=$1', [reyesId]);
 
     const profRes = await client.query(
       `INSERT INTO provider_profiles
          (user_id, provider_type, business_name, description, address, city, country,
-          phone, email, specialties, price_range, rating, review_count, verified, vtv_certified,
+          latitude, longitude, phone, email, hours_of_operation, specialties, price_range,
+          rating, review_count, verified, vtv_certified,
           featured, status, claimed, approval_status, hidden, auto_confirm_bookings, booking_buffer_minutes)
-       VALUES ($1,'doctor',$2,$3,$4,$5,'El Salvador',$6,$7,$8,'$$',4.9,27,true,true,true,
+       VALUES ($1,'doctor',$2,$3,$4,$5,'El Salvador',$6,$7,$8,$9,$10,$11,'$$',4.9,27,true,true,true,
                'active',true,'approved',false,false,15)
        RETURNING id`,
       [
@@ -897,8 +1142,10 @@ async function seedBetaScenario() {
         'Root-cause, whole-person care blending functional medicine with nervous-system and lifestyle work. Helping members calm stress, restore sleep, and rebuild lasting vitality.',
         'Calle La Reforma 123, Colonia San Benito',
         'San Salvador',
+        13.6929, -89.2182,
         '+503 2200 1234',
         BETA_PRACTITIONER_EMAIL,
+        JSON.stringify({ meta: { languages: ['Spanish', 'English'], modality: 'hybrid', licensed: true, days: [1, 2, 3, 4, 5] } }),
         JSON.stringify(['Stress & Anxiety', 'Sleep', 'Optimal Health', 'Energy & Vitality']),
       ]
     );
@@ -1006,6 +1253,15 @@ async function seedBetaScenario() {
     await betaInsertBooking(client, { patientId: supporting['ana.demo@example.test'], providerId: profileId, serviceId: svcFollowUp, price: 75, dayOffset: -15, startHour: 13, durationMin: 30, status: 'cancelled', cancellationReason: 'Unable to attend — will rebook.' });
     await betaInsertBooking(client, { patientId: supporting['pablo.demo@example.test'], providerId: profileId, serviceId: svcConsult, price: 120, dayOffset: -25, startHour: 16, durationMin: 60, status: 'completed' });
 
+    // --- InvestorDemoV1 marketplace catalog (fictional practitioner directory) ---
+    // Adds the breadth the marketplace + map showcase: many specialties/wellness
+    // categories, several public cities, EN/ES, virtual/in-person/hybrid, licensed
+    // vs wellness, varied prices and availability. Each is fully synthetic and
+    // namespaced; none is a principal login.
+    for (const prov of INVESTOR_PROVIDERS) {
+      await betaInsertCatalogProvider(client, prov);
+    }
+
     await client.query('COMMIT');
     console.log('✓ beta scenario committed');
   } catch (e) {
@@ -1023,7 +1279,32 @@ async function seedBetaScenario() {
   counts.provider_availability = (await db.query('SELECT COUNT(*)::int c FROM provider_availability WHERE provider_id = (SELECT id FROM provider_profiles WHERE user_id=(SELECT id FROM users WHERE email=$1))', [BETA_PRACTITIONER_EMAIL])).rows[0].c;
   counts.bookings = (await db.query('SELECT COUNT(*)::int c FROM bookings WHERE provider_id = (SELECT id FROM provider_profiles WHERE user_id=(SELECT id FROM users WHERE email=$1))', [BETA_PRACTITIONER_EMAIL])).rows[0].c;
   counts.notifications = (await db.query('SELECT COUNT(*)::int c FROM notifications WHERE user_id = ANY(SELECT id FROM users WHERE email = ANY($1))', [BETA_ALL_EMAILS])).rows[0].c;
-  console.log('✓ Beta scenario fixture counts:', JSON.stringify(counts));
+
+  // Marketplace breadth across the whole InvestorDemoV1 fixture (principal + catalog).
+  const allProviderEmails = [BETA_PRACTITIONER_EMAIL, ...INVESTOR_PROVIDER_EMAILS];
+  counts.marketplace_providers = (await db.query(
+    "SELECT COUNT(*)::int c FROM provider_profiles WHERE status='active' AND hidden=false AND user_id = ANY(SELECT id FROM users WHERE email = ANY($1))",
+    [allProviderEmails])).rows[0].c;
+  counts.provider_types = (await db.query(
+    'SELECT COUNT(DISTINCT provider_type)::int c FROM provider_profiles WHERE user_id = ANY(SELECT id FROM users WHERE email = ANY($1))',
+    [allProviderEmails])).rows[0].c;
+  counts.cities = (await db.query(
+    'SELECT COUNT(DISTINCT city)::int c FROM provider_profiles WHERE user_id = ANY(SELECT id FROM users WHERE email = ANY($1))',
+    [allProviderEmails])).rows[0].c;
+  counts.catalog_services = (await db.query(
+    'SELECT COUNT(*)::int c FROM provider_services WHERE provider_id = ANY(SELECT id FROM provider_profiles WHERE user_id = ANY(SELECT id FROM users WHERE email = ANY($1)))',
+    [allProviderEmails])).rows[0].c;
+  const specialtyRows = (await db.query(
+    'SELECT specialties FROM provider_profiles WHERE user_id = ANY(SELECT id FROM users WHERE email = ANY($1))',
+    [allProviderEmails])).rows;
+  const specialtySet = new Set();
+  for (const r of specialtyRows) {
+    const arr = Array.isArray(r.specialties) ? r.specialties : (r.specialties ? JSON.parse(r.specialties) : []);
+    for (const s of arr) specialtySet.add(s);
+  }
+  counts.distinct_specialties = specialtySet.size;
+  console.log('✓ InvestorDemoV1 fixture counts:', JSON.stringify(counts));
+  console.log('✓ Specialties/wellness categories:', JSON.stringify([...specialtySet].sort()));
   console.log(`✓ Principal credentials written to ${BETA_CREDS_PATH} (0600, not printed here).`);
   console.log('✓ Member principal:', BETA_MEMBER_EMAIL, '| Practitioner principal:', BETA_PRACTITIONER_EMAIL);
 }

@@ -138,8 +138,8 @@ async function transition(req, res, { id, next, requireFrom, reasonDefault, noti
 router.put('/:id/confirm', authMiddleware, providerOnly, (req, res) => transition(req, res, {
   id: req.params.id, next: 'confirmed', requireFrom: ['pending'], reasonDefault: 'Confirmed by provider',
   notify: async (b) => {
-    await createNotification(b.patient_id, 'booking', '✅ Appointment Confirmed',
-      `Your ${b.service_name || 'appointment'} with ${b.business_name} on ${String(b.booking_date).slice(0, 10)} at ${b.start_time} is confirmed.`,
+    await createNotification(b.patient_id, 'booking', 'Solaris',
+      'Your booking status changed. Sign in to Solaris for details.',
       { bookingId: b.id, role: 'patient' });
     await sendBookingEmail({ userId: b.patient_id, toEmail: b.patient_email, template: 'booking_confirmed' });
     // Solaris inbox: confirmation message + first-booking intake request.

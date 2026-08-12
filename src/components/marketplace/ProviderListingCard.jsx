@@ -21,10 +21,23 @@ function fmtDistance(km) {
   return `${Math.round(km)} km`;
 }
 
+const MODALITY_LABEL = { virtual: 'Virtual', in_person: 'In-person', hybrid: 'Virtual & in-person' };
+
+// Non-schema attributes (modality/languages) live in hours_of_operation.meta —
+// parse defensively (may arrive as a string or already-parsed object).
+function listingMeta(p) {
+  let obj = p?.hours_of_operation;
+  if (typeof obj === 'string') { try { obj = JSON.parse(obj); } catch { obj = null; } }
+  return (obj && typeof obj === 'object' && obj.meta) ? obj.meta : {};
+}
+
 export default function ProviderListingCard({ provider, onOpen, onHover, active }) {
   const p = provider;
   const cover = p.cover_photo_url || p.profile_photo_url;
   const dist = fmtDistance(p.distance_km);
+  const meta = listingMeta(p);
+  const modality = MODALITY_LABEL[meta.modality];
+  const langs = Array.isArray(meta.languages) ? meta.languages : [];
 
   return (
     <article
@@ -51,6 +64,12 @@ export default function ProviderListingCard({ provider, onOpen, onHover, active 
         </div>
         <h4 className="plc-name">{p.business_name}</h4>
         {p.description && <p className="plc-desc">{p.description}</p>}
+        {(modality || langs.length > 0) && (
+          <div className="plc-chips">
+            {modality && <span className="plc-chip plc-chip-mode">{modality}</span>}
+            {langs.slice(0, 2).map((l) => <span key={l} className="plc-chip">{l}</span>)}
+          </div>
+        )}
         <div className="plc-meta">
           <span className="plc-loc"><MapPin size={13} /> {p.city || p.address || 'El Salvador'}</span>
           {p.price_range && <span className="plc-price">{p.price_range}</span>}
@@ -83,6 +102,10 @@ const CSS = `
   margin:0;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .luca .plc-desc{font-size:12.5px;color:var(--muted);margin:0;line-height:1.45;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.luca .plc-chips{display:flex;flex-wrap:wrap;gap:5px}
+.luca .plc-chip{font-size:10.5px;font-weight:700;color:var(--muted-2);background:var(--surface-2);
+  border:1px solid var(--line);border-radius:999px;padding:2px 8px;line-height:1.5}
+.luca .plc-chip-mode{color:var(--teal-d);border-color:var(--mint);background:var(--mint-soft)}
 .luca .plc-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:auto}
 .luca .plc-loc{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--muted-2);min-width:0}
 .luca .plc-loc svg{flex-shrink:0}

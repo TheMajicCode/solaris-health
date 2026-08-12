@@ -223,9 +223,9 @@ router.post('/request', authMiddleware, async (req, res) => {
 
     if (autoConfirm) {
       await createNotification(
-        req.user.userId, 'booking', '✅ Appointment Confirmed',
-        `Your ${serviceName} with ${provider.business_name} on ${date} at ${startTime} is confirmed.`,
-        { bookingId: booking.id, role: 'patient', date, startTime }
+        req.user.userId, 'booking', 'Solaris',
+        'Your booking status changed. Sign in to Solaris for details.',
+        { bookingId: booking.id, role: 'patient' }
       );
       await sendBookingEmail({
         userId: req.user.userId, toEmail: patient.rows[0]?.email, template: 'booking_confirmed',
