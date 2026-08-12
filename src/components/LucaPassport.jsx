@@ -562,19 +562,20 @@ function navForRole(role, isProvider) {
       ],
     },
     {
+      // Intelligence folds into LUCA Coach; Media + Inbox fold into Journal /
+      // Messages respectively — each now a sub-tab of its parent, no duplication.
       group: 'Salud', color: '#36C9A9', items: [
         { id: 'health', label: 'Health Passport', icon: HeartPulse },
         { id: 'coach', label: 'LUCA Coach', icon: Bot },
-        { id: 'intelligence', label: 'Intelligence', icon: Brain },
         { id: 'journal', label: 'Journal', icon: BookOpen },
-        { id: 'media', label: 'Media', icon: Headphones },
-        { id: 'inbox', label: 'Inbox', icon: Inbox, badgeKey: 'inbox' },
         { id: 'messages', label: 'Messages', icon: MessageSquare, badgeKey: 'messages' },
       ],
     },
     {
+      // Economic Passport now carries Overview / Contributions / Network as
+      // sub-tabs, so it is a real destination (no longer "coming soon").
       group: 'Tierra', color: '#C58A53', items: [
-        { id: 'wallet', label: 'Economic Passport', icon: EconomicPassportIcon, comingSoon: true },
+        { id: 'wallet', label: 'Economic Passport', icon: EconomicPassportIcon },
       ],
     },
   ];
@@ -622,13 +623,9 @@ function solarisNav(effectiveRole) {
       ],
     });
   }
-  groups.push({
-    group: 'Sovereign', color: '#9FE7D6', items: [
-      { id: 'gps-map', label: 'The Network', icon: MapPin },
-      { id: 'contributions', label: 'Contributions', icon: Award },
-      { id: 'identity', label: 'Identity & Data', icon: ShieldCheck },
-    ],
-  });
+  // The former "Sovereign" sidebar group is consolidated: The Network and
+  // Contributions are now sub-tabs of the Economic Passport, and Identity & Data
+  // lives in the top-right profile menu. No standalone sidebar entries remain.
   return groups;
 }
 
@@ -786,7 +783,76 @@ const TAB_META = {
   'admin-finance': { title: 'Finance', sub: 'Platform payment reconciliation and the GPS settlement queue.' },
   'admin-system': { title: 'System', sub: 'Platform health, the living GPS economy, and the activity timeline.' },
   'admin-settings': { title: 'Settings', sub: 'Platform configuration, data protection, and audit retention.' },
+  // Account settings (member) — one destination, five sections.
+  account: { title: 'Settings', sub: 'Your profile, preferences, notifications, security, and data — all in one place.' },
 };
+
+/* ============================== NAVIGATION STATE (URL-backed) ==============================
+   The authenticated app keeps its area + nested sub-tab (and the member/practitioner
+   portal view) in the URL query string, so bookmarks, refresh, and browser Back/Forward
+   all restore the exact view. The pathname is untouched ("/"), so /find and /intake keep
+   working. Old, now-consolidated nav targets redirect to their new parent tab + sub-tab. */
+
+// Legacy (pre-consolidation) tab ids → their new { tab, sub } home.
+export const LEGACY_TAB_MAP = {
+  intelligence: { tab: 'coach', sub: 'intelligence' },
+  media: { tab: 'journal', sub: 'media' },
+  inbox: { tab: 'messages', sub: 'inbox' },
+  contributions: { tab: 'wallet', sub: 'contributions' },
+  'gps-map': { tab: 'wallet', sub: 'network' },
+  network: { tab: 'wallet', sub: 'network' },
+};
+
+// Areas that own a set of nested sub-tabs, with the default (first) sub-tab.
+export const SUBTABS = {
+  coach: { tabs: ['coach', 'intelligence'], def: 'coach' },
+  journal: { tabs: ['journal', 'growth', 'media'], def: 'journal' },
+  messages: { tabs: ['conversations', 'inbox'], def: 'conversations' },
+  wallet: { tabs: ['overview', 'contributions', 'network'], def: 'overview' },
+  account: { tabs: ['profile', 'preferences', 'notifications', 'security', 'privacy'], def: 'profile' },
+};
+
+// Canonicalise a raw (possibly legacy) tab + sub into a valid { tab, sub }.
+export function resolveNav(rawTab, rawSub) {
+  let tab = rawTab || 'dashboard';
+  let sub = rawSub || null;
+  if (LEGACY_TAB_MAP[tab]) {
+    const m = LEGACY_TAB_MAP[tab];
+    tab = m.tab;
+    if (!sub) sub = m.sub;
+  }
+  const conf = SUBTABS[tab];
+  if (conf) {
+    if (!sub || !conf.tabs.includes(sub)) sub = conf.def;
+  } else {
+    sub = null;
+  }
+  return { tab, sub };
+}
+
+// Read the current nav intent from the URL query string.
+function readUrlNav() {
+  try {
+    const p = new URLSearchParams(window.location.search);
+    return { tab: p.get('area'), sub: p.get('sub'), portal: p.get('portal') };
+  } catch {
+    return { tab: null, sub: null, portal: null };
+  }
+}
+
+// Push a canonical nav (+ optional portal view) into the URL without touching the pathname.
+function writeUrlNav(tab, sub, portalView, replace = false) {
+  try {
+    const p = new URLSearchParams(window.location.search);
+    if (tab) p.set('area', tab); else p.delete('area');
+    if (sub) p.set('sub', sub); else p.delete('sub');
+    if (portalView) p.set('portal', portalView); else p.delete('portal');
+    const qs = p.toString();
+    const url = `${window.location.pathname}${qs ? '?' + qs : ''}`;
+    if (replace) window.history.replaceState({ tab, sub, portalView }, '', url);
+    else window.history.pushState({ tab, sub, portalView }, '', url);
+  } catch { /* history unavailable — state still lives in React */ }
+}
 
 /* ============================== DAILY CHECK-IN ============================== */
 const CI_DIMENSIONS = [
@@ -2886,10 +2952,17 @@ function HabitTracker({ habits, ticked, onToggle, onAdd, onDelete }) {
   );
 }
 
-function JournalPage({ user, go }) {
+function JournalPage({ user, go, forcedView, hideToggle }) {
   const { setPendingProviderId } = useApp();
   const { playById } = useAudio();
-  const [view, setView] = useState('grow'); // grow | reflect
+  // `view` is normally internal (Grow / Reflect toggle). When the Journal area
+  // wrapper drives it (Journal = reflect, Growth = grow), it passes `forcedView`
+  // and `hideToggle` so the outer sub-tab bar is the single source of truth.
+  const [view, setView] = useState(forcedView || 'grow'); // grow | reflect
+  useEffect(() => {
+    if (forcedView && forcedView !== view) setView(forcedView);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forcedView]);
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [mood, setMood] = useState('good');
@@ -3023,7 +3096,7 @@ function JournalPage({ user, go }) {
               ))}
             </div>
           </div>
-          <div className="row" style={{ gap: 4, background: '#F1F5F3', borderRadius: 999, padding: 4, flex: 'none' }}>
+          <div className="row" style={{ gap: 4, background: '#F1F5F3', borderRadius: 999, padding: 4, flex: 'none', display: hideToggle ? 'none' : undefined }}>
             {[{ k: 'grow', label: 'Grow', icon: Compass }, { k: 'reflect', label: 'Reflect', icon: BookOpen }].map((v) => (
               <button key={v.k} type="button" onClick={() => setView(v.k)}
                 className="row" style={{ gap: 6, alignItems: 'center', border: 'none', cursor: 'pointer', borderRadius: 999, padding: '8px 16px', fontSize: 13, fontWeight: 700,
@@ -5163,7 +5236,530 @@ function InboxPage({ user, go, onUnread }) {
   );
 }
 
-function TabPage({ tab, user, go, effectiveRole, onUnread, onInboxUnread, onBecomeProvider, onApprovalStats, onBookings }) {
+/* ============================== SUB-TAB BAR ==============================
+   A small, accessible pill bar used by the consolidated areas (LUCA Coach,
+   Journal, Messages, Economic Passport, Settings). Reuses the existing visual
+   language — mint-tinted active pill on a soft neutral track. */
+function SubTabs({ items, active, onSelect, ariaLabel }) {
+  const onKeyDown = (e, idx) => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    e.preventDefault();
+    const dir = e.key === 'ArrowRight' ? 1 : -1;
+    const next = (idx + dir + items.length) % items.length;
+    onSelect(items[next].id);
+  };
+  return (
+    <div role="tablist" aria-label={ariaLabel || 'Sections'} className="row wrap" style={{ gap: 4, background: '#F1F5F3', borderRadius: 999, padding: 4, marginBottom: 18, width: 'fit-content', maxWidth: '100%' }}>
+      {items.map((it, idx) => {
+        const Icon = it.icon;
+        const on = active === it.id;
+        return (
+          <button
+            key={it.id}
+            role="tab"
+            aria-selected={on}
+            tabIndex={on ? 0 : -1}
+            type="button"
+            onClick={() => onSelect(it.id)}
+            onKeyDown={(e) => onKeyDown(e, idx)}
+            className="row"
+            style={{ gap: 7, alignItems: 'center', border: 'none', cursor: 'pointer', borderRadius: 999, padding: '8px 15px', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap',
+              background: on ? '#fff' : 'transparent', color: on ? 'var(--ink)' : 'var(--muted,#8AA09C)',
+              boxShadow: on ? '0 1px 4px rgba(0,0,0,.08)' : 'none' }}
+          >
+            {Icon && <Icon size={15} strokeWidth={2} />} {it.label}
+            {it.badge > 0 && <span className="badge" style={{ background: 'var(--gold)', color: '#3C2807', borderRadius: 999, fontSize: 10.5, fontWeight: 700, padding: '1px 7px', marginLeft: 2 }}>{it.badge}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ---- Consolidated areas: each renders a sub-tab bar over EXISTING page
+   components (no duplication) and reflects the nested sub-tab from the URL. ---- */
+
+function CoachArea({ user, go, sub }) {
+  const active = SUBTABS.coach.tabs.includes(sub) ? sub : SUBTABS.coach.def;
+  return (
+    <div>
+      <SubTabs
+        ariaLabel="LUCA Coach sections"
+        active={active}
+        onSelect={(id) => go('coach', id)}
+        items={[
+          { id: 'coach', label: 'Coach', icon: Bot },
+          { id: 'intelligence', label: 'Intelligence', icon: Brain },
+        ]}
+      />
+      {active === 'intelligence'
+        ? <ErrorBoundary><IntelligencePage user={user} go={go} /></ErrorBoundary>
+        : <CoachPage user={user} go={go} />}
+    </div>
+  );
+}
+
+function JournalArea({ user, go, sub }) {
+  const active = SUBTABS.journal.tabs.includes(sub) ? sub : SUBTABS.journal.def;
+  return (
+    <div>
+      <SubTabs
+        ariaLabel="Journal sections"
+        active={active}
+        onSelect={(id) => go('journal', id)}
+        items={[
+          { id: 'journal', label: 'Journal', icon: BookOpen },
+          { id: 'growth', label: 'Growth', icon: Compass },
+          { id: 'media', label: 'Media', icon: Headphones },
+        ]}
+      />
+      {active === 'media'
+        ? <ErrorBoundary><MediaPage user={user} go={go} /></ErrorBoundary>
+        : <ErrorBoundary><JournalPage user={user} go={go} forcedView={active === 'growth' ? 'grow' : 'reflect'} hideToggle /></ErrorBoundary>}
+    </div>
+  );
+}
+
+function MessagesArea({ user, go, sub, onUnread, onInboxUnread }) {
+  const active = SUBTABS.messages.tabs.includes(sub) ? sub : SUBTABS.messages.def;
+  return (
+    <div>
+      <SubTabs
+        ariaLabel="Messages sections"
+        active={active}
+        onSelect={(id) => go('messages', id)}
+        items={[
+          { id: 'conversations', label: 'Conversations', icon: MessageSquare },
+          { id: 'inbox', label: 'Inbox', icon: Inbox },
+        ]}
+      />
+      {active === 'inbox'
+        ? <ErrorBoundary><InboxPage user={user} go={go} onUnread={onInboxUnread} /></ErrorBoundary>
+        : <SecureChat user={user} onUnread={onUnread} />}
+    </div>
+  );
+}
+
+function EconomicPassportArea({ user, go, sub }) {
+  const active = SUBTABS.wallet.tabs.includes(sub) ? sub : SUBTABS.wallet.def;
+  return (
+    <div>
+      <SubTabs
+        ariaLabel="Economic Passport sections"
+        active={active}
+        onSelect={(id) => go('wallet', id)}
+        items={[
+          { id: 'overview', label: 'Overview', icon: EconomicPassportIcon },
+          { id: 'contributions', label: 'Contributions', icon: Award },
+          { id: 'network', label: 'Network', icon: MapPin },
+        ]}
+      />
+      {active === 'contributions'
+        ? <ErrorBoundary><ContributionLedger user={user} /></ErrorBoundary>
+        : active === 'network'
+          ? <ErrorBoundary><GPSMapView /></ErrorBoundary>
+          : <ErrorBoundary><EconomicPassportPage user={user} /></ErrorBoundary>}
+    </div>
+  );
+}
+
+/* ============================== ACCOUNT SETTINGS ==============================
+   One destination, five sections. Every control here maps to an EXISTING,
+   genuinely-persisting endpoint (PATCH /users/me, PUT /users/profile, avatar
+   upload, data export). PUT /users/profile is a full upsert, so we always load
+   the current profile, merge the changed fields, and resubmit the whole object.
+   No decorative toggles, no password field (no endpoint), and private keys /
+   recovery phrases are never shown or stored. */
+
+// Map a loaded user_profiles row (snake_case) to the PUT /profile body (camelCase),
+// preserving every field so a partial save never wipes the rest.
+function profileRowToBody(row) {
+  const r = row || {};
+  let goals = [];
+  try { goals = Array.isArray(r.goals_json) ? r.goals_json : JSON.parse(r.goals_json || '[]'); } catch { goals = []; }
+  return {
+    dateOfBirth: r.date_of_birth || null,
+    sexAtBirth: r.sex_at_birth || null,
+    genderIdentity: r.gender_identity || null,
+    heightCm: r.height_cm || null,
+    weightKg: r.weight_kg || null,
+    timezone: r.timezone || null,
+    goalsText: r.goals_text || null,
+    goals,
+    mainConcernsText: r.main_concerns_text || null,
+    budgetRange: r.budget_range || null,
+    carePreference: r.care_preference || null,
+    travelWillingness: r.travel_willingness || null,
+    wantsPractitionerGuidance: r.wants_practitioner_guidance ?? true,
+    wantsWorkshops: r.wants_workshops ?? true,
+    wantsRoutines: r.wants_routines ?? true,
+    consentPrivacy: r.consent_privacy ?? false,
+    consentAiGuidance: r.consent_ai_guidance ?? false,
+    consentMarketing: r.consent_marketing ?? false,
+  };
+}
+
+const SET_INPUT = { width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid var(--line,#e3ece8)', background: '#fff', color: 'var(--ink)', fontSize: 14, fontFamily: 'inherit', outline: 'none' };
+const SET_LABEL = { display: 'block', fontSize: 12.5, fontWeight: 700, color: 'var(--ink)', marginBottom: 6 };
+
+function SetField({ label, children, hint }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <label style={SET_LABEL}>{label}</label>
+      {children}
+      {hint && <div className="tiny muted" style={{ marginTop: 5 }}>{hint}</div>}
+    </div>
+  );
+}
+
+function SetToggle({ label, hint, checked, onChange, disabled }) {
+  return (
+    <button type="button" role="switch" aria-checked={!!checked} disabled={disabled}
+      onClick={() => !disabled && onChange(!checked)}
+      className="row" style={{ width: '100%', textAlign: 'left', gap: 12, alignItems: 'flex-start', justifyContent: 'space-between',
+        background: 'transparent', border: 'none', cursor: disabled ? 'default' : 'pointer', padding: '10px 0' }}>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: 'var(--ink)' }}>{label}</span>
+        {hint && <span className="tiny muted" style={{ display: 'block', marginTop: 3 }}>{hint}</span>}
+      </span>
+      <span aria-hidden="true" style={{ flex: 'none', width: 42, height: 24, borderRadius: 999, background: checked ? 'var(--mint)' : '#cdd9d4', position: 'relative', transition: 'background .15s' }}>
+        <span style={{ position: 'absolute', top: 3, left: checked ? 21 : 3, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .15s', boxShadow: '0 1px 3px rgba(0,0,0,.2)' }} />
+      </span>
+    </button>
+  );
+}
+
+function SettingsPage({ user, go, sub }) {
+  const { refreshUser, logout } = useApp();
+  const active = SUBTABS.account.tabs.includes(sub) ? sub : SUBTABS.account.def;
+  const [profile, setProfile] = useState(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+
+  // Account (users table) form
+  const [acct, setAcct] = useState({ firstName: '', lastName: '', country: '', city: '', phone: '', bio: '', language: '' });
+  const [savingAcct, setSavingAcct] = useState(false);
+  const [savingSection, setSavingSection] = useState(null); // 'preferences' | 'notifications' | 'privacy'
+  const [downloading, setDownloading] = useState(false);
+
+  useEffect(() => {
+    setAcct({
+      firstName: user?.firstName || '',
+      lastName: user?.lastName || '',
+      country: user?.country || '',
+      city: user?.city || '',
+      phone: user?.phone || '',
+      bio: user?.bio || '',
+      language: user?.language || '',
+    });
+  }, [user]);
+
+  useEffect(() => {
+    let on = true;
+    api.getProfile()
+      .then((r) => { if (on) setProfile(r.profile || {}); })
+      .catch(() => { if (on) setProfile({}); })
+      .finally(() => { if (on) setLoadingProfile(false); });
+    return () => { on = false; };
+  }, []);
+
+  // Persist a set of user_profiles changes by merging into the full upsert body.
+  const saveProfileMerged = async (changes, sectionKey) => {
+    setSavingSection(sectionKey);
+    try {
+      const body = { ...profileRowToBody(profile), ...changes };
+      const r = await api.saveProfile(body);
+      setProfile(r.profile || { ...(profile || {}), ...changes });
+      toast.success('Saved');
+    } catch {
+      toast.error('Could not save — please try again.');
+    } finally {
+      setSavingSection(null);
+    }
+  };
+
+  const saveAccount = async () => {
+    setSavingAcct(true);
+    try {
+      await api.updateMe({
+        first_name: acct.firstName || null,
+        last_name: acct.lastName || null,
+        country: acct.country || null,
+        city: acct.city || null,
+        phone: acct.phone || null,
+        bio: acct.bio || null,
+        language: acct.language || null,
+      });
+      await refreshUser?.();
+      toast.success('Profile updated');
+    } catch {
+      toast.error('Could not update your profile.');
+    } finally {
+      setSavingAcct(false);
+    }
+  };
+
+  const onAvatarPick = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 4_000_000) { toast.error('Image too large (max ~4MB)'); return; }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        await api.uploadPhoto(String(reader.result));
+        await refreshUser?.();
+        toast.success('Photo updated');
+      } catch { toast.error('Could not upload photo.'); }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const downloadData = async () => {
+    setDownloading(true);
+    try {
+      const blob = await api.downloadVault();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'solaris-vault-export.zip';
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch { toast.error('Export failed — please try again.'); }
+    finally { setDownloading(false); }
+  };
+
+  const btn = (label, onClick, busy) => (
+    <button type="button" onClick={onClick} disabled={busy}
+      style={{ padding: '10px 18px', borderRadius: 10, border: 'none', cursor: busy ? 'default' : 'pointer', background: 'var(--mint)', color: '#04231d', fontSize: 13.5, fontWeight: 700, opacity: busy ? 0.6 : 1 }}>
+      {busy ? 'Saving…' : label}
+    </button>
+  );
+
+  const p = profile || {};
+
+  return (
+    <div>
+      <SubTabs
+        ariaLabel="Settings sections"
+        active={active}
+        onSelect={(id) => go('account', id)}
+        items={[
+          { id: 'profile', label: 'Profile & Account', icon: UserCog },
+          { id: 'preferences', label: 'Preferences', icon: Settings },
+          { id: 'notifications', label: 'Notifications', icon: Bell },
+          { id: 'security', label: 'Security', icon: Lock },
+          { id: 'privacy', label: 'Privacy & Data', icon: ShieldCheck },
+        ]}
+      />
+
+      {active === 'profile' && (
+        <Card style={{ maxWidth: 640 }}>
+          <div className="row" style={{ gap: 14, alignItems: 'center', marginBottom: 20 }}>
+            <Avatar name={acct.firstName ? `${acct.firstName} ${acct.lastName}` : (user?.email || 'Member')} size={56} />
+            <div>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 14px', borderRadius: 10, border: '1px solid var(--line,#e3ece8)', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: 'var(--ink)' }}>
+                <Upload size={15} /> Change photo
+                <input type="file" accept="image/*" onChange={onAvatarPick} style={{ display: 'none' }} />
+              </label>
+              <div className="tiny muted" style={{ marginTop: 6 }}>JPG or PNG, up to ~4MB.</div>
+            </div>
+          </div>
+          <div className="grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0 18px' }}>
+            <SetField label="First name"><input style={SET_INPUT} value={acct.firstName} onChange={(e) => setAcct({ ...acct, firstName: e.target.value })} /></SetField>
+            <SetField label="Last name"><input style={SET_INPUT} value={acct.lastName} onChange={(e) => setAcct({ ...acct, lastName: e.target.value })} /></SetField>
+            <SetField label="Country"><input style={SET_INPUT} value={acct.country} onChange={(e) => setAcct({ ...acct, country: e.target.value })} /></SetField>
+            <SetField label="City"><input style={SET_INPUT} value={acct.city} onChange={(e) => setAcct({ ...acct, city: e.target.value })} /></SetField>
+            <SetField label="Phone"><input style={SET_INPUT} value={acct.phone} onChange={(e) => setAcct({ ...acct, phone: e.target.value })} /></SetField>
+            <SetField label="Email" hint="Your sign-in email can't be changed here."><input style={{ ...SET_INPUT, background: '#f4f7f6', color: 'var(--muted,#8AA09C)' }} value={user?.email || ''} disabled /></SetField>
+          </div>
+          <SetField label="About you"><textarea style={{ ...SET_INPUT, minHeight: 82, resize: 'vertical' }} value={acct.bio} onChange={(e) => setAcct({ ...acct, bio: e.target.value })} /></SetField>
+          {btn('Save changes', saveAccount, savingAcct)}
+        </Card>
+      )}
+
+      {active === 'preferences' && (
+        <Card style={{ maxWidth: 640 }}>
+          {loadingProfile ? <CardSkeleton rows={4} /> : (
+            <>
+              <SetField label="Language" hint="Used across your passport where translations are available.">
+                <select style={SET_INPUT} value={acct.language} onChange={(e) => setAcct({ ...acct, language: e.target.value })}>
+                  <option value="">Select…</option>
+                  <option value="en">English</option>
+                  <option value="es">Español</option>
+                </select>
+              </SetField>
+              <SetField label="Time zone" hint="Keeps reminders and timestamps aligned to your day.">
+                <input style={SET_INPUT} placeholder="e.g. America/El_Salvador" defaultValue={p.timezone || ''} onBlur={(e) => { p.timezone = e.target.value; }} id="set-tz" />
+              </SetField>
+              <SetField label="Care preference">
+                <select style={SET_INPUT} defaultValue={p.care_preference || ''} id="set-care">
+                  <option value="">No preference</option>
+                  <option value="in_person">In person</option>
+                  <option value="remote">Remote</option>
+                  <option value="hybrid">Hybrid</option>
+                </select>
+              </SetField>
+              <SetField label="Budget range">
+                <select style={SET_INPUT} defaultValue={p.budget_range || ''} id="set-budget">
+                  <option value="">No preference</option>
+                  <option value="low">Economical</option>
+                  <option value="medium">Moderate</option>
+                  <option value="high">Premium</option>
+                </select>
+              </SetField>
+              <div style={{ borderTop: '1px solid var(--line,#e3ece8)', margin: '4px 0 8px' }} />
+              <SetToggle label="Suggest guided routines" hint="Let LUCA offer daily routines tailored to your journey." checked={p.wants_routines ?? true} onChange={(v) => { setProfile({ ...p, wants_routines: v }); }} />
+              <SetToggle label="Invite me to workshops" hint="Occasional live sessions from Solaris practitioners." checked={p.wants_workshops ?? true} onChange={(v) => { setProfile({ ...p, wants_workshops: v }); }} />
+              <div style={{ marginTop: 14 }}>
+                {btn('Save preferences', () => {
+                  const tz = document.getElementById('set-tz')?.value || null;
+                  const care = document.getElementById('set-care')?.value || null;
+                  const budget = document.getElementById('set-budget')?.value || null;
+                  // language lives on the users table
+                  api.updateMe({ language: acct.language || null }).then(() => refreshUser?.()).catch(() => {});
+                  return saveProfileMerged({ timezone: tz, carePreference: care, budgetRange: budget, wantsRoutines: p.wants_routines ?? true, wantsWorkshops: p.wants_workshops ?? true }, 'preferences');
+                }, savingSection === 'preferences')}
+              </div>
+            </>
+          )}
+        </Card>
+      )}
+
+      {active === 'notifications' && (
+        <Card style={{ maxWidth: 640 }}>
+          {loadingProfile ? <CardSkeleton rows={3} /> : (
+            <>
+              <p className="tiny muted" style={{ marginTop: 0, marginBottom: 8 }}>Choose what Solaris may send you. These preferences are stored with your profile.</p>
+              <SetToggle label="Practitioner guidance" hint="Nudges and check-ins from practitioners supporting your journey." checked={p.wants_practitioner_guidance ?? true} onChange={(v) => setProfile({ ...p, wants_practitioner_guidance: v })} />
+              <SetToggle label="Product & community updates" hint="Occasional news, workshops, and community highlights." checked={p.consent_marketing ?? false} onChange={(v) => setProfile({ ...p, consent_marketing: v })} />
+              <div style={{ marginTop: 14 }}>
+                {btn('Save notifications', () => saveProfileMerged({ wantsPractitionerGuidance: p.wants_practitioner_guidance ?? true, consentMarketing: p.consent_marketing ?? false }, 'notifications'), savingSection === 'notifications')}
+              </div>
+            </>
+          )}
+        </Card>
+      )}
+
+      {active === 'security' && (
+        <Card style={{ maxWidth: 640 }}>
+          <SetField label="Public identity key" hint="Your public Nostr key (npub). This is safe to share — it is not your private key.">
+            <div className="row" style={{ gap: 8, alignItems: 'center' }}>
+              <input style={{ ...SET_INPUT, background: '#f4f7f6', fontFamily: 'monospace', fontSize: 12.5 }} value={user?.nostrNpub || 'Not linked yet'} readOnly />
+              {user?.nostrNpub && (
+                <button type="button" title="Copy" onClick={() => { navigator.clipboard?.writeText(user.nostrNpub); toast.success('Copied'); }} style={{ flex: 'none', padding: 10, borderRadius: 10, border: '1px solid var(--line,#e3ece8)', background: '#fff', cursor: 'pointer', color: 'var(--ink)' }}><Copy size={15} /></button>
+              )}
+            </div>
+          </SetField>
+          {user?.keyCustody && (
+            <SetField label="Key custody">
+              <input style={{ ...SET_INPUT, background: '#f4f7f6' }} value={user.keyCustody === 'self' ? 'Self-custody — you hold your keys' : String(user.keyCustody)} readOnly />
+            </SetField>
+          )}
+          <div style={{ borderTop: '1px solid var(--line,#e3ece8)', margin: '10px 0 16px' }} />
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>Session</div>
+          <p className="tiny muted" style={{ marginTop: 0, marginBottom: 12 }}>Signing out ends this session and clears it from this device.</p>
+          <button type="button" onClick={logout} className="row" style={{ gap: 8, alignItems: 'center', padding: '10px 16px', borderRadius: 10, border: '1px solid var(--line,#e3ece8)', background: '#fff', color: '#b4432f', fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}>
+            <LogOut size={15} /> Sign out
+          </button>
+        </Card>
+      )}
+
+      {active === 'privacy' && (
+        <Card style={{ maxWidth: 640 }}>
+          {loadingProfile ? <CardSkeleton rows={3} /> : (
+            <>
+              <SetToggle label="Privacy consent" hint="Store and process my health data to power my passport." checked={p.consent_privacy ?? false} onChange={(v) => setProfile({ ...p, consent_privacy: v })} />
+              <SetToggle label="AI guidance consent" hint="Allow LUCA to use my data to personalise guidance." checked={p.consent_ai_guidance ?? false} onChange={(v) => setProfile({ ...p, consent_ai_guidance: v })} />
+              <div style={{ marginTop: 8, marginBottom: 18 }}>
+                {btn('Save privacy choices', () => saveProfileMerged({ consentPrivacy: p.consent_privacy ?? false, consentAiGuidance: p.consent_ai_guidance ?? false }, 'privacy'), savingSection === 'privacy')}
+              </div>
+              <div style={{ borderTop: '1px solid var(--line,#e3ece8)', margin: '4px 0 16px' }} />
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)', marginBottom: 4 }}>Your data</div>
+              <p className="tiny muted" style={{ marginTop: 0, marginBottom: 12 }}>Export a complete copy of your sovereign vault — journals, check-ins, and records — as a ZIP archive. Your data is yours.</p>
+              <button type="button" onClick={downloadData} disabled={downloading} className="row" style={{ gap: 8, alignItems: 'center', padding: '10px 16px', borderRadius: 10, border: '1px solid var(--line,#e3ece8)', background: '#fff', color: 'var(--ink)', fontSize: 13.5, fontWeight: 700, cursor: downloading ? 'default' : 'pointer', opacity: downloading ? 0.6 : 1 }}>
+                <Download size={15} /> {downloading ? 'Preparing…' : 'Download my data (.zip)'}
+              </button>
+            </>
+          )}
+        </Card>
+      )}
+    </div>
+  );
+}
+
+/* ============================== PROFILE MENU (top-right) ==============================
+   Reuses the existing avatar as an accessible dropdown trigger. Mouse, keyboard
+   (Enter/Space to open, Escape to close, arrow keys to move), click-outside and
+   touch all work. Items: My Profile, Settings, Identity & Data, Sign out. */
+function ProfileMenu({ user, displayName, go, logout }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+  const items = [
+    { key: 'profile', label: 'My Profile', icon: UserCog, onSelect: () => go('account', 'profile') },
+    { key: 'settings', label: 'Settings', icon: Settings, onSelect: () => go('account', 'preferences') },
+    { key: 'identity', label: 'Identity & Data', icon: ShieldCheck, onSelect: () => go('identity') },
+    { key: 'signout', label: 'Sign out', icon: LogOut, danger: true, onSelect: () => logout?.() },
+  ];
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDocClick = (e) => { if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') { setOpen(false); } };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('touchstart', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('touchstart', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const choose = (it) => { setOpen(false); it.onSelect(); };
+
+  return (
+    <div ref={rootRef} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Account menu"
+        onClick={() => setOpen((v) => !v)}
+        style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', borderRadius: '50%', lineHeight: 0 }}
+      >
+        {user?.avatarUrl
+          ? <img src={user.avatarUrl} alt="" style={{ width: 39, height: 39, borderRadius: '50%', objectFit: 'cover' }} />
+          : <Avatar name={displayName} size={39} />}
+      </button>
+      {open && (
+        <div role="menu" aria-label="Account" style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', minWidth: 216, background: '#fff', border: '1px solid var(--line,#e3ece8)', borderRadius: 14, boxShadow: '0 12px 34px rgba(10,43,41,.18)', padding: 8, zIndex: 60 }}>
+          <div style={{ padding: '8px 12px 10px', borderBottom: '1px solid var(--line,#e3ece8)', marginBottom: 6 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</div>
+            <div className="tiny muted" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.email}</div>
+          </div>
+          {items.map((it) => {
+            const Icon = it.icon;
+            return (
+              <button
+                key={it.key}
+                role="menuitem"
+                type="button"
+                onClick={() => choose(it)}
+                className="row"
+                style={{ width: '100%', textAlign: 'left', gap: 10, alignItems: 'center', padding: '10px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'transparent', color: it.danger ? '#b4432f' : 'var(--ink)', fontSize: 13.5, fontWeight: 600 }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = '#f1f5f3'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+              >
+                <Icon size={16} strokeWidth={2} /> {it.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TabPage({ tab, sub, user, go, effectiveRole, onUnread, onInboxUnread, onBecomeProvider, onApprovalStats, onBookings }) {
   switch (tab) {
     case 'gps-map': return <ErrorBoundary><GPSMapView /></ErrorBoundary>;
     case 'contributions': return <ErrorBoundary><ContributionLedger user={user} /></ErrorBoundary>;
@@ -5173,16 +5769,17 @@ function TabPage({ tab, user, go, effectiveRole, onUnread, onInboxUnread, onBeco
     case 'explore': return <ErrorBoundary><ExploreMarketplace user={user} onBecomeProvider={onBecomeProvider} /></ErrorBoundary>;
     case 'health': return <HealthPassportPage user={user} go={go} />;
     case 'timeline': return <TimelinePage user={user} />;
-    case 'coach': return <CoachPage user={user} go={go} />;
+    case 'coach': return <ErrorBoundary><CoachArea user={user} go={go} sub={sub} /></ErrorBoundary>;
     case 'intelligence': return <ErrorBoundary><IntelligencePage user={user} go={go} /></ErrorBoundary>;
-    case 'journal': return <ErrorBoundary><JournalPage user={user} go={go} /></ErrorBoundary>;
+    case 'journal': return <ErrorBoundary><JournalArea user={user} go={go} sub={sub} /></ErrorBoundary>;
     case 'media': return <ErrorBoundary><MediaPage user={user} go={go} /></ErrorBoundary>;
     case 'appointments': return <AppointmentsPage user={user} />;
     case 'my-bookings': return <MyBookings user={user} onExplore={() => go('explore')} />;
     case 'booking-oversight': return <BookingManagement />;
-    case 'messages': return <SecureChat user={user} onUnread={onUnread} />;
+    case 'messages': return <ErrorBoundary><MessagesArea user={user} go={go} sub={sub} onUnread={onUnread} onInboxUnread={onInboxUnread} /></ErrorBoundary>;
     case 'inbox': return <ErrorBoundary><InboxPage user={user} go={go} onUnread={onInboxUnread} /></ErrorBoundary>;
-    case 'wallet': return <EconomicPassportPage user={user} />;
+    case 'wallet': return <ErrorBoundary><EconomicPassportArea user={user} go={go} sub={sub} /></ErrorBoundary>;
+    case 'account': return <ErrorBoundary><SettingsPage user={user} go={go} sub={sub} /></ErrorBoundary>;
     case 'treasury': return <RegenerativeTreasury user={user} />;
     case 'gps-economy': return <GPSStats />;
     case 'drafts': return <DraftQueuePage />;
@@ -5228,32 +5825,100 @@ function AdminSystemPage() {
 export default function LucaPassport() {
   const { user, logout, refreshUser } = useApp();
   const realRole = user?.role || 'patient';
-  const effectiveRole = normalizeSolarisRole(realRole);
-  const role = legacyRoleFor(effectiveRole); // legacy role the base nav understands
+  const baseEffectiveRole = normalizeSolarisRole(realRole);
   const isProvider = user?.isProvider === true;
+
+  // Member / Practitioner portal switcher. The right to switch is derived from
+  // the authenticated SERVER user (role === 'practitioner' or an approved
+  // provider), never from localStorage or any client-only flag. clinic_admin
+  // never gets the switcher. A non-approved member can never obtain the
+  // practitioner persona here, and the backend independently gates every
+  // practitioner endpoint on role, so URL/state tampering cannot leak data.
+  const isApprovedPractitioner = user?.role === 'practitioner' || user?.isProvider === true;
+  const canSwitchPortal = isApprovedPractitioner && baseEffectiveRole !== 'clinic_admin';
+
+  const initialUrl = readUrlNav();
+  const [portalView, setPortalView] = useState(() => {
+    if (!canSwitchPortal) return baseEffectiveRole === 'clinic_admin' ? 'admin' : 'member';
+    if (initialUrl.portal === 'practitioner' || initialUrl.portal === 'member') return initialUrl.portal;
+    return baseEffectiveRole === 'practitioner' ? 'practitioner' : 'member';
+  });
+  const portalViewRef = useRef(portalView);
+  useEffect(() => { portalViewRef.current = portalView; }, [portalView]);
+
+  // The persona actually rendered. clinic_admin is unchanged; a switcher-enabled
+  // account renders the practitioner portal only when the switch is set there.
+  const effectiveRole = baseEffectiveRole === 'clinic_admin'
+    ? 'clinic_admin'
+    : (canSwitchPortal && portalView === 'practitioner') ? 'practitioner' : 'patient';
+  const role = legacyRoleFor(effectiveRole); // legacy role the base nav understands
   const nav = navForPersona(effectiveRole, role, isProvider);
   const portal = PORTAL[effectiveRole] || PORTAL.patient;
-  const [tab, setTab] = useState(() => defaultTabFor(effectiveRole));
+
+  // Area + nested sub-tab, initialised from the URL so bookmarks/refresh restore it.
+  const [route, setRoute] = useState(() => resolveNav(initialUrl.tab || defaultTabFor(effectiveRole), initialUrl.sub));
+  const tab = route.tab;
+  const sub = route.sub;
   const [drawer, setDrawer] = useState(false);
   const [badges, setBadges] = useState({});
   const [showApplication, setShowApplication] = useState(false);
   const [showPractitioner, setShowPractitioner] = useState(false);
   const [appStatus, setAppStatus] = useState(null); // current user's latest application
 
-  // close drawer on tab change
-  const go = useCallback((id) => { setTab(id); setDrawer(false); }, []);
+  // Navigate to an area (+ optional sub-tab). Canonicalises legacy targets and
+  // mirrors the result into the URL query string; the pathname is untouched.
+  const go = useCallback((rawTab, rawSub) => {
+    const r = resolveNav(rawTab, rawSub);
+    setRoute(r);
+    writeUrlNav(r.tab, r.sub, canSwitchPortal ? portalViewRef.current : undefined);
+    setDrawer(false);
+  }, [canSwitchPortal]);
+
+  // Switch between the Member and Practitioner portals on the same account.
+  const switchPortal = useCallback((view) => {
+    if (!canSwitchPortal) return;
+    setPortalView(view);
+    const nextRole = view === 'practitioner' ? 'practitioner' : 'patient';
+    const r = resolveNav(defaultTabFor(nextRole));
+    setRoute(r);
+    writeUrlNav(r.tab, r.sub, view);
+    setDrawer(false);
+  }, [canSwitchPortal]);
 
   // Cross-component navigation (e.g. "Begin a guided journey" -> Health Passport).
   useEffect(() => {
-    const onNav = (e) => { if (e?.detail?.tab) go(e.detail.tab); };
+    const onNav = (e) => { if (e?.detail?.tab) go(e.detail.tab, e.detail.sub); };
     window.addEventListener('solaris:navigate', onNav);
     return () => window.removeEventListener('solaris:navigate', onNav);
   }, [go]);
 
-  // If the active tab isn't available for this persona, fall back to its home tab.
-  const validTabIds = nav.flatMap((g) => g.items.map((i) => i.id));
+  // Browser Back / Forward — re-read the area, sub-tab, and portal from the URL.
   useEffect(() => {
-    if (!validTabIds.includes(tab)) setTab(defaultTabFor(effectiveRole));
+    const onPop = () => {
+      const u = readUrlNav();
+      if (canSwitchPortal && (u.portal === 'practitioner' || u.portal === 'member')) setPortalView(u.portal);
+      setRoute(resolveNav(u.tab || defaultTabFor(baseEffectiveRole), u.sub));
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [canSwitchPortal, baseEffectiveRole]);
+
+  // Keep the URL in sync on first render (so a bare "/" gets ?area=…), and ensure
+  // the initial area is valid for the persona.
+  useEffect(() => {
+    writeUrlNav(route.tab, route.sub, canSwitchPortal ? portalView : undefined, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // If the active area isn't available for this persona (e.g. after a portal
+  // switch), fall back to its home tab. account/identity live in the profile
+  // menu, not the sidebar, so they are always allowed.
+  const ALWAYS_ALLOWED = ['account', 'identity'];
+  useEffect(() => {
+    const valid = nav.flatMap((g) => g.items.map((i) => i.id));
+    if (!valid.includes(route.tab) && !ALWAYS_ALLOWED.includes(route.tab)) {
+      setRoute(resolveNav(defaultTabFor(effectiveRole)));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveRole]);
 
@@ -5392,6 +6057,29 @@ export default function LucaPassport() {
             </div>
           </div>
 
+          {/* Member / Practitioner portal switcher — shown only to an approved
+              practitioner (server-derived). Sits at the very top, above the nav. */}
+          {canSwitchPortal && (
+            <div role="tablist" aria-label="Portal" style={{ display: 'flex', gap: 4, background: 'rgba(255,255,255,.06)', border: '1px solid rgba(255,255,255,.1)', borderRadius: 12, padding: 4, margin: '2px 0 12px' }}>
+              {[{ id: 'member', label: 'Member', accent: PORTAL.patient.accent }, { id: 'practitioner', label: 'Practitioner', accent: PORTAL.practitioner.accent }].map((pv) => {
+                const on = portalView === pv.id;
+                return (
+                  <button
+                    key={pv.id}
+                    role="tab"
+                    aria-selected={on}
+                    type="button"
+                    onClick={() => switchPortal(pv.id)}
+                    style={{ flex: 1, padding: '7px 8px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                      background: on ? pv.accent : 'transparent', color: on ? '#04231d' : '#D9EEE8', transition: 'background .15s' }}
+                  >
+                    {pv.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <nav className="col" style={{ gap: 1 }}>
             {nav.map((grp) => (
               <div key={grp.group}>
@@ -5454,7 +6142,7 @@ export default function LucaPassport() {
               <input placeholder="Search your passport, care, and value…" />
             </div>
             <NotificationCenter onNavigate={handleNotificationNavigate} />
-            <Avatar name={displayName} size={39} />
+            <ProfileMenu user={user} displayName={displayName} go={go} logout={logout} />
           </header>
 
           <main className="page">
@@ -5466,15 +6154,15 @@ export default function LucaPassport() {
                   </span>
                 </div>
               } />
-            <TabPage tab={tab} user={user} go={go} effectiveRole={effectiveRole} onUnread={(n) => setBadges((b) => ({ ...b, messages: n }))} onInboxUnread={(n) => setBadges((b) => ({ ...b, inbox: n }))} onBecomeProvider={() => setShowApplication(true)} onApprovalStats={(s) => setBadges((b) => ({ ...b, approvals: s.pending || 0 }))} onBookings={(n) => setBadges((b) => ({ ...b, bookings: n }))} />
+            <TabPage tab={tab} sub={sub} user={user} go={go} effectiveRole={effectiveRole} onUnread={(n) => setBadges((b) => ({ ...b, messages: n }))} onInboxUnread={(n) => setBadges((b) => ({ ...b, inbox: n }))} onBecomeProvider={() => setShowApplication(true)} onApprovalStats={(s) => setBadges((b) => ({ ...b, approvals: s.pending || 0 }))} onBookings={(n) => setBadges((b) => ({ ...b, bookings: n }))} />
           </main>
         </div>
       </div>
 
-      {/* Persistent mini-player — patient experience only (except Media, which has its own player) */}
-      <MiniPlayer hidden={tab === 'media' || effectiveRole !== 'patient'} />
+      {/* Persistent mini-player — patient experience only (except the Media sub-tab, which has its own player) */}
+      <MiniPlayer hidden={(tab === 'journal' && sub === 'media') || effectiveRole !== 'patient'} />
 
-      {/* Floating LUCA assistant — patient experience only (except the full Coach page) */}
+      {/* Floating LUCA assistant — patient experience only (except the LUCA Coach area) */}
       <LucaWidget user={user} hidden={tab === 'coach' || effectiveRole !== 'patient'} go={go} />
 
       {showApplication && (
