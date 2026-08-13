@@ -8,6 +8,7 @@
  *   onBecomeProvider  ()=>void  — optional CTA to open provider onboarding
  */
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Search, MapPin, Map as MapIcon, List as ListIcon, Loader2, Store, Plus, X, Sprout, Sparkles, RefreshCw, ArrowRight, Compass, Clock, Headphones, Stethoscope, Heart, Brain, Activity, BookOpen, CheckCircle2, Footprints, SlidersHorizontal } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '../../lib/api.js';
@@ -54,83 +55,6 @@ function QuickFilters({ filters, patch, presentTypes, languageOptions }) {
       {chip(filters.vtv, 'Value-to-value', () => patch({ vtv: !filters.vtv }), 'vtv')}
       {languageOptions.slice(0, 4).map((l) => chip(filters.languages.includes(l), l, () => patch({ languages: toggleArr(filters.languages, l) }), `l-${l}`))}
       {presentTypes.map((t) => chip(filters.types.includes(t.id), t.label, () => patch({ types: toggleArr(filters.types, t.id) }), `t-${t.id}`))}
-    </div>
-  );
-}
-
-// Draggable results sheet over the map. Controlled `snap` (collapsed | half |
-// full); drag from the handle only so map / list gestures never fight. Snap
-// fractions are of the live stage height (dvh-safe, recomputed on resize /
-// rotation so the sheet is never trapped). A visible handle + two tap buttons
-// provide a non-drag alternative.
-function ResultsSheet({ snap, onSnap, children }) {
-  const ref = useRef(null);
-  const [dragH, setDragH] = useState(null);
-  const [, tick] = useState(0);
-  const startY = useRef(null);
-  const startH = useRef(null);
-  const moved = useRef(false);
-  const FRAC = { collapsed: 0.20, half: 0.55, full: 0.95 };
-  const stageH = () => ref.current?.parentElement?.clientHeight || ((window.visualViewport?.height || window.innerHeight) - 140);
-  useEffect(() => {
-    const f = () => tick((n) => n + 1);
-    window.addEventListener('resize', f);
-    window.addEventListener('orientationchange', f);
-    return () => { window.removeEventListener('resize', f); window.removeEventListener('orientationchange', f); };
-  }, []);
-  // Bottom nav hides only while the sheet is fully raised; returns otherwise.
-  useEffect(() => { window.dispatchEvent(new CustomEvent('solaris:botnav', { detail: { hidden: snap === 'full' } })); }, [snap]);
-  useEffect(() => () => window.dispatchEvent(new CustomEvent('solaris:botnav', { detail: { hidden: false } })), []);
-  const H = dragH != null ? dragH : Math.round(stageH() * FRAC[snap]);
-  const onDown = (e) => { startY.current = e.clientY; startH.current = H; moved.current = false; setDragH(H); try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* noop */ } };
-  const onMove = (e) => {
-    if (startY.current == null) return;
-    const dy = startY.current - e.clientY;
-    if (Math.abs(dy) > 6) moved.current = true;
-    const sh = stageH();
-    let h = startH.current + dy;
-    h = Math.max(sh * 0.12, Math.min(sh * 0.97, h));
-    setDragH(h);
-  };
-  const finish = () => {
-    if (startY.current == null) return;
-    const sh = stageH();
-    const frac = (dragH != null ? dragH : H) / sh;
-    startY.current = null;
-    setDragH(null);
-    let best = 'half'; let bd = 9;
-    for (const k of Object.keys(FRAC)) { const d = Math.abs(FRAC[k] - frac); if (d < bd) { bd = d; best = k; } }
-    onSnap(best);
-  };
-  const cycle = () => onSnap(snap === 'collapsed' ? 'half' : snap === 'half' ? 'full' : 'collapsed');
-  const onClick = () => { if (moved.current) { moved.current = false; return; } cycle(); };
-  const onKey = (e) => {
-    if (e.key === 'ArrowUp') { e.preventDefault(); onSnap(snap === 'collapsed' ? 'half' : 'full'); }
-    else if (e.key === 'ArrowDown') { e.preventDefault(); onSnap(snap === 'full' ? 'half' : 'collapsed'); }
-    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cycle(); }
-  };
-  return (
-    <div className="exm-sheet" ref={ref} style={{ height: `${H}px` }} data-dragging={dragH != null ? 'true' : 'false'}>
-      <div
-        className="exm-sheet-handle"
-        role="button"
-        tabIndex={0}
-        aria-label={`Results sheet (${snap}). Drag or use the arrow keys to resize.`}
-        aria-expanded={snap !== 'collapsed'}
-        onPointerDown={onDown}
-        onPointerMove={onMove}
-        onPointerUp={finish}
-        onPointerCancel={finish}
-        onKeyDown={onKey}
-        onClick={onClick}
-      >
-        <span className="exm-sheet-bar" aria-hidden="true" />
-      </div>
-      <div className="exm-sheet-tabs">
-        <button type="button" className="exm-sheet-tab" onClick={() => onSnap('collapsed')} aria-label="Show map">Show map</button>
-        <button type="button" className="exm-sheet-tab" onClick={() => onSnap('full')} aria-label="Show results">Show results</button>
-      </div>
-      <div className="exm-sheet-body">{children}</div>
     </div>
   );
 }
@@ -278,11 +202,10 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
   const [activeId, setActiveId] = useState(null);
   const [hoverId, setHoverId] = useState(null);
   const [openId, setOpenId] = useState(null);
-  const [mobileView, setMobileView] = useState('list'); // list | map
+  const [mobileView, setMobileView] = useState('map'); // map | list (default map)
   const [showFilters, setShowFilters] = useState(false);
   const listRef = useRef(null);
   const isMobile = useIsMobile(900);
-  const [sheetSnap, setSheetSnap] = useState('half');
 
   // Keep the fixed mobile Explore stage docked just below the app's sticky
   // header (its height varies with safe-area / font scaling) — measured, never
@@ -400,16 +323,22 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
-  // Listing-card select: always select + centre its marker + open the compact
-  // map card (via activeId). On desktop it also opens the full detail modal
-  // (unchanged behaviour); on mobile it lowers the sheet to half so the map
-  // card is visible, leaving "View & book" to open the detail.
+  // Listing-card select: always select + centre its marker (via activeId). On
+  // desktop it also opens the full detail modal (unchanged behaviour); on mobile
+  // it opens the provider detail directly (the list-card tap is the primary
+  // "book" action there — a separate "Show on map" control handles map sync).
   const handleCardOpen = (pr) => {
     setActiveId(pr.id);
-    if (isMobile) setSheetSnap('half');
-    else setOpenId(pr.id);
+    setOpenId(pr.id);
     const el = listRef.current?.querySelector(`[data-pid="${pr.id}"]`);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  // Select a provider and reveal it on the map (used by the mobile list's
+  // "Show on map" action) — keeps marker/list selection in sync.
+  const showOnMap = (pr) => {
+    setActiveId(pr.id);
+    setMobileView('map');
   };
 
   // Provider types actually present in the current result set — used for the
@@ -454,7 +383,7 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
 
   // Shared map panel with marker↔list sync (compact card + open-detail wiring).
   const mapPanel = (
-    <MapErrorBoundary onSwitchToList={() => { setMobileView('list'); setSheetSnap('full'); }}>
+    <MapErrorBoundary onSwitchToList={() => { setMobileView('list'); }}>
       <MapView
         providers={visibleProviders}
         activeId={activeId || hoverId}
@@ -523,9 +452,30 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
     </>
   );
 
-  // ── Mobile: map behind + draggable results sheet + quick filters ──
+  // ── Mobile: explicit Map | List switch + quick filters (no draggable sheet) ──
+  // The full-bleed stage is `position:fixed`, but the shell wraps every page in
+  // `.page`, which runs a lucafade keyframe that touches `transform` — a
+  // transformed ancestor becomes the containing block for fixed descendants and
+  // traps/compresses the stage. We portal the whole mobile surface OUT of `.page`
+  // to the `.luca` app root (no transform/filter/containment there), so the fixed
+  // stage resolves against the real viewport. We stay inside `.luca` so the
+  // `.luca .exm-*` scoped styles still apply. Falls back to <body> in tests where
+  // no `.luca` root is mounted.
+  //
+  // Map state: the map fills the stage between the controls and the fixed bottom
+  // nav; selecting a marker opens MapView's compact provider card over the map.
+  // List state: a single scrollable column of full-width provider cards, each
+  // with a "Show on map" action that selects the provider and flips to the map.
+  // Search + filters apply identically to both and are preserved across the
+  // switch (shared `query` / `filters` / `visibleProviders`).
   if (isMobile) {
-    return (
+    const portalTarget = typeof document !== 'undefined'
+      ? (document.querySelector('.luca') || document.body)
+      : null;
+    const countLabel = loading
+      ? 'Finding providers…'
+      : `${visibleProviders.length} provider${visibleProviders.length === 1 ? '' : 's'}`;
+    const mobileTree = (
       <div className="exm exm-mobile">
         <div className="exm-m">
           <div className="exm-mbar">
@@ -545,15 +495,62 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
             </button>
           </div>
           <QuickFilters filters={filters} patch={patch} presentTypes={presentTypes} languageOptions={languageOptions} />
+          <div className="exm-mseg" role="group" aria-label="Choose map or list view">
+            <button
+              type="button"
+              className={`exm-seg${mobileView === 'map' ? ' on' : ''}`}
+              aria-pressed={mobileView === 'map'}
+              onClick={() => setMobileView('map')}
+            >
+              <MapIcon size={16} /> Map
+            </button>
+            <button
+              type="button"
+              className={`exm-seg${mobileView === 'list' ? ' on' : ''}`}
+              aria-pressed={mobileView === 'list'}
+              onClick={() => setMobileView('list')}
+            >
+              <ListIcon size={16} /> List
+            </button>
+          </div>
           <div className="exm-mstage">
-            <div className="exm-mmap">{mapPanel}</div>
-            <ResultsSheet snap={sheetSnap} onSnap={setSheetSnap}>
-              <div className="exm-sheet-count">
-                {loading ? 'Finding providers…' : `${visibleProviders.length} provider${visibleProviders.length === 1 ? '' : 's'}`}
+            {mobileView === 'map' ? (
+              <div className="exm-mmap">{mapPanel}</div>
+            ) : (
+              <div className="exm-mlist" ref={listRef}>
+                <div className="exm-mlist-count">{countLabel}</div>
+                {loading ? (
+                  <div className="exm-loading"><Loader2 className="exm-spin" size={26} /> Finding providers…</div>
+                ) : visibleProviders.length === 0 ? (
+                  <div className="exm-empty">
+                    <Store size={34} />
+                    <h4>No providers match your filters</h4>
+                    <p>Try widening your search or resetting the filters — or begin a guided journey below.</p>
+                    <button className="exm-resetbtn" onClick={reset}>Reset filters</button>
+                    <JourneyOffers offers={blueprints} starting={startingJourney} onBegin={beginJourney} onPreview={setPreviewType} compact />
+                  </div>
+                ) : (
+                  <>
+                    <div className="exm-cards">
+                      {visibleProviders.map((p) => (
+                        <div key={p.id} data-pid={p.id} className="exm-mlist-item">
+                          <ProviderListingCard
+                            provider={p}
+                            onOpen={handleCardOpen}
+                            onHover={setHoverId}
+                            active={hoverId === p.id || activeId === p.id}
+                          />
+                          <button type="button" className="exm-showmap" onClick={() => showOnMap(p)}>
+                            <MapPin size={14} /> Show on map
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <JourneyOffers offers={blueprints} starting={startingJourney} onBegin={beginJourney} onPreview={setPreviewType} compact />
+                  </>
+                )}
               </div>
-              <div ref={listRef}>{resultsBody}</div>
-              <JourneyOffers offers={blueprints} starting={startingJourney} onBegin={beginJourney} onPreview={setPreviewType} compact />
-            </ResultsSheet>
+            )}
           </div>
         </div>
         {filterSheet}
@@ -561,6 +558,7 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
         <style>{CSS}</style>
       </div>
     );
+    return portalTarget ? createPortal(mobileTree, portalTarget) : mobileTree;
   }
 
   // ── Desktop / large-tablet: the classic split view (unchanged) ──
@@ -969,12 +967,18 @@ const CSS = `
 }
 
 /* ===================================================================
-   MOBILE EXPLORE (<=900px): sticky search + quick filters, full-bleed
-   map behind, draggable results sheet. Uses 100dvh-safe stage sizing.
+   MOBILE EXPLORE (<=900px): sticky search + quick filters + Map|List
+   segmented switch, full-bleed fixed stage. Uses 100dvh-safe stage sizing.
    =================================================================== */
 .luca .exm-mobile{min-height:0}
-.luca .exm-m{position:fixed;left:0;right:0;top:var(--exm-top,54px);bottom:0;z-index:20;
-  display:flex;flex-direction:column;background:var(--bg)}
+/* Full-bleed mobile stage. The surface is portaled out of the transformed .page
+   ancestor (see ExploreMarketplace mobile branch), so this fixed box resolves
+   against the real viewport: it fills from just below the sticky header
+   (--exm-top, measured) to the very bottom. 100dvh via the top/bottom anchors
+   tracks the dynamic viewport (URL bar show/hide, rotation). z-index sits below
+   the bottom nav (60) so the nav stays visible over the map/collapsed sheet. */
+.luca .exm-m{position:fixed;left:0;right:0;top:var(--exm-top,54px);bottom:0;z-index:40;
+  display:flex;flex-direction:column;background:var(--bg);overflow:hidden}
 .luca .exm-mbar{flex:none;display:flex;gap:8px;align-items:center;padding:8px 12px;
   background:var(--bg);border-bottom:1px solid var(--line)}
 .luca .exm-mbar .exm-search{flex:1;min-width:0;box-shadow:none;padding:9px 12px;border-radius:12px}
@@ -989,27 +993,29 @@ const CSS = `
 .luca .exm-qf{flex:none;white-space:nowrap;border:1px solid var(--line);background:var(--surface);color:var(--ink);
   border-radius:999px;padding:8px 14px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;min-height:36px}
 .luca .exm-qf.on{background:var(--teal-d);color:#fff;border-color:var(--teal-d)}
+/* Map | List segmented switch — a clear, always-visible toggle (no draggable
+   sheet). Two equal buttons; the active one is filled. */
+.luca .exm-mseg{flex:none;display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:8px 12px;
+  background:var(--bg);border-bottom:1px solid var(--line)}
+.luca .exm-seg{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);
+  background:var(--surface);color:var(--ink);border-radius:11px;padding:9px;font-size:13px;font-weight:700;
+  cursor:pointer;font-family:inherit;min-height:42px}
+.luca .exm-seg.on{background:var(--teal-d);color:#fff;border-color:var(--teal-d)}
 .luca .exm-mstage{position:relative;flex:1;min-height:0;overflow:hidden}
 .luca .exm-mmap{position:absolute;inset:0}
 .luca .exm-mmap .mv-wrap{height:100%;border-radius:0;border:none}
-.luca .exm-sheet{position:absolute;left:0;right:0;bottom:0;z-index:10;display:flex;flex-direction:column;
-  background:var(--surface);border-radius:22px 22px 0 0;box-shadow:0 -14px 40px rgba(2,18,24,.22);
-  transition:height .28s cubic-bezier(.2,.8,.2,1);overflow:hidden;max-height:100%}
-.luca .exm-sheet[data-dragging="true"]{transition:none}
-.luca .exm-sheet-handle{flex:none;display:flex;align-items:center;justify-content:center;height:26px;
-  cursor:grab;touch-action:none;-webkit-tap-highlight-color:transparent}
-.luca .exm-sheet-handle:active{cursor:grabbing}
-.luca .exm-sheet-handle:focus-visible{outline:2px solid var(--mint);outline-offset:-4px;border-radius:12px}
-.luca .exm-sheet-bar{width:44px;height:5px;border-radius:999px;background:var(--line-2)}
-.luca .exm-sheet-tabs{flex:none;display:flex;gap:8px;padding:0 14px 8px}
-.luca .exm-sheet-tab{flex:1;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:10px;
-  padding:8px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;min-height:40px}
-.luca .exm-sheet-tab:hover{border-color:var(--teal-d);color:var(--teal-d)}
-.luca .exm-sheet-count{font-size:12px;font-weight:700;color:var(--muted);padding:2px 2px 8px}
-.luca .exm-sheet-body{flex:1;min-height:0;overflow-y:auto;padding:0 14px calc(96px + env(safe-area-inset-bottom,0px));
-  -webkit-overflow-scrolling:touch}
-.luca .exm-sheet-body .exm-cards{padding-bottom:6px}
-.luca .exm-sheet-body .exm-journeys.compact{margin-top:22px}
+/* List state: a single full-width scrollable column of provider cards. Bottom
+   padding clears the fixed bottom nav (its height + safe-area inset). */
+.luca .exm-mlist{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding:10px 12px calc(96px + env(safe-area-inset-bottom,0px));background:var(--bg)}
+.luca .exm-mlist-count{font-size:12px;font-weight:700;color:var(--muted);padding:2px 2px 10px}
+.luca .exm-mlist .exm-cards{display:flex;flex-direction:column;gap:12px}
+.luca .exm-mlist-item{display:flex;flex-direction:column;gap:0}
+.luca .exm-showmap{align-self:flex-start;margin-top:6px;display:inline-flex;align-items:center;gap:6px;
+  border:1px solid var(--line);background:var(--surface);color:var(--teal-d);border-radius:10px;
+  padding:8px 13px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;min-height:38px}
+.luca .exm-showmap:hover{border-color:var(--teal-d);background:var(--mint-soft)}
+.luca .exm-mlist .exm-journeys.compact{margin-top:22px}
 /* Mobile filter-sheet footer (inside the adaptive overlay) */
 .luca .exm-fs-foot{display:flex;gap:10px;align-items:center}
 .luca .exm-fs-clear{flex:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);
@@ -1017,5 +1023,4 @@ const CSS = `
 .luca .exm-fs-apply{flex:1;border:none;background:var(--teal-d);color:#fff;border-radius:12px;padding:12px 18px;
   font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;min-height:44px}
 .luca .exm-fs-apply:hover{background:var(--teal-d2)}
-@media(prefers-reduced-motion:reduce){.luca .exm-sheet{transition:none}}
 `;

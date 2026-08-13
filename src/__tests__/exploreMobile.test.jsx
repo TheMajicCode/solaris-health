@@ -1,13 +1,12 @@
 /**
- * Explore mobile map/list experience — quick filters + full filter sheet,
- * marker↔list synchronisation (both directions), and the draggable results
- * sheet's collapsed/half/full states with a tap alternative to dragging.
- * Covers acceptance scenarios 4, 5, 6, 7 and 8.
+ * Explore mobile map/list experience — quick filters + full filter sheet, the
+ * explicit Map | List segmented switch (default Map), and marker<->list
+ * synchronisation in both directions via the shared activeId.
  *
  * matchMedia is forced to report a phone viewport BEFORE the component imports,
- * so ExploreMarketplace renders its mobile branch (map behind + results sheet).
+ * so ExploreMarketplace renders its mobile branch (segmented Map/List stage).
  * Leaflet cannot lay out in jsdom, so MapView is replaced with a light stub that
- * preserves the real marker↔list wiring (onSelect / activeId / onOpenDetail).
+ * preserves the real marker<->list wiring (onSelect / activeId / onOpenDetail).
  */
 import React from 'react';
 import { describe, it, expect, vi, beforeAll } from 'vitest';
@@ -90,11 +89,16 @@ vi.mock('../components/marketplace/MapView.jsx', () => ({
 
 import ExploreMarketplace from '../components/marketplace/ExploreMarketplace.jsx';
 
+// Default mobile view is the map, so wait for the map stub to mount.
 const renderExplore = async () => {
   const utils = render(<ExploreMarketplace user={{ id: 1, role: 'patient' }} />);
-  await waitFor(() => expect(document.querySelector('[data-pid="1"] .plc')).toBeTruthy());
+  await waitFor(() => expect(screen.getByTestId('marker-1')).toBeTruthy());
   return utils;
 };
+
+const seg = (name) => screen.getByRole('button', { name });
+const showList = () => fireEvent.click(seg('List'));
+const showMap = () => fireEvent.click(seg('Map'));
 
 describe('quick filters + full filter sheet', () => {
   it('renders quick-filter chips mapped to real fields and toggles one', async () => {
@@ -122,48 +126,45 @@ describe('quick filters + full filter sheet', () => {
   });
 });
 
-describe('marker ↔ list synchronisation', () => {
-  it('selecting a marker opens its map card and highlights the matching list item', async () => {
+describe('Map | List segmented switch', () => {
+  it('defaults to Map and toggles to List (aria-pressed reflects the active view)', async () => {
+    await renderExplore();
+    const group = screen.getByRole('group', { name: 'Choose map or list view' });
+    expect(within(group).getByRole('button', { name: 'Map' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(group).getByRole('button', { name: 'List' })).toHaveAttribute('aria-pressed', 'false');
+    // Map stage is mounted, the single-column list stage is not.
+    expect(document.querySelector('.exm-mmap')).toBeTruthy();
+    expect(document.querySelector('.exm-mlist')).toBeNull();
+
+    showList();
+    expect(within(group).getByRole('button', { name: 'List' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(group).getByRole('button', { name: 'Map' })).toHaveAttribute('aria-pressed', 'false');
+    // List stage renders full-width single-column cards.
+    expect(document.querySelector('.exm-mlist')).toBeTruthy();
+    expect(document.querySelector('[data-pid="1"] .plc')).toBeTruthy();
+    expect(document.querySelector('.exm-mmap')).toBeNull();
+  });
+});
+
+describe('marker <-> list synchronisation', () => {
+  it('selecting a marker opens its map card and highlights the matching list item after switching to List', async () => {
     await renderExplore();
     fireEvent.click(screen.getByTestId('marker-2'));
     // Map card for the selected provider appears.
     expect(screen.getByTestId('map-card-name')).toHaveTextContent('Verde Nutrition');
-    // Matching list card is highlighted (plc-active).
+    // Switching to the list keeps that provider highlighted (plc-active).
+    showList();
     const listItem = document.querySelector('[data-pid="2"] .plc');
     expect(listItem).toHaveClass('plc-active');
   });
 
-  it('selecting a list item selects + centres its marker (map card shows the same provider)', async () => {
+  it('"Show on map" from a list card selects + reveals its marker (map card shows the same provider)', async () => {
     await renderExplore();
-    const card1 = document.querySelector('[data-pid="1"] .plc');
-    fireEvent.click(card1);
-    // The map receives the active id and shows the matching provider card.
+    showList();
+    const showMapBtn = within(document.querySelector('[data-pid="1"]')).getByRole('button', { name: /Show on map/i });
+    fireEvent.click(showMapBtn);
+    // Returns to the map view with that provider selected.
+    expect(screen.getByRole('button', { name: 'Map' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('map-card-name')).toHaveTextContent('Aura Dental');
-    expect(document.querySelector('[data-pid="1"] .plc')).toHaveClass('plc-active');
-  });
-});
-
-describe('draggable results sheet states + tap alternative', () => {
-  it('exposes a handle with state + non-drag tap controls (Show map / Show results)', async () => {
-    await renderExplore();
-    const handle = screen.getByRole('button', { name: /Results sheet/i });
-    expect(screen.getByRole('button', { name: 'Show map' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Show results' })).toBeInTheDocument();
-
-    // Tap "Show results" → full (expanded); "Show map" → collapsed.
-    fireEvent.click(screen.getByRole('button', { name: 'Show results' }));
-    expect(screen.getByRole('button', { name: /Results sheet \(full\)/i })).toHaveAttribute('aria-expanded', 'true');
-    fireEvent.click(screen.getByRole('button', { name: 'Show map' }));
-    expect(screen.getByRole('button', { name: /Results sheet \(collapsed\)/i })).toHaveAttribute('aria-expanded', 'false');
-  });
-
-  it('keyboard arrows on the handle resize the sheet (non-drag alternative)', async () => {
-    await renderExplore();
-    const handle = screen.getByRole('button', { name: /Results sheet/i });
-    fireEvent.keyDown(handle, { key: 'ArrowUp' });
-    expect(screen.getByRole('button', { name: /Results sheet/i })).toHaveAttribute('aria-expanded', 'true');
-    fireEvent.keyDown(screen.getByRole('button', { name: /Results sheet/i }), { key: 'ArrowDown' });
-    fireEvent.keyDown(screen.getByRole('button', { name: /Results sheet/i }), { key: 'ArrowDown' });
-    expect(screen.getByRole('button', { name: /Results sheet \(collapsed\)/i })).toHaveAttribute('aria-expanded', 'false');
   });
 });

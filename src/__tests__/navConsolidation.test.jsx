@@ -1,8 +1,9 @@
 /**
  * Navigation-consolidation unit tests — verify the simplified member sidebar,
  * the legacy → new parent+sub-tab redirects, and the nested sub-tab shape used
- * by the consolidated areas (LUCA Coach, Journal, Messages, Economic Passport,
- * Settings). These guard the acceptance criteria for the sidebar cleanup.
+ * by the consolidated areas (LUCA Coach, Communications, Economic Passport,
+ * Settings). Journal + Messages now merge into a single Communications
+ * destination. These guard the acceptance criteria for the sidebar cleanup.
  */
 import { describe, it, expect, vi } from 'vitest';
 
@@ -22,14 +23,14 @@ const tabIds = (nav) => nav.flatMap((g) => g.items.map((i) => i.id));
 describe('member sidebar consolidation', () => {
   const ids = tabIds(navForPersona('patient', 'patient', false));
 
-  it('keeps the core member destinations', () => {
-    for (const id of ['dashboard', 'explore', 'health', 'coach', 'journal', 'messages', 'wallet']) {
+  it('keeps the core member destinations (Journal + Messages now one Communications)', () => {
+    for (const id of ['dashboard', 'explore', 'health', 'coach', 'communications', 'wallet']) {
       expect(ids).toContain(id);
     }
   });
 
   it('removes the now-consolidated standalone entries from the sidebar', () => {
-    for (const id of ['intelligence', 'media', 'inbox', 'contributions', 'gps-map', 'network', 'identity', 'account']) {
+    for (const id of ['intelligence', 'media', 'inbox', 'contributions', 'gps-map', 'network', 'identity', 'account', 'journal', 'messages']) {
       expect(ids).not.toContain(id);
     }
   });
@@ -42,8 +43,12 @@ describe('member sidebar consolidation', () => {
 describe('resolveNav — legacy redirects', () => {
   it('maps each legacy target to its new parent + sub-tab', () => {
     expect(resolveNav('intelligence')).toEqual({ tab: 'coach', sub: 'intelligence' });
-    expect(resolveNav('media')).toEqual({ tab: 'journal', sub: 'media' });
-    expect(resolveNav('inbox')).toEqual({ tab: 'messages', sub: 'inbox' });
+    // Journal + Messages (and their former sub-pages) all fold into Communications.
+    expect(resolveNav('journal')).toEqual({ tab: 'communications', sub: 'journal' });
+    expect(resolveNav('growth')).toEqual({ tab: 'communications', sub: 'growth' });
+    expect(resolveNav('media')).toEqual({ tab: 'communications', sub: 'media' });
+    expect(resolveNav('messages')).toEqual({ tab: 'communications', sub: 'messages' });
+    expect(resolveNav('inbox')).toEqual({ tab: 'communications', sub: 'inbox' });
     expect(resolveNav('contributions')).toEqual({ tab: 'wallet', sub: 'contributions' });
     expect(resolveNav('gps-map')).toEqual({ tab: 'wallet', sub: 'network' });
     expect(resolveNav('network')).toEqual({ tab: 'wallet', sub: 'network' });
@@ -61,20 +66,21 @@ describe('resolveNav — legacy redirects', () => {
 describe('resolveNav — canonicalisation', () => {
   it('defaults an area with sub-tabs to its first sub-tab', () => {
     expect(resolveNav('coach')).toEqual({ tab: 'coach', sub: 'coach' });
-    expect(resolveNav('journal')).toEqual({ tab: 'journal', sub: 'journal' });
-    expect(resolveNav('messages')).toEqual({ tab: 'messages', sub: 'conversations' });
+    expect(resolveNav('communications')).toEqual({ tab: 'communications', sub: 'messages' });
     expect(resolveNav('wallet')).toEqual({ tab: 'wallet', sub: 'overview' });
     expect(resolveNav('account')).toEqual({ tab: 'account', sub: 'profile' });
   });
 
   it('preserves a valid explicit sub-tab', () => {
     expect(resolveNav('coach', 'intelligence')).toEqual({ tab: 'coach', sub: 'intelligence' });
+    expect(resolveNav('communications', 'journal')).toEqual({ tab: 'communications', sub: 'journal' });
     expect(resolveNav('wallet', 'network')).toEqual({ tab: 'wallet', sub: 'network' });
     expect(resolveNav('account', 'security')).toEqual({ tab: 'account', sub: 'security' });
   });
 
   it('falls back to the default sub-tab for an unknown sub', () => {
     expect(resolveNav('coach', 'bogus')).toEqual({ tab: 'coach', sub: 'coach' });
+    expect(resolveNav('communications', 'bogus')).toEqual({ tab: 'communications', sub: 'messages' });
   });
 
   it('leaves a flat tab (no sub-tabs) with a null sub', () => {
@@ -90,11 +96,9 @@ describe('SUBTABS shape', () => {
   it('LUCA Coach carries Coach and Intelligence', () => {
     expect(SUBTABS.coach.tabs).toEqual(['coach', 'intelligence']);
   });
-  it('Journal preserves Growth alongside Journal and Media', () => {
-    expect(SUBTABS.journal.tabs).toEqual(['journal', 'growth', 'media']);
-  });
-  it('Messages carries Conversations and Inbox', () => {
-    expect(SUBTABS.messages.tabs).toEqual(['conversations', 'inbox']);
+  it('Communications merges With Others (Messages, Inbox) + With Yourself (Journal, Growth, Media)', () => {
+    expect(SUBTABS.communications.tabs).toEqual(['messages', 'inbox', 'journal', 'growth', 'media']);
+    expect(SUBTABS.communications.def).toBe('messages');
   });
   it('Settings exposes the five account sections', () => {
     expect(SUBTABS.account.tabs).toEqual(['profile', 'preferences', 'notifications', 'security', 'privacy']);

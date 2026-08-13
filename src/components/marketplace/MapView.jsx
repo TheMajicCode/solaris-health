@@ -76,9 +76,15 @@ function MapProviderCard({ provider, onOpen, onClose }) {
   const langs = Array.isArray(meta.languages) ? meta.languages : [];
   const modality = MODALITY_LABEL[meta.modality] || null;
   const loc = [provider.city, provider.region].filter(Boolean).join(', ');
+  const cover = provider.cover_photo_url || provider.profile_photo_url;
   return (
     <div className="mv-card" role="dialog" aria-label={`${provider.business_name || 'Provider'} summary`}>
       <button type="button" className="mv-card-x" onClick={onClose} aria-label="Close provider card"><X size={16} /></button>
+      <div className="mv-card-media">
+        {cover
+          ? <img src={cover} alt={provider.business_name || 'Provider'} loading="lazy" />
+          : <div className="mv-card-noimg"><MapPin size={20} /></div>}
+      </div>
       <div className="mv-card-head">
         <TypeBadge type={provider.provider_type} />
         {provider.rating > 0 && <RatingStars value={Number(provider.rating)} size={13} showValue count={provider.review_count} />}
@@ -273,6 +279,10 @@ const CSS = `
 .luca .mv-card-x{position:absolute;top:9px;right:9px;width:28px;height:28px;border-radius:8px;border:none;
   background:var(--surface-2);color:var(--muted);display:grid;place-items:center;cursor:pointer}
 .luca .mv-card-x:hover{background:var(--line-2);color:var(--ink)}
+.luca .mv-card-media{width:100%;height:96px;border-radius:12px;overflow:hidden;background:var(--surface-2);margin-bottom:10px}
+.luca .mv-card-media img{width:100%;height:100%;object-fit:cover;display:block}
+.luca .mv-card-noimg{width:100%;height:100%;display:grid;place-items:center;color:var(--muted);
+  background:linear-gradient(135deg,var(--mint-soft),var(--surface-2))}
 .luca .mv-card-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-right:30px}
 .luca .mv-card-name{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15.5px;color:var(--ink);margin-top:7px;line-height:1.25}
 .luca .mv-card-row{display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--muted);margin-top:4px}

@@ -7,6 +7,7 @@
    global dark theme used by the auth / onboarding flows.
    ============================================================ */
 import React, { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, Cell,
   RadarChart as ReRadar, PolarGrid, PolarAngleAxis, Radar, CartesianGrid,
@@ -160,6 +161,14 @@ const CSS = `
 .stat .unit{font-size:13px;color:var(--muted-2);font-weight:500;margin-left:5px}
 .divider{height:1px;background:var(--line);margin:14px 0}
 .grid{display:grid;gap:18px}
+/* Phone (<=767px): every major card grid collapses to a single full-width
+   column. Uses !important to beat inline gridTemplateColumns styles (fixed
+   1fr 1fr / 1fr 1fr 1fr / minmax()+fixed-px layouts) so no skinny side-by-side
+   columns survive on phones. Auto-fit grids already collapse; this is a no-op
+   for them. */
+@media(max-width:767px){
+  .luca .grid,.luca .grid-2-1{grid-template-columns:1fr!important}
+}
 .row{display:flex;align-items:center}
 .col{display:flex;flex-direction:column}
 .between{display:flex;align-items:center;justify-content:space-between}
@@ -385,18 +394,6 @@ textarea.input-line{resize:vertical;min-height:64px}
 .luca .queue-ico{width:26px;height:26px;border-radius:8px;background:linear-gradient(150deg,#0E5C57,#0A413D);color:#E7F8F3;display:grid;place-items:center;flex:none}
 .luca .queue-title{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 @media(max-width:520px){.luca .mini-player{left:12px;right:12px;transform:none;width:auto}}
-/* Floating LUCA widget */
-.luca .luca-fab{position:fixed;right:22px;bottom:22px;z-index:9998;display:inline-flex;align-items:center;gap:9px;background:linear-gradient(150deg,#0E5C57,#0A413D);color:#E7F8F3;border:none;border-radius:999px;padding:8px 16px 8px 8px;cursor:pointer;box-shadow:0 10px 30px rgba(10,60,55,.35);font-family:inherit;transition:transform .15s,box-shadow .15s}
-.luca .luca-fab:hover{transform:translateY(-2px);box-shadow:0 14px 38px rgba(10,60,55,.42)}
-.luca .luca-fab-label{font-size:13.5px;font-weight:700;letter-spacing:.2px}
-.luca .luca-widget{position:fixed;right:22px;bottom:22px;z-index:9999;width:380px;max-width:calc(100vw - 32px);height:520px;max-height:calc(100vh - 44px);display:flex;flex-direction:column;background:var(--surface,#fff);border:1px solid var(--line,#E6EDEA);border-radius:20px;overflow:hidden;box-shadow:0 24px 70px rgba(10,40,40,.28)}
-.luca .luca-widget-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;background:linear-gradient(150deg,#0E5C57,#0A413D)}
-.luca .luca-widget-x{background:rgba(255,255,255,.14);border:none;color:#E7F8F3;width:28px;height:28px;border-radius:9px;display:grid;place-items:center;cursor:pointer;flex:none}
-.luca .luca-widget-x:hover{background:rgba(255,255,255,.24)}
-.luca .luca-widget-body{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px;background:var(--surface-2,#F7FAF9)}
-.luca .luca-widget-foot{padding:12px 14px;border-top:1px solid var(--line,#E6EDEA);background:var(--surface,#fff)}
-.luca .luca-widget-foot .btn.primary{padding:8px 12px}
-@media(max-width:520px){.luca .luca-widget{right:12px;left:12px;width:auto}}
 /* Daily check-in modal */
 .luca .ci-overlay{position:fixed;inset:0;z-index:10000;background:rgba(8,32,30,.55);backdrop-filter:blur(3px);display:flex;align-items:flex-end;justify-content:center;animation:ciFade .2s ease}
 @keyframes ciFade{from{opacity:0}to{opacity:1}}
@@ -463,7 +460,6 @@ textarea.input-line{resize:vertical;min-height:64px}
 .luca .home-btn{display:none}
 .luca .m-title{display:none}
 .luca .m-botnav{display:none}
-.luca .luca-guide-wrap{display:none}
 @media(max-width:900px){
   /* Compact sticky header: Home (left) · title (center) · notif+profile (right) */
   .topbar{padding:10px 12px;gap:8px}
@@ -476,18 +472,24 @@ textarea.input-line{resize:vertical;min-height:64px}
   .page{padding:16px 14px calc(84px + env(safe-area-inset-bottom,0px))}
 
   /* Fixed bottom navigation */
-  .luca .m-botnav{position:fixed;left:0;right:0;bottom:0;z-index:60;display:flex;align-items:flex-end;
-    justify-content:space-around;gap:2px;background:rgba(255,255,255,.94);backdrop-filter:blur(12px);
-    border-top:1px solid var(--line);padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px));
+  /* Exactly five equal columns that can never overflow the viewport. Grid keeps
+     every destination visible and complete; the centre LUCA orb rises visually
+     but stays inside its own 1fr column. */
+  .luca .m-botnav{position:fixed;inset-inline:0;left:0;right:0;bottom:0;z-index:60;
+    display:grid;grid-template-columns:repeat(5,minmax(0,1fr));align-items:end;gap:2px;
+    width:100%;max-width:100vw;box-sizing:border-box;
+    background:rgba(255,255,255,.94);backdrop-filter:blur(12px);
+    border-top:1px solid var(--line);padding:6px 4px calc(6px + env(safe-area-inset-bottom,0px));
     transition:transform .28s cubic-bezier(.2,.8,.2,1)}
   .luca .m-botnav.hidden{transform:translateY(120%)}
-  .luca .m-bn-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  .luca .m-bn-item{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
     min-width:0;min-height:48px;padding:6px 2px;border:none;background:transparent;color:var(--muted);
     font-family:inherit;font-size:10.5px;font-weight:600;cursor:pointer;border-radius:12px;transition:color .15s}
   .luca .m-bn-item span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
   .luca .m-bn-item.active{color:var(--teal-d)}
   .luca .m-bn-item.active svg{transform:translateY(-1px)}
-  .luca .m-bn-luca{flex:0 0 auto;margin-top:-22px}
+  .luca .m-bn-luca{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
+    justify-self:center;min-width:0;border:none;background:transparent;cursor:pointer;font-family:inherit;margin-top:-22px}
   .luca .m-bn-luca .m-bn-orb{width:54px;height:54px;border-radius:50%;
     background:radial-gradient(circle at 50% 35%,#36C9A9,#0E5C57);color:#EAFBF6;display:grid;place-items:center;
     box-shadow:0 6px 18px rgba(14,92,87,.42),0 0 0 4px rgba(255,255,255,.9);transition:transform .18s}
@@ -506,20 +508,6 @@ textarea.input-line{resize:vertical;min-height:64px}
   .luca .m-more-item.switch{color:var(--teal-d);border-top:1px solid var(--line);margin-top:4px}
 }
 
-/* Lightweight LUCA guide (spark companion) — visible at any width where mounted */
-.luca .luca-guide-wrap{display:block;position:fixed;right:16px;bottom:calc(86px + env(safe-area-inset-bottom,0px));z-index:55;pointer-events:none}
-@media(min-width:901px){.luca .luca-guide-wrap{bottom:22px;right:22px}}
-.luca .luca-guide{pointer-events:auto;position:relative;display:flex;align-items:flex-end;gap:10px;
-  animation:guideFloat 4.5s ease-in-out infinite}
-.luca .luca-guide-spark{width:44px;height:44px;border-radius:50%;flex:none;
-  background:radial-gradient(circle at 50% 35%,#36C9A9,#0E5C57);display:grid;place-items:center;color:#EAFBF6;
-  box-shadow:0 6px 20px rgba(14,92,87,.4),0 0 0 3px rgba(255,255,255,.85)}
-.luca .luca-guide-bubble{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:14px 14px 4px 14px;
-  padding:9px 12px;max-width:210px;font-size:12.5px;line-height:1.45;color:var(--ink);box-shadow:var(--shadow)}
-.luca .luca-guide-x{position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;border:1px solid var(--line);
-  background:var(--surface);color:var(--muted);display:grid;place-items:center;cursor:pointer;box-shadow:var(--shadow-sm)}
-@keyframes guideFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
-@media(prefers-reduced-motion:reduce){.luca .luca-guide{animation:none!important}}
 `;
 
 /* ============================== HELPERS ============================== */
@@ -633,8 +621,8 @@ function navForRole(role, isProvider) {
       group: 'Salud', color: '#36C9A9', items: [
         { id: 'health', label: 'Health Passport', icon: HeartPulse },
         { id: 'coach', label: 'LUCA Coach', icon: Bot },
-        { id: 'journal', label: 'Journal', icon: BookOpen },
-        { id: 'messages', label: 'Messages', icon: MessageSquare, badgeKey: 'messages' },
+        // Journal + Messages consolidated into a single Communications destination.
+        { id: 'communications', label: 'Communications', icon: MessageSquare, badgeKey: 'messages' },
       ],
     },
     {
@@ -818,6 +806,7 @@ const TAB_META = {
   'my-bookings': { title: 'My Bookings', sub: 'Your appointments with marketplace providers — upcoming, pending, and past.' },
   'booking-oversight': { title: 'Booking Oversight', sub: 'Monitor and resolve appointments across every provider on the platform.' },
   messages: { title: 'Secure Messages', sub: 'End-to-end encrypted conversations with your care network — only you can read them.' },
+  communications: { title: 'Communications', sub: 'Everything you say and reflect — messages and inbox with others, and your private journal, growth, and media.' },
   wallet: { title: 'Economic Passport', sub: 'Your sovereign economic identity — GPS value flows, LOVE points, and simulated receipts.' },
   treasury: { title: 'Community Treasury', sub: 'The regenerative commons — every transaction seeds our shared prosperity.' },
   'gps-economy': { title: 'GPS Economy', sub: 'The living economy — how value flows, splits, and returns to the commons.' },
@@ -862,8 +851,12 @@ const TAB_META = {
 // Legacy (pre-consolidation) tab ids → their new { tab, sub } home.
 export const LEGACY_TAB_MAP = {
   intelligence: { tab: 'coach', sub: 'intelligence' },
-  media: { tab: 'journal', sub: 'media' },
-  inbox: { tab: 'messages', sub: 'inbox' },
+  // Journal + Messages (and their former sub-pages) consolidate into Communications.
+  journal: { tab: 'communications', sub: 'journal' },
+  growth: { tab: 'communications', sub: 'growth' },
+  media: { tab: 'communications', sub: 'media' },
+  messages: { tab: 'communications', sub: 'messages' },
+  inbox: { tab: 'communications', sub: 'inbox' },
   contributions: { tab: 'wallet', sub: 'contributions' },
   'gps-map': { tab: 'wallet', sub: 'network' },
   network: { tab: 'wallet', sub: 'network' },
@@ -872,6 +865,8 @@ export const LEGACY_TAB_MAP = {
 // Areas that own a set of nested sub-tabs, with the default (first) sub-tab.
 export const SUBTABS = {
   coach: { tabs: ['coach', 'intelligence'], def: 'coach' },
+  // Communications: "With Others" (messages, inbox) + "With Yourself" (journal, growth, media).
+  communications: { tabs: ['messages', 'inbox', 'journal', 'growth', 'media'], def: 'messages' },
   journal: { tabs: ['journal', 'growth', 'media'], def: 'journal' },
   messages: { tabs: ['conversations', 'inbox'], def: 'conversations' },
   wallet: { tabs: ['overview', 'contributions', 'network'], def: 'overview' },
@@ -5111,127 +5106,6 @@ function BecomeAPractitionerModal({ user, onClose, onSubmitted }) {
 }
 
 /* ============================== PAGE ROUTER ============================== */
-/* ============================== LUCA FLOATING WIDGET ============================== */
-function LucaWidget({ user, hidden, go }) {
-  const { lucaMessages: messages, setLucaMessages: setMessages, lucaLoaded, loadLucaHistory, startRetake, setPendingProviderId, setPendingCurate } = useApp();
-  const { playFromLibrary } = useAudio();
-  const [open, setOpen] = useState(false);
-  const [input, setInput] = useState('');
-  const [sending, setSending] = useState(false);
-  const endRef = useRef(null);
-  const loading = open && !lucaLoaded;
-
-  // Lazy-load the shared history the first time the panel is opened
-  useEffect(() => {
-    if (open) loadLucaHistory();
-  }, [open, loadLucaHistory]);
-
-  useEffect(() => { if (open) endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, sending, open]);
-
-  const send = async (text) => {
-    const content = (text ?? input).trim();
-    if (!content || sending) return;
-    setInput('');
-    setMessages((m) => [...m, { role: 'user', content, created_at: new Date().toISOString() }]);
-    setSending(true);
-    try {
-      const res = await api.sendLucaMessage(content);
-      setMessages((m) => [...m, { role: 'assistant', content: res?.reply || '…', model: res?.model, suggestions: res?.suggestions || [], created_at: new Date().toISOString() }]);
-    } catch (e) {
-      const msg = e?.agentDisabled
-        ? 'LUCA is paused — you turned it off. Re-enable anytime from your Passport.'
-        : 'LUCA is taking a moment — try again shortly.';
-      setMessages((m) => [...m, { role: 'assistant', content: msg, created_at: new Date().toISOString() }]);
-    } finally { setSending(false); }
-  };
-
-  const firstName = user?.firstName || 'friend';
-  if (hidden) return null;
-
-  return (
-    <>
-      {!open && (
-        <button className="luca-fab" onClick={() => setOpen(true)} aria-label="Ask LUCA">
-          <LucaAvatar size="sm" />
-          <span className="luca-fab-label">Ask LUCA</span>
-        </button>
-      )}
-      {open && (
-        <div className="luca-widget" role="dialog" aria-label="LUCA chat">
-          <div className="luca-widget-head">
-            <div className="row gap-2" style={{ alignItems: 'center', minWidth: 0 }}>
-              <LucaAvatar size="sm" />
-              <div style={{ minWidth: 0 }}>
-                <div className="dp f7" style={{ fontSize: 14, color: '#fff' }}>LUCA</div>
-                <div style={{ fontSize: 11, color: 'rgba(231,248,243,.7)' }}>Heart-Centered Intelligence</div>
-              </div>
-            </div>
-            <button className="luca-widget-x" onClick={() => setOpen(false)} aria-label="Minimize"><X size={16} /></button>
-          </div>
-
-          <div className="luca-widget-body">
-            {loading ? (
-              <><Skel h={40} w="70%" /><Skel h={40} w="55%" style={{ alignSelf: 'flex-end' }} /></>
-            ) : messages.length === 0 ? (
-              <div className="col" style={{ gap: 10, alignItems: 'center', textAlign: 'center', padding: '18px 8px' }}>
-                <LucaAvatar />
-                <div className="small f6" style={{ color: 'var(--ink)' }}>How can I support you today, {firstName}?</div>
-                <div className="tiny muted">I guide and educate — never diagnose.</div>
-                <div className="luca-chips" style={{ justifyContent: 'center' }}>
-                  {COACH_SUGGESTIONS.slice(0, 3).map((s, i) => (
-                    <button key={s} className="luca-chip" onClick={() => send(s)} disabled={sending}
-                      style={{ background: CHIP_BG[i % 3], color: CHIP_TEXT[i % 3], borderColor: CHIP_BORDER[i % 3] }}>
-                      <Sparkles size={12} strokeWidth={2.4} />{s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : messages.map((m, i) => {
-              const isUser = m.role === 'user';
-              return (
-                <div key={i} className={`msg-row ${isUser ? 'user' : 'ai'}`}>
-                  {isUser ? <Avatar name={user?.fullName} size={26} /> : <LucaAvatar size="sm" />}
-                  <div style={{ minWidth: 0, maxWidth: '84%' }}>
-                    <div className={`msg-bubble ${isUser ? 'user' : 'ai'}`} style={{ fontSize: 13 }}>{m.content}</div>
-                    {!isUser && (
-                      <span style={{ fontSize: '10px', color: 'var(--muted-2)', display: 'block', marginTop: '4px' }}>
-                        AI · Not medical advice
-                      </span>
-                    )}
-                    {!isUser && i === messages.length - 1 && !sending && (
-                      <LucaChips suggestions={m.suggestions} onAction={(s) => executeChipAction(s, { go, setInput, send, playAudio: playFromLibrary, startRetake, setPendingProviderId, setPendingCurate })} disabled={sending} />
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-            {sending && (
-              <div className="msg-row ai">
-                <LucaAvatar size="sm" />
-                <div className="msg-bubble ai"><span className="dot-typing"><i /><i /><i /></span></div>
-              </div>
-            )}
-            <div ref={endRef} />
-          </div>
-
-          <div className="luca-widget-foot">
-            <div className="coach-input-row">
-              <input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && send()}
-                placeholder="Ask LUCA anything..."
-              />
-              <button className="btn primary" onClick={() => send()} disabled={sending || !input.trim()} aria-label="Send"><Send size={15} strokeWidth={2.2} /></button>
-            </div>
-            <div className="tiny muted" style={{ textAlign: 'center', marginTop: 6 }}>LUCA guides and educates — never diagnoses or prescribes.</div>
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
-
 /* =============================== INBOX =============================== */
 function InboxPage({ user, go, onUnread }) {
   const [loading, setLoading] = useState(true);
@@ -5322,6 +5196,7 @@ function SubTabs({ items, active, onSelect, ariaLabel }) {
     const next = (idx + dir + items.length) % items.length;
     onSelect(items[next].id);
   };
+  const hasActive = items.some((x) => x.id === active);
   return (
     <div role="tablist" aria-label={ariaLabel || 'Sections'} className="row wrap" style={{ gap: 4, background: '#F1F5F3', borderRadius: 999, padding: 4, marginBottom: 18, width: 'fit-content', maxWidth: '100%' }}>
       {items.map((it, idx) => {
@@ -5332,7 +5207,7 @@ function SubTabs({ items, active, onSelect, ariaLabel }) {
             key={it.id}
             role="tab"
             aria-selected={on}
-            tabIndex={on ? 0 : -1}
+            tabIndex={on || (!hasActive && idx === 0) ? 0 : -1}
             type="button"
             onClick={() => onSelect(it.id)}
             onKeyDown={(e) => onKeyDown(e, idx)}
@@ -5410,6 +5285,44 @@ function MessagesArea({ user, go, sub, onUnread, onInboxUnread }) {
       {active === 'inbox'
         ? <ErrorBoundary><InboxPage user={user} go={go} onUnread={onInboxUnread} /></ErrorBoundary>
         : <SecureChat user={user} onUnread={onUnread} />}
+    </div>
+  );
+}
+
+/* Communications — one destination that merges the former Journal + Messages.
+   Two accessible segmented controls: "With Others" (Messages, Inbox) and
+   "With Yourself" (Journal, Growth, Media). Every section is URL-backed and
+   reuses the existing page components (no duplicated functionality). */
+function CommunicationsArea({ user, go, sub, onUnread, onInboxUnread }) {
+  const active = SUBTABS.communications.tabs.includes(sub) ? sub : SUBTABS.communications.def;
+  const withOthers = [
+    { id: 'messages', label: 'Messages', icon: MessageSquare },
+    { id: 'inbox', label: 'Inbox', icon: Inbox },
+  ];
+  const withYourself = [
+    { id: 'journal', label: 'Journal', icon: BookOpen },
+    { id: 'growth', label: 'Growth', icon: Compass },
+    { id: 'media', label: 'Media', icon: Headphones },
+  ];
+  const groupLabel = { fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--muted,#8AA09C)', marginBottom: 6 };
+  let body;
+  if (active === 'inbox') body = <ErrorBoundary><InboxPage user={user} go={go} onUnread={onInboxUnread} /></ErrorBoundary>;
+  else if (active === 'journal' || active === 'growth') body = <ErrorBoundary><JournalPage user={user} go={go} forcedView={active === 'growth' ? 'grow' : 'reflect'} hideToggle /></ErrorBoundary>;
+  else if (active === 'media') body = <ErrorBoundary><MediaPage user={user} go={go} /></ErrorBoundary>;
+  else body = <SecureChat user={user} onUnread={onUnread} />;
+  return (
+    <div>
+      <div className="comm-groups" style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 24px', alignItems: 'flex-start', marginBottom: 4 }}>
+        <div className="comm-group">
+          <div style={groupLabel}>With Others</div>
+          <SubTabs ariaLabel="With Others" active={active} onSelect={(id) => go('communications', id)} items={withOthers} />
+        </div>
+        <div className="comm-group">
+          <div style={groupLabel}>With Yourself</div>
+          <SubTabs ariaLabel="With Yourself" active={active} onSelect={(id) => go('communications', id)} items={withYourself} />
+        </div>
+      </div>
+      {body}
     </div>
   );
 }
@@ -5851,6 +5764,7 @@ function TabPage({ tab, sub, user, go, effectiveRole, onUnread, onInboxUnread, o
     case 'my-bookings': return <MyBookings user={user} onExplore={() => go('explore')} />;
     case 'booking-oversight': return <BookingManagement />;
     case 'messages': return <ErrorBoundary><MessagesArea user={user} go={go} sub={sub} onUnread={onUnread} onInboxUnread={onInboxUnread} /></ErrorBoundary>;
+    case 'communications': return <ErrorBoundary><CommunicationsArea user={user} go={go} sub={sub} onUnread={onUnread} onInboxUnread={onInboxUnread} /></ErrorBoundary>;
     case 'inbox': return <ErrorBoundary><InboxPage user={user} go={go} onUnread={onInboxUnread} /></ErrorBoundary>;
     case 'wallet': return <ErrorBoundary><EconomicPassportArea user={user} go={go} sub={sub} /></ErrorBoundary>;
     case 'account': return <ErrorBoundary><SettingsPage user={user} go={go} sub={sub} /></ErrorBoundary>;
@@ -5896,35 +5810,6 @@ function AdminSystemPage() {
 }
 
 /* ============================== MAIN SHELL ============================== */
-/* Lightweight LUCA guide — a friendly spark companion. Pure CSS/SVG motion
-   (no 3D / video / animation deps). Dismissible and remembered for the session;
-   never diagnostic, never a chat. `prefers-reduced-motion` is handled in CSS. */
-function LucaGuide({ onOpen }) {
-  const [dismissed, setDismissed] = useState(() => {
-    try { return sessionStorage.getItem('solaris:guideDismissed') === '1'; } catch { return false; }
-  });
-  if (dismissed) return null;
-  const dismiss = () => {
-    setDismissed(true);
-    try { sessionStorage.setItem('solaris:guideDismissed', '1'); } catch { /* ignore */ }
-  };
-  return (
-    <div className="luca-guide-wrap">
-      <div className="luca-guide">
-        <button type="button" className="luca-guide-spark" aria-label="Open LUCA Coach" onClick={onOpen}>
-          <Sparkles size={22} strokeWidth={2.2} />
-        </button>
-        <div className="luca-guide-bubble">
-          Tap the spark whenever you'd like to explore with LUCA.
-          <button type="button" className="luca-guide-x" aria-label="Dismiss LUCA guide" onClick={dismiss}>
-            <X size={12} strokeWidth={2.4} />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function LucaPassport() {
   const { user, logout, refreshUser } = useApp();
   const realRole = user?.role || 'patient';
@@ -6171,7 +6056,7 @@ export default function LucaPassport() {
     { id: 'explore', label: 'Explore', icon: Compass },
     { id: 'health', label: 'Health', icon: HeartPulse },
     { id: 'coach', label: 'LUCA', center: true },
-    { id: 'journal', label: 'Reflection', icon: BookOpen },
+    { id: 'communications', label: 'Connect', ariaLabel: 'Communications', icon: MessageSquare },
     { id: 'wallet', label: 'Economic', icon: Wallet },
   ];
   const practitionerNavItems = [
@@ -6283,7 +6168,7 @@ export default function LucaPassport() {
           <header className="topbar">
             <button className="icon-btn menu-btn" onClick={() => setDrawer(true)} aria-label="Open menu"><Menu size={18} /></button>
             <button className="icon-btn home-btn" onClick={() => go(defaultTabFor(effectiveRole))} aria-label="Home"><LayoutDashboard size={18} /></button>
-            <div className="m-title" aria-hidden="true">{tab === 'journal' ? 'Reflection' : meta.title}</div>
+            <div className="m-title" aria-hidden="true">{meta.title}</div>
             <div className="search">
               <Search size={16} />
               <input placeholder="Search your passport, care, and value…" />
@@ -6307,16 +6192,15 @@ export default function LucaPassport() {
       </div>
 
       {/* Persistent mini-player — patient experience only (except the Media sub-tab, which has its own player) */}
-      <MiniPlayer hidden={(tab === 'journal' && sub === 'media') || effectiveRole !== 'patient'} />
+      <MiniPlayer hidden={(tab === 'communications' && sub === 'media') || effectiveRole !== 'patient'} />
 
-      {/* Lightweight LUCA guide (spark companion) — patient experience only,
-          hidden on the Coach area so it never duplicates the coach surface. */}
-      {effectiveRole === 'patient' && tab !== 'coach' && (
-        <LucaGuide onOpen={() => go('coach')} />
-      )}
-
-      {/* ---------------- MOBILE BOTTOM NAV ---------------- */}
-      {showBotNav && (
+      {/* ---------------- MOBILE BOTTOM NAV ----------------
+          Rendered through a portal at document.body so no transformed or
+          positioned ancestor (e.g. the .page fade keyframe) can trap or
+          compress the fixed bar. Wrapped in a fresh `.luca` scope so the
+          existing `.luca .m-botnav` styles still apply. */}
+      {showBotNav && typeof document !== 'undefined' && document.body && createPortal(
+        <div className="luca">
         <nav className={`m-botnav ${navHidden ? 'hidden' : ''}`} aria-label="Primary">
           {botNavItems.map((it) => {
             if (it.center) {
@@ -6357,7 +6241,7 @@ export default function LucaPassport() {
                 key={it.id}
                 type="button"
                 className={`m-bn-item ${active ? 'active' : ''}`}
-                aria-label={it.label}
+                aria-label={it.ariaLabel || it.label}
                 aria-current={active ? 'page' : undefined}
                 onClick={() => go(it.id)}
               >
@@ -6367,29 +6251,32 @@ export default function LucaPassport() {
             );
           })}
         </nav>
-      )}
 
-      {/* Practitioner "More" bottom sheet */}
-      {moreOpen && (
-        <div className="m-more-scrim" onClick={() => setMoreOpen(false)}>
-          <div className="m-more" role="dialog" aria-label="More" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-            <div className="m-more-grab" />
-            <button type="button" className="m-more-item" onClick={() => { go('prac-availability'); setMoreOpen(false); }}>
-              <CalendarCheck size={20} strokeWidth={2} /> Availability
-            </button>
-            <button type="button" className="m-more-item" onClick={() => { go('prac-finance'); setMoreOpen(false); }}>
-              <Wallet size={20} strokeWidth={2} /> Finance
-            </button>
-            <button type="button" className="m-more-item" onClick={() => { go('prac-settings'); setMoreOpen(false); }}>
-              <Settings size={20} strokeWidth={2} /> Settings
-            </button>
-            {canSwitchPortal && (
-              <button type="button" className="m-more-item switch" onClick={() => { switchPortal('member'); setMoreOpen(false); }}>
-                <Users size={20} strokeWidth={2} /> Switch to Member portal
+        {/* Practitioner "More" bottom sheet — portaled with the bar so it stacks
+            above the page and is never trapped by a transformed ancestor. */}
+        {moreOpen && (
+          <div className="m-more-scrim" onClick={() => setMoreOpen(false)}>
+            <div className="m-more" role="dialog" aria-label="More" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+              <div className="m-more-grab" />
+              <button type="button" className="m-more-item" onClick={() => { go('prac-availability'); setMoreOpen(false); }}>
+                <CalendarCheck size={20} strokeWidth={2} /> Availability
               </button>
-            )}
+              <button type="button" className="m-more-item" onClick={() => { go('prac-finance'); setMoreOpen(false); }}>
+                <Wallet size={20} strokeWidth={2} /> Finance
+              </button>
+              <button type="button" className="m-more-item" onClick={() => { go('prac-settings'); setMoreOpen(false); }}>
+                <Settings size={20} strokeWidth={2} /> Settings
+              </button>
+              {canSwitchPortal && (
+                <button type="button" className="m-more-item switch" onClick={() => { switchPortal('member'); setMoreOpen(false); }}>
+                  <Users size={20} strokeWidth={2} /> Switch to Member portal
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
+        </div>,
+        document.body,
       )}
 
       {showApplication && (

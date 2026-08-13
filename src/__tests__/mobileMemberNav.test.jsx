@@ -1,7 +1,8 @@
 /**
- * Mobile member experience — bottom-nav shape + routing, Reflection outer label,
- * lightweight LUCA guide (reduced-motion), and the desktop sidebar regression.
- * Covers acceptance scenarios 1, 3, 11 and 12 for the mobile UI sprint.
+ * Mobile member experience — bottom-nav shape + routing, the Communications outer
+ * label, the removal of every floating LUCA surface, and the desktop sidebar
+ * regression. Covers the mobile nav structural fix and the Journal+Messages ->
+ * Communications consolidation.
  *
  * The bottom nav lives in the DOM at every viewport (CSS hides it on desktop),
  * so these DOM assertions are viewport-independent and stable in jsdom.
@@ -42,7 +43,7 @@ describe('member mobile bottom navigation', () => {
     const items = within(nav).getAllByRole('button', { hidden: true });
     expect(items).toHaveLength(5);
     const labels = items.map((b) => b.getAttribute('aria-label'));
-    expect(labels).toEqual(['Explore', 'Health', 'LUCA Coach', 'Reflection', 'Economic']);
+    expect(labels).toEqual(['Explore', 'Health', 'LUCA Coach', 'Communications', 'Economic']);
     // Centre item is the raised LUCA orb, not a normal tab.
     expect(nav.querySelector('.m-bn-luca')).toBeTruthy();
     // Dashboard is reached from the top-left Home button, never the bottom nav.
@@ -69,34 +70,31 @@ describe('member mobile bottom navigation', () => {
   });
 });
 
-describe('Reflection outer label / inner tabs', () => {
-  it('uses "Reflection" as the outer bottom-nav label', () => {
+describe('Communications outer label / consolidated inner tabs', () => {
+  it('uses "Communications" as the outer bottom-nav label', () => {
     render(<LucaPassport />);
-    expect(within(botnav()).getByRole('button', { name: 'Reflection', hidden: true })).toBeInTheDocument();
+    expect(within(botnav()).getByRole('button', { name: 'Communications', hidden: true })).toBeInTheDocument();
   });
 
-  it('preserves the Journal / Growth / Media inner sub-tabs', () => {
-    expect(SUBTABS.journal.tabs).toEqual(['journal', 'growth', 'media']);
+  it('consolidates Messages + Journal / Growth / Media under the Communications area', () => {
+    // "With Others" (messages, inbox) + "With Yourself" (journal, growth, media).
+    expect(SUBTABS.communications.tabs).toEqual(['messages', 'inbox', 'journal', 'growth', 'media']);
+    expect(SUBTABS.communications.def).toBe('messages');
   });
 });
 
-describe('lightweight LUCA guide (reduced-motion safe)', () => {
-  it('renders a dismissible spark that opens the Coach, not a chat widget', () => {
+describe('no floating LUCA surface remains', () => {
+  it('does not render any floating LUCA guide / spark / FAB / widget', () => {
     render(<LucaPassport />);
-    const spark = document.querySelector('.luca-guide-spark[aria-label="Open LUCA Coach"]');
-    expect(spark).toBeTruthy();
-    // No legacy floating "Ask LUCA" chatbot FAB.
-    expect(document.querySelector('.luca-fab')).toBeNull();
-    // Dismiss removes it for the session.
-    fireEvent.click(document.querySelector('.luca-guide-x[aria-label="Dismiss LUCA guide"]'));
+    // The removed floating guide and any legacy chatbot FAB must be gone.
     expect(document.querySelector('.luca-guide-spark')).toBeNull();
-  });
-
-  it('ships a prefers-reduced-motion guard that stops the guide animation', () => {
-    render(<LucaPassport />);
-    const css = Array.from(document.querySelectorAll('style')).map((s) => s.textContent).join('\n');
-    expect(css).toMatch(/prefers-reduced-motion:\s*reduce/);
-    expect(css).toMatch(/luca-guide/);
+    expect(document.querySelector('.luca-guide')).toBeNull();
+    expect(document.querySelector('.luca-fab')).toBeNull();
+    expect(document.querySelector('.luca-widget')).toBeNull();
+    expect(screen.queryByLabelText(/open luca coach/i)).toBeNull();
+    expect(screen.queryByText(/ask luca/i)).toBeNull();
+    // The only persistent mobile LUCA entry is the raised centre nav button.
+    expect(botnav().querySelector('.m-bn-luca')).toBeTruthy();
   });
 });
 

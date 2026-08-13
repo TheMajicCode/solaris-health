@@ -18,7 +18,7 @@ export function AppProvider({ children }) {
   const [pendingProviderId, setPendingProviderId] = useState(null); // deep-link: open this practitioner profile in Explore
   const [pendingCurate, setPendingCurate] = useState(false); // deep-link: run "Curate for me" on Explore mount
 
-  // ── Shared LUCA conversation (CoachPage + floating LucaWidget are two views of it) ──
+  // ── Shared LUCA conversation (used by the LUCA Coach surface) ──
   const [lucaMessages, setLucaMessages] = useState(() => {
     try {
       const stored = sessionStorage.getItem('luca_messages');
