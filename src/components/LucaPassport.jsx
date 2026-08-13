@@ -59,14 +59,18 @@ import IdentityCard from './passport/IdentityCard.jsx';
 import WalletCard from './passport/WalletCard.jsx';
 import LevelBadge from './passport/LevelBadge.jsx';
 import ContributionLedger from './contributions/ContributionLedger.jsx';
+import SparkWalletScreen from './wallet/SparkWalletScreen.jsx';
 import AuraAdmin from './clinic/AuraAdmin.jsx';
 import toast from 'react-hot-toast';
 
 /* ============================== DESIGN SYSTEM ============================== */
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
-
+/* Offline-coherent local/system font stack (no network @import). The installed
+   PWA renders identically online and offline. */
 .luca{
+  --font-display:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+  --font-body:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+  --font-mono:ui-monospace,'SFMono-Regular',Menlo,Consolas,monospace;
   --ink:#0A2B29; --teal:#0E5C57; --teal-d:#06403B; --teal-d2:#0A524C;
   --mint:#2FBE9F; --mint-soft:#DAF3EC; --mint-line:#BFE8DD; --mint-ink:#0B6A57;
   --gold:#D69B33; --gold-2:#E3AC46; --gold-soft:#F7E8C8; --gold-ink:#7E5715;
@@ -79,11 +83,11 @@ const CSS = `
   --shadow-sm:0 1px 2px rgba(10,43,41,.05),0 7px 18px -14px rgba(10,43,41,.18);
   --r:16px; --r-sm:12px; --r-lg:22px;
   color:var(--ink); line-height:1.5; -webkit-font-smoothing:antialiased;
-  font-family:'IBM Plex Sans',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  font-family:var(--font-body);
 }
 .luca *{box-sizing:border-box}
-.luca .mono{font-family:'IBM Plex Mono',ui-monospace,Menlo,monospace}
-.luca .dp{font-family:'Space Grotesk',system-ui,sans-serif}
+.luca .mono{font-family:var(--font-mono)}
+.luca .dp{font-family:var(--font-display)}
 
 .luca-app{display:grid;grid-template-columns:252px 1fr;min-height:100vh;
   background:
@@ -98,7 +102,7 @@ const CSS = `
 .brand{display:flex;align-items:center;gap:11px;padding:8px 10px 14px}
 .brand-mark{width:36px;height:36px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;
   background:radial-gradient(circle at 50% 35%,#13716A,#06403B);box-shadow:0 0 18px rgba(47,190,159,.45);border:1px solid rgba(47,190,159,.4)}
-.brand-name{font-family:'Space Grotesk';font-weight:700;font-size:18px;color:#fff;letter-spacing:.12em;line-height:1}
+.brand-name{font-family:var(--font-display);font-weight:700;font-size:18px;color:#fff;letter-spacing:.12em;line-height:1}
 .brand-sub{font-size:10px;color:rgba(217,238,232,.62);letter-spacing:.16em;text-transform:uppercase;margin-top:3px}
 .nav-label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:rgba(217,238,232,.46);
   padding:15px 12px 6px;font-weight:600;display:flex;align-items:center;gap:7px}
@@ -139,7 +143,7 @@ const CSS = `
 .page{padding:24px 26px 64px;max-width:1260px;margin:0 auto;animation:lucafade .4s ease both}
 @keyframes lucafade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:20px;flex-wrap:wrap}
-.page-title{font-family:'Space Grotesk';font-weight:600;font-size:25px;letter-spacing:-.015em;color:var(--ink);line-height:1.1}
+.page-title{font-family:var(--font-display);font-weight:600;font-size:25px;letter-spacing:-.015em;color:var(--ink);line-height:1.1}
 .page-sub{color:var(--muted);font-size:13.5px;margin-top:5px;max-width:560px}
 
 /* cards & primitives */
@@ -157,7 +161,7 @@ const CSS = `
 .luca .inbox-dot{flex:none;width:9px;height:9px;border-radius:999px;background:var(--gold)}
 .eyebrow{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-2);font-weight:600}
 .card-title{font-size:15px;font-weight:600;color:var(--ink)}
-.stat{font-family:'Space Grotesk';font-weight:600;font-size:27px;letter-spacing:-.02em;color:var(--ink);line-height:1}
+.stat{font-family:var(--font-display);font-weight:600;font-size:27px;letter-spacing:-.02em;color:var(--ink);line-height:1}
 .stat .unit{font-size:13px;color:var(--muted-2);font-weight:500;margin-left:5px}
 .divider{height:1px;background:var(--line);margin:14px 0}
 .grid{display:grid;gap:18px}
@@ -212,7 +216,7 @@ const CSS = `
 .btn.danger{color:var(--danger-ink);border-color:#F0C9BF;background:var(--danger-soft)}
 
 .avatar{border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;
-  font-family:'Space Grotesk';flex:none;font-size:15px;letter-spacing:.02em}
+  font-family:var(--font-display);flex:none;font-size:15px;letter-spacing:.02em}
 
 .track{height:8px;border-radius:999px;background:var(--line-2);overflow:hidden;width:100%}
 .bar{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--mint),var(--teal));transition:width 1s var(--ease,ease)}
@@ -281,8 +285,8 @@ const CSS = `
 /* ---- layout helpers & page-specific blocks ---- */
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
 @media(max-width:860px){.grid-2{grid-template-columns:1fr}}
-.h1{font-family:'Space Grotesk',system-ui,sans-serif;font-weight:700;font-size:30px;letter-spacing:-.02em;color:var(--ink)}
-.h2{font-family:'Space Grotesk',system-ui,sans-serif;font-weight:700;font-size:23px;letter-spacing:-.02em;color:var(--ink)}
+.h1{font-family:var(--font-display);font-weight:700;font-size:30px;letter-spacing:-.02em;color:var(--ink)}
+.h2{font-family:var(--font-display);font-weight:700;font-size:23px;letter-spacing:-.02em;color:var(--ink)}
 .ar{text-align:right}
 .ellipsis{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
@@ -466,7 +470,7 @@ textarea.input-line{resize:vertical;min-height:64px}
   .topbar .search{display:none}
   .topbar .menu-btn{display:none}
   .luca .home-btn{display:flex}
-  .luca .m-title{display:block;flex:1;min-width:0;font-family:'Space Grotesk',sans-serif;font-weight:700;
+  .luca .m-title{display:block;flex:1;min-width:0;font-family:var(--font-display);font-weight:700;
     font-size:16px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left}
   /* leave room for the fixed bottom nav so nothing hides behind it */
   .page{padding:16px 14px calc(84px + env(safe-area-inset-bottom,0px))}
@@ -485,7 +489,8 @@ textarea.input-line{resize:vertical;min-height:64px}
   .luca .m-bn-item{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
     min-width:0;min-height:48px;padding:6px 2px;border:none;background:transparent;color:var(--muted);
     font-family:inherit;font-size:10.5px;font-weight:600;cursor:pointer;border-radius:12px;transition:color .15s}
-  .luca .m-bn-item span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  .luca .m-bn-item span{white-space:normal;text-align:center;line-height:1.05;overflow:hidden;overflow-wrap:anywhere;
+    max-width:100%;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;min-height:calc(1.05em * 2)}
   .luca .m-bn-item.active{color:var(--teal-d)}
   .luca .m-bn-item.active svg{transform:translateY(-1px)}
   .luca .m-bn-luca{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
@@ -869,7 +874,7 @@ export const SUBTABS = {
   communications: { tabs: ['messages', 'inbox', 'journal', 'growth', 'media'], def: 'messages' },
   journal: { tabs: ['journal', 'growth', 'media'], def: 'journal' },
   messages: { tabs: ['conversations', 'inbox'], def: 'conversations' },
-  wallet: { tabs: ['overview', 'contributions', 'network'], def: 'overview' },
+  wallet: { tabs: ['wallet', 'gps', 'contributions', 'network'], def: 'wallet' },
   account: { tabs: ['profile', 'preferences', 'notifications', 'security', 'privacy'], def: 'profile' },
 };
 
@@ -5336,16 +5341,19 @@ function EconomicPassportArea({ user, go, sub }) {
         active={active}
         onSelect={(id) => go('wallet', id)}
         items={[
-          { id: 'overview', label: 'Overview', icon: EconomicPassportIcon },
+          { id: 'wallet', label: 'Wallet', icon: Wallet },
+          { id: 'gps', label: 'GPS', icon: EconomicPassportIcon },
           { id: 'contributions', label: 'Contributions', icon: Award },
           { id: 'network', label: 'Network', icon: MapPin },
         ]}
       />
-      {active === 'contributions'
-        ? <ErrorBoundary><ContributionLedger user={user} /></ErrorBoundary>
-        : active === 'network'
-          ? <ErrorBoundary><GPSMapView /></ErrorBoundary>
-          : <ErrorBoundary><EconomicPassportPage user={user} /></ErrorBoundary>}
+      {active === 'wallet'
+        ? <ErrorBoundary><SparkWalletScreen /></ErrorBoundary>
+        : active === 'contributions'
+          ? <ErrorBoundary><ContributionLedger user={user} /></ErrorBoundary>
+          : active === 'network'
+            ? <ErrorBoundary><GPSMapView /></ErrorBoundary>
+            : <ErrorBoundary><EconomicPassportPage user={user} /></ErrorBoundary>}
     </div>
   );
 }
@@ -6056,7 +6064,7 @@ export default function LucaPassport() {
     { id: 'explore', label: 'Explore', icon: Compass },
     { id: 'health', label: 'Health', icon: HeartPulse },
     { id: 'coach', label: 'LUCA', center: true },
-    { id: 'communications', label: 'Connect', ariaLabel: 'Communications', icon: MessageSquare },
+    { id: 'communications', label: 'Communications', ariaLabel: 'Communications', icon: MessageSquare },
     { id: 'wallet', label: 'Economic', icon: Wallet },
   ];
   const practitionerNavItems = [

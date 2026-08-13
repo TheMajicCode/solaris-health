@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Wallet, ShieldCheck, Eye, EyeOff, Loader2, Check, Link2, AlertTriangle } from 'lucide-react';
+import { Wallet, ShieldCheck, Eye, EyeOff, Loader2, Check, Link2, AlertTriangle, Lock } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { readSparkConfig, isSparkDemoFixture } from '../lib/spark/config.js';
 import {
   createSparkWallet, restoreSparkWallet, cleanupConnections, looksLikeMnemonic,
   classifySparkAddress, DEMO_FIXTURE_MNEMONIC,
 } from '../lib/spark/adapter.js';
+import { VAULT_STATUS_TEXT } from '../lib/spark/vault.js';
+import { useSparkWallet } from '../state/SparkWalletContext.jsx';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * SparkWalletCard — the optional "Reclaim Your Wealth" Spark surface (spec §4/§2A).
@@ -29,8 +31,9 @@ const SCREEN2_SAFE_COPY =
 export default function SparkWalletCard({ onWalletReady }) {
   const cfg = useMemo(() => readSparkConfig(), []);
   const demoFixture = useMemo(() => isSparkDemoFixture(), []);
+  const spark = useSparkWallet();
 
-  // mode: idle | generating | backup | restore | restoring | ready
+  // mode: idle | generating | backup | passphrase | restore | restoring | ready
   const [mode, setMode] = useState('idle');
   const [mnemonic, setMnemonic] = useState('');     // memory only
   const [reveal, setReveal] = useState(false);
@@ -38,6 +41,13 @@ export default function SparkWalletCard({ onWalletReady }) {
   const [restoreInput, setRestoreInput] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+
+  // Device unlock passphrase step — required before the encrypted same-device
+  // vault is written (spec §2/§3). The passphrase lives in memory only.
+  const [passphrase, setPassphrase] = useState('');
+  const [passphrase2, setPassphrase2] = useState('');
+  const [backedUpFlag, setBackedUpFlag] = useState(true); // true=generate path, false=restore path
+  const secretForVault = useRef('');                       // mnemonic pending encryption (memory only)
 
   // Optional PUBLIC-address linking — a SEPARATE, unchecked consent (spec §4).
   const [linkConsent, setLinkConsent] = useState(false);
@@ -47,9 +57,12 @@ export default function SparkWalletCard({ onWalletReady }) {
   const [linked, setLinked] = useState(null); // { chain, address }
 
   const unmounted = useRef(false);
+  const adoptedRef = useRef(false); // true once the app-root provider owns the wallet
   useEffect(() => {
     unmounted.current = false; // reset on (re)mount — StrictMode/dev remounts this instance
-    return () => { unmounted.current = true; cleanupConnections(); };
+    // On unmount only release an ORPHAN wallet (abandoned mid-flow). Once adopted
+    // by the app-root SparkWalletProvider, the wallet must stay live into Solaris.
+    return () => { unmounted.current = true; if (!adoptedRef.current) cleanupConnections(); };
   }, []);
 
   const maskedWords = useMemo(
@@ -59,6 +72,7 @@ export default function SparkWalletCard({ onWalletReady }) {
 
   const resetSecretState = () => {
     setMnemonic(''); setReveal(false); setAck(false);
+    setPassphrase(''); setPassphrase2(''); secretForVault.current = '';
   };
 
   const doGenerate = async () => {
@@ -89,8 +103,34 @@ export default function SparkWalletCard({ onWalletReady }) {
       return;
     }
     setError('');
-    setMode('ready');
-    if (onWalletReady) onWalletReady({ backedUp: true });
+    // Carry the recovery words into the passphrase step (memory only) so the
+    // encrypted same-device vault can be written before we finish.
+    secretForVault.current = mnemonic;
+    setBackedUpFlag(true);
+    setMode('passphrase');
+  };
+
+  // Encrypt the recovery words into the same-device vault under a user-entered
+  // unlock passphrase, then keep the active wallet available and finish (spec §2/§3).
+  const savePassphraseAndFinish = async () => {
+    if (busy) return;
+    setError('');
+    if (passphrase.length < 8) { setError('Use an unlock passphrase of at least 8 characters.'); return; }
+    if (passphrase !== passphrase2) { setError('The two passphrases do not match.'); return; }
+    setBusy(true);
+    try {
+      await spark.adopt({ mnemonic: secretForVault.current, passphrase });
+      adoptedRef.current = true; // provider now owns the wallet — don't release on unmount
+      // Drop every plaintext secret from memory; the active wallet stays live.
+      secretForVault.current = '';
+      setMnemonic(''); setPassphrase(''); setPassphrase2(''); setReveal(false); setAck(false);
+      setMode('ready');
+      if (onWalletReady) onWalletReady({ backedUp: backedUpFlag });
+    } catch (e) {
+      setError(e?.message || 'Could not secure the wallet on this device.');
+    } finally {
+      if (!unmounted.current) setBusy(false);
+    }
   };
 
   const doRestore = async () => {
@@ -104,9 +144,11 @@ export default function SparkWalletCard({ onWalletReady }) {
     try {
       await restoreSparkWallet({ network: cfg.network, mnemonic: restoreInput, fixture: demoFixture });
       if (unmounted.current) { await cleanupConnections(); return; }
+      // Carry the restored words into the passphrase step (memory only), then clear input.
+      secretForVault.current = restoreInput.trim().toLowerCase();
       setRestoreInput('');
-      setMode('ready');
-      if (onWalletReady) onWalletReady({ backedUp: false });
+      setBackedUpFlag(false);
+      setMode('passphrase');
     } catch (e) {
       await cleanupConnections();
       setMode('restore');
@@ -210,10 +252,38 @@ export default function SparkWalletCard({ onWalletReady }) {
               </div>
             )}
 
+            {mode === 'passphrase' && (
+              <div className="spk-backup">
+                <div className="spk-warn">
+                  <p className="spk-warn-title"><Lock size={14} /> Encrypt this wallet on this device</p>
+                  <p className="spk-safe" style={{ margin: 0 }}>
+                    Choose an unlock passphrase (at least 8 characters). It encrypts your wallet on this
+                    device and is required to unlock it later. Solaris never receives it.
+                  </p>
+                </div>
+                <label className="spk-label" htmlFor="spk-pass">Unlock passphrase</label>
+                <input
+                  id="spk-pass" className="input" type="password" value={passphrase}
+                  onChange={(e) => setPassphrase(e.target.value)} autoComplete="new-password"
+                  spellCheck={false} placeholder="At least 8 characters"
+                />
+                <label className="spk-label" htmlFor="spk-pass2" style={{ marginTop: 8 }}>Confirm passphrase</label>
+                <input
+                  id="spk-pass2" className="input" type="password" value={passphrase2}
+                  onChange={(e) => setPassphrase2(e.target.value)} autoComplete="new-password"
+                  spellCheck={false} placeholder="Re-enter passphrase"
+                />
+                <p className="spk-hint" style={{ marginTop: 8 }}>{VAULT_STATUS_TEXT}</p>
+                <button className="spk-btn" onClick={savePassphraseAndFinish} disabled={busy} aria-busy={busy} style={{ marginTop: 10 }}>
+                  {busy ? <><Loader2 size={15} className="spk-spin" /> Encrypting…</> : 'Encrypt & finish'}
+                </button>
+              </div>
+            )}
+
             {mode === 'ready' && (
               <div className="spk-ready">
                 <p className="spk-ready-msg"><Check size={16} /> Your Spark wallet is ready for this session.</p>
-                <p className="spk-hint">Kept in memory only — after a refresh you will restore it locally.</p>
+                <p className="spk-hint"><Lock size={13} /> {VAULT_STATUS_TEXT}</p>
               </div>
             )}
 

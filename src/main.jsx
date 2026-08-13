@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { AppProvider, useApp } from './state/AppContext.jsx'
+import { SparkWalletProvider } from './state/SparkWalletContext.jsx'
 import { Spinner } from './components/ui.jsx'
 import Onboarding from './flows/Onboarding.jsx'
 import Auth from './flows/Auth.jsx'
@@ -100,6 +101,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <RootErrorBoundary>
     <AppProvider>
+    <SparkWalletProvider>
       <Root />
       <PWAInstallInvitation />
       <Toaster
@@ -122,6 +124,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           error: { iconTheme: { primary: '#F2A0A0', secondary: '#06403B' } },
         }}
       />
+    </SparkWalletProvider>
     </AppProvider>
     </RootErrorBoundary>
   </React.StrictMode>,

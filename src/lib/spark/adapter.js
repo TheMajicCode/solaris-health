@@ -23,6 +23,7 @@ export const DEMO_FIXTURE_MNEMONIC =
   'alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima';
 
 let _inflight = null;      // single-flight guard (create OR restore)
+let _sendInflight = null;  // single-flight guard (transfer/send)
 let _activeWallet = null;  // in-memory wallet object (never persisted)
 
 function assertBrowser() {
@@ -121,6 +122,80 @@ export async function cleanupConnections() {
 
 /** True while a create/restore is in flight (for disabling duplicate presses). */
 export function isSparkBusy() { return _inflight !== null; }
+
+/** True while a send/transfer is in flight (for disabling duplicate submits). */
+export function isSparkSending() { return _sendInflight !== null; }
+
+/** The in-memory active wallet, or null. Never serialised/persisted. */
+export function getActiveWallet() { return _activeWallet; }
+export function hasActiveWallet() { return !!_activeWallet; }
+
+function requireWallet() {
+  if (!_activeWallet) throw new Error('No active Spark wallet in this session.');
+  return _activeWallet;
+}
+
+/** The PUBLIC Spark address of the active wallet (REGTEST → sparkrt1…). Safe to show. */
+export async function walletGetAddress() {
+  return requireWallet().getSparkAddress();
+}
+
+/** The active wallet's identity public key (hex) — PUBLIC, safe to show. */
+export async function walletGetIdentityPublicKey() {
+  return requireWallet().getIdentityPublicKey();
+}
+
+/**
+ * Available balance of the active wallet, in whole sats (Number).
+ * Reads SDK satsBalance.available (bigint) and converts for display.
+ * @returns {Promise<number>}
+ */
+export async function walletGetBalanceSats() {
+  const bal = await requireWallet().getBalance();
+  const available = bal?.satsBalance?.available ?? bal?.balance ?? 0n;
+  return Number(available);
+}
+
+/** True if `n` is a positive integer number of sats. */
+export function isValidSats(n) {
+  return Number.isInteger(n) && n > 0 && Number.isFinite(n);
+}
+
+/**
+ * Send sats to a Spark address (SINGLE-FLIGHT). Validates integer positive sats
+ * and address shape BEFORE any SDK call. Never logs the amount + destination
+ * together with any profile/health context (caller must keep those apart too).
+ * @returns {Promise<object>} the SDK WalletTransfer
+ */
+export function walletTransfer({ amountSats, receiverSparkAddress } = {}) {
+  if (_sendInflight) return _sendInflight;
+  if (!isValidSats(amountSats)) {
+    return Promise.reject(new Error('Enter a whole number of sats greater than zero.'));
+  }
+  const cls = classifySparkAddress(receiverSparkAddress);
+  if (!cls.ok) return Promise.reject(new Error(cls.reason));
+  _sendInflight = (async () => {
+    const wallet = requireWallet();
+    return wallet.transfer({ amountSats, receiverSparkAddress: cls.address });
+  })();
+  return _sendInflight.finally(() => { _sendInflight = null; });
+}
+
+/**
+ * Create a BOLT11 Lightning invoice to RECEIVE sats (the installed SDK supports
+ * this — spec §4). Validates integer positive sats. `memo` must never contain
+ * private/health data (caller responsibility; we default to a neutral memo).
+ * @returns {Promise<object>} the SDK LightningReceiveRequest (contains invoice)
+ */
+export async function walletCreateLightningInvoice({ amountSats, memo } = {}) {
+  if (!isValidSats(amountSats)) {
+    throw new Error('Enter a whole number of sats greater than zero.');
+  }
+  return requireWallet().createLightningInvoice({
+    amountSats,
+    memo: memo || 'Solaris REGTEST',
+  });
+}
 
 /**
  * Classify a PUBLIC Spark address for the optional address-linking consent.

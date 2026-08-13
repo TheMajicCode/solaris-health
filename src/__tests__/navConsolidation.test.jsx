@@ -67,7 +67,7 @@ describe('resolveNav — canonicalisation', () => {
   it('defaults an area with sub-tabs to its first sub-tab', () => {
     expect(resolveNav('coach')).toEqual({ tab: 'coach', sub: 'coach' });
     expect(resolveNav('communications')).toEqual({ tab: 'communications', sub: 'messages' });
-    expect(resolveNav('wallet')).toEqual({ tab: 'wallet', sub: 'overview' });
+    expect(resolveNav('wallet')).toEqual({ tab: 'wallet', sub: 'wallet' });
     expect(resolveNav('account')).toEqual({ tab: 'account', sub: 'profile' });
   });
 
@@ -90,8 +90,8 @@ describe('resolveNav — canonicalisation', () => {
 });
 
 describe('SUBTABS shape', () => {
-  it('Economic Passport carries Overview, Contributions and Network', () => {
-    expect(SUBTABS.wallet.tabs).toEqual(['overview', 'contributions', 'network']);
+  it('Economic Passport carries Wallet, GPS, Contributions and Network', () => {
+    expect(SUBTABS.wallet.tabs).toEqual(['wallet', 'gps', 'contributions', 'network']);
   });
   it('LUCA Coach carries Coach and Intelligence', () => {
     expect(SUBTABS.coach.tabs).toEqual(['coach', 'intelligence']);

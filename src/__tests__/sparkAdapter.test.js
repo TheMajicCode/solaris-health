@@ -18,6 +18,8 @@ import {
   DEMO_FIXTURE_MNEMONIC,
   looksLikeMnemonic, pickWordPositions, wordAt, classifySparkAddress,
   createSparkWallet, restoreSparkWallet, isSparkBusy,
+  isValidSats, walletTransfer, walletCreateLightningInvoice,
+  isSparkSending, hasActiveWallet,
 } from '../lib/spark/adapter.js';
 
 afterEach(() => { vi.unstubAllEnvs(); });
@@ -109,5 +111,46 @@ describe('adapter safety — fixture path never loads the SDK', () => {
     const [r1, r2] = await Promise.all([p1, p2]);
     expect(r1).toEqual(r2);
     expect(isSparkBusy()).toBe(false);
+  });
+});
+
+describe('send/receive safety — validation before any SDK/wallet use', () => {
+  it('isValidSats accepts only positive integers', () => {
+    expect(isValidSats(1)).toBe(true);
+    expect(isValidSats(21000)).toBe(true);
+    expect(isValidSats(0)).toBe(false);
+    expect(isValidSats(-5)).toBe(false);
+    expect(isValidSats(1.5)).toBe(false);
+    expect(isValidSats(NaN)).toBe(false);
+    expect(isValidSats('10')).toBe(false);
+  });
+
+  it('walletTransfer rejects non-integer/zero/negative sats BEFORE any SDK call', async () => {
+    await expect(walletTransfer({ amountSats: 0, receiverSparkAddress: 'sparkrt1qexample' }))
+      .rejects.toThrow(/whole number of sats/i);
+    await expect(walletTransfer({ amountSats: 1.2, receiverSparkAddress: 'sparkrt1qexample' }))
+      .rejects.toThrow(/whole number of sats/i);
+    expect(isSparkSending()).toBe(false);
+  });
+
+  it('walletTransfer rejects an unrecognised destination address BEFORE any SDK call', async () => {
+    await expect(walletTransfer({ amountSats: 10, receiverSparkAddress: 'not-an-address' }))
+      .rejects.toThrow(/not a recognised Spark address/i);
+    expect(isSparkSending()).toBe(false);
+  });
+
+  it('walletTransfer is single-flight and requires an active wallet (none in tests)', async () => {
+    expect(hasActiveWallet()).toBe(false);
+    const p1 = walletTransfer({ amountSats: 10, receiverSparkAddress: 'sparkrt1qexample' });
+    const p2 = walletTransfer({ amountSats: 10, receiverSparkAddress: 'sparkrt1qexample' });
+    expect(isSparkSending()).toBe(true); // second press shares the one in-flight send
+    await expect(p1).rejects.toThrow(/no active spark wallet/i);
+    await expect(p2).rejects.toThrow(/no active spark wallet/i);
+    expect(isSparkSending()).toBe(false);
+  });
+
+  it('walletCreateLightningInvoice validates integer positive sats before any SDK call', async () => {
+    await expect(walletCreateLightningInvoice({ amountSats: 0 })).rejects.toThrow(/whole number of sats/i);
+    await expect(walletCreateLightningInvoice({ amountSats: 2.5 })).rejects.toThrow(/whole number of sats/i);
   });
 });
