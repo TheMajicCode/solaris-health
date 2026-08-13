@@ -8,7 +8,7 @@
  *   onBecomeProvider  ()=>void  — optional CTA to open provider onboarding
  */
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Search, MapPin, Map as MapIcon, List as ListIcon, Loader2, Store, Plus, X, Sprout, Sparkles, RefreshCw, ArrowRight, Compass, Clock, Headphones, Stethoscope, Heart, Brain, Activity, BookOpen, CheckCircle2, Footprints } from 'lucide-react';
+import { Search, MapPin, Map as MapIcon, List as ListIcon, Loader2, Store, Plus, X, Sprout, Sparkles, RefreshCw, ArrowRight, Compass, Clock, Headphones, Stethoscope, Heart, Brain, Activity, BookOpen, CheckCircle2, Footprints, SlidersHorizontal } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '../../lib/api.js';
 import { useApp } from '../../state/AppContext.jsx';
@@ -16,6 +16,124 @@ import MapView from './MapView.jsx';
 import SearchFilters from './SearchFilters.jsx';
 import ProviderListingCard from './ProviderListingCard.jsx';
 import ProviderDetailModal from './ProviderDetailModal.jsx';
+import { PROVIDER_TYPES } from './ProviderBadges.jsx';
+import AdaptiveOverlay from '../ui/AdaptiveOverlay.jsx';
+
+// Mobile breakpoint (matches the app shell's 900px). Kept in a hook so the
+// Explore layout can switch to the map + draggable results sheet on phones and
+// tablet-portrait without touching the desktop split view.
+function useIsMobile(bp = 900) {
+  const q = `(max-width:${bp}px)`;
+  const [m, setM] = useState(() => (typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(q).matches : false));
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined;
+    const mq = window.matchMedia(q);
+    const h = (e) => setM(e.matches);
+    setM(mq.matches);
+    try { mq.addEventListener('change', h); } catch { mq.addListener(h); }
+    return () => { try { mq.removeEventListener('change', h); } catch { mq.removeListener(h); } };
+  }, [q]);
+  return m;
+}
+
+// Horizontally scrollable quick filters — every chip maps to a REAL filter
+// field (rating / modality / verified / value-to-value / language / provider
+// type). No invented attributes.
+function QuickFilters({ filters, patch, presentTypes, languageOptions }) {
+  const modality = filters.modality;
+  const chip = (active, label, onClick, key) => (
+    <button key={key} type="button" className={`exm-qf${active ? ' on' : ''}`} aria-pressed={active} onClick={onClick}>{label}</button>
+  );
+  const toggleArr = (arr, v) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
+  return (
+    <div className="exm-qf-row" role="group" aria-label="Quick filters">
+      {chip(filters.minRating >= 4.5, 'Top rated', () => patch({ minRating: filters.minRating >= 4.5 ? 0 : 4.5 }), 'rt')}
+      {chip(modality === 'virtual', 'Virtual', () => patch({ modality: modality === 'virtual' ? '' : 'virtual' }), 'v')}
+      {chip(modality === 'in_person', 'In person', () => patch({ modality: modality === 'in_person' ? '' : 'in_person' }), 'ip')}
+      {chip(filters.verified, 'Verified', () => patch({ verified: !filters.verified }), 'vf')}
+      {chip(filters.vtv, 'Value-to-value', () => patch({ vtv: !filters.vtv }), 'vtv')}
+      {languageOptions.slice(0, 4).map((l) => chip(filters.languages.includes(l), l, () => patch({ languages: toggleArr(filters.languages, l) }), `l-${l}`))}
+      {presentTypes.map((t) => chip(filters.types.includes(t.id), t.label, () => patch({ types: toggleArr(filters.types, t.id) }), `t-${t.id}`))}
+    </div>
+  );
+}
+
+// Draggable results sheet over the map. Controlled `snap` (collapsed | half |
+// full); drag from the handle only so map / list gestures never fight. Snap
+// fractions are of the live stage height (dvh-safe, recomputed on resize /
+// rotation so the sheet is never trapped). A visible handle + two tap buttons
+// provide a non-drag alternative.
+function ResultsSheet({ snap, onSnap, children }) {
+  const ref = useRef(null);
+  const [dragH, setDragH] = useState(null);
+  const [, tick] = useState(0);
+  const startY = useRef(null);
+  const startH = useRef(null);
+  const moved = useRef(false);
+  const FRAC = { collapsed: 0.20, half: 0.55, full: 0.95 };
+  const stageH = () => ref.current?.parentElement?.clientHeight || ((window.visualViewport?.height || window.innerHeight) - 140);
+  useEffect(() => {
+    const f = () => tick((n) => n + 1);
+    window.addEventListener('resize', f);
+    window.addEventListener('orientationchange', f);
+    return () => { window.removeEventListener('resize', f); window.removeEventListener('orientationchange', f); };
+  }, []);
+  // Bottom nav hides only while the sheet is fully raised; returns otherwise.
+  useEffect(() => { window.dispatchEvent(new CustomEvent('solaris:botnav', { detail: { hidden: snap === 'full' } })); }, [snap]);
+  useEffect(() => () => window.dispatchEvent(new CustomEvent('solaris:botnav', { detail: { hidden: false } })), []);
+  const H = dragH != null ? dragH : Math.round(stageH() * FRAC[snap]);
+  const onDown = (e) => { startY.current = e.clientY; startH.current = H; moved.current = false; setDragH(H); try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* noop */ } };
+  const onMove = (e) => {
+    if (startY.current == null) return;
+    const dy = startY.current - e.clientY;
+    if (Math.abs(dy) > 6) moved.current = true;
+    const sh = stageH();
+    let h = startH.current + dy;
+    h = Math.max(sh * 0.12, Math.min(sh * 0.97, h));
+    setDragH(h);
+  };
+  const finish = () => {
+    if (startY.current == null) return;
+    const sh = stageH();
+    const frac = (dragH != null ? dragH : H) / sh;
+    startY.current = null;
+    setDragH(null);
+    let best = 'half'; let bd = 9;
+    for (const k of Object.keys(FRAC)) { const d = Math.abs(FRAC[k] - frac); if (d < bd) { bd = d; best = k; } }
+    onSnap(best);
+  };
+  const cycle = () => onSnap(snap === 'collapsed' ? 'half' : snap === 'half' ? 'full' : 'collapsed');
+  const onClick = () => { if (moved.current) { moved.current = false; return; } cycle(); };
+  const onKey = (e) => {
+    if (e.key === 'ArrowUp') { e.preventDefault(); onSnap(snap === 'collapsed' ? 'half' : 'full'); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); onSnap(snap === 'full' ? 'half' : 'collapsed'); }
+    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); cycle(); }
+  };
+  return (
+    <div className="exm-sheet" ref={ref} style={{ height: `${H}px` }} data-dragging={dragH != null ? 'true' : 'false'}>
+      <div
+        className="exm-sheet-handle"
+        role="button"
+        tabIndex={0}
+        aria-label={`Results sheet (${snap}). Drag or use the arrow keys to resize.`}
+        aria-expanded={snap !== 'collapsed'}
+        onPointerDown={onDown}
+        onPointerMove={onMove}
+        onPointerUp={finish}
+        onPointerCancel={finish}
+        onKeyDown={onKey}
+        onClick={onClick}
+      >
+        <span className="exm-sheet-bar" aria-hidden="true" />
+      </div>
+      <div className="exm-sheet-tabs">
+        <button type="button" className="exm-sheet-tab" onClick={() => onSnap('collapsed')} aria-label="Show map">Show map</button>
+        <button type="button" className="exm-sheet-tab" onClick={() => onSnap('full')} aria-label="Show results">Show results</button>
+      </div>
+      <div className="exm-sheet-body">{children}</div>
+    </div>
+  );
+}
 
 // Isolates Leaflet/tile failures so a map crash never takes down the usable
 // results list. On error it renders a compact fallback with a "browse the list"
@@ -163,6 +281,24 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
   const [mobileView, setMobileView] = useState('list'); // list | map
   const [showFilters, setShowFilters] = useState(false);
   const listRef = useRef(null);
+  const isMobile = useIsMobile(900);
+  const [sheetSnap, setSheetSnap] = useState('half');
+
+  // Keep the fixed mobile Explore stage docked just below the app's sticky
+  // header (its height varies with safe-area / font scaling) — measured, never
+  // hard-coded.
+  useEffect(() => {
+    if (!isMobile) return undefined;
+    const set = () => {
+      const tb = document.querySelector('.topbar');
+      const h = tb ? Math.round(tb.getBoundingClientRect().height) : 54;
+      document.documentElement.style.setProperty('--exm-top', `${h}px`);
+    };
+    set();
+    window.addEventListener('resize', set);
+    window.addEventListener('orientationchange', set);
+    return () => { window.removeEventListener('resize', set); window.removeEventListener('orientationchange', set); };
+  }, [isMobile]);
 
   // debounce search text
   useEffect(() => {
@@ -264,6 +400,25 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
+  // Listing-card select: always select + centre its marker + open the compact
+  // map card (via activeId). On desktop it also opens the full detail modal
+  // (unchanged behaviour); on mobile it lowers the sheet to half so the map
+  // card is visible, leaving "View & book" to open the detail.
+  const handleCardOpen = (pr) => {
+    setActiveId(pr.id);
+    if (isMobile) setSheetSnap('half');
+    else setOpenId(pr.id);
+    const el = listRef.current?.querySelector(`[data-pid="${pr.id}"]`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  // Provider types actually present in the current result set — used for the
+  // mobile quick-filter chips so we never offer a category with no listings.
+  const presentTypes = useMemo(() => {
+    const s = new Set(providers.map((p) => p.provider_type).filter(Boolean));
+    return PROVIDER_TYPES.filter((t) => s.has(t.id));
+  }, [providers]);
+
   const hasLocation = !!userLocation;
   const activeFilterCount =
     filters.types.length + filters.price.length + filters.languages.length +
@@ -271,6 +426,144 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
     (filters.city ? 1 : 0) + (filters.modality ? 1 : 0) +
     (filters.availability && filters.availability !== 'any' ? 1 : 0);
 
+  // Shared results list (used by both the desktop column and the mobile sheet).
+  const resultsBody = loading ? (
+    <div className="exm-loading"><Loader2 className="exm-spin" size={26} /> Finding providers…</div>
+  ) : visibleProviders.length === 0 ? (
+    <div className="exm-empty">
+      <Store size={34} />
+      <h4>No providers match your filters</h4>
+      <p>Try widening your search or resetting the filters — or begin a guided journey below.</p>
+      <button className="exm-resetbtn" onClick={reset}>Reset filters</button>
+      <JourneyOffers offers={blueprints} starting={startingJourney} onBegin={beginJourney} onPreview={setPreviewType} compact />
+    </div>
+  ) : (
+    <div className="exm-cards">
+      {visibleProviders.map((p) => (
+        <div key={p.id} data-pid={p.id}>
+          <ProviderListingCard
+            provider={p}
+            onOpen={handleCardOpen}
+            onHover={setHoverId}
+            active={hoverId === p.id || activeId === p.id}
+          />
+        </div>
+      ))}
+    </div>
+  );
+
+  // Shared map panel with marker↔list sync (compact card + open-detail wiring).
+  const mapPanel = (
+    <MapErrorBoundary onSwitchToList={() => { setMobileView('list'); setSheetSnap('full'); }}>
+      <MapView
+        providers={visibleProviders}
+        activeId={activeId || hoverId}
+        onSelect={onSelect}
+        onHover={setHoverId}
+        userLocation={userLocation}
+        onLocate={(loc) => setUserLocation(loc)}
+        radiusKm={hasLocation ? filters.radius : null}
+        onOpenDetail={(pr) => setOpenId(pr.id)}
+        onClearActive={() => setActiveId(null)}
+      />
+    </MapErrorBoundary>
+  );
+
+  // Accessible full-height mobile filter sheet (real fields only) built on the
+  // shared adaptive overlay: focus trap, Escape/visible close, sticky footer
+  // with Clear + Apply (current result count), internal scroll.
+  const filterSheet = (
+    <AdaptiveOverlay
+      open={showFilters}
+      onClose={() => setShowFilters(false)}
+      title="Filters"
+      ariaLabel="Filter providers"
+      size="lg"
+      closeLabel="Close filters"
+      footer={(
+        <div className="exm-fs-foot">
+          <button type="button" className="exm-fs-clear" onClick={reset}>Clear all</button>
+          <button type="button" className="exm-fs-apply" onClick={() => setShowFilters(false)}>
+            Show {visibleProviders.length} result{visibleProviders.length === 1 ? '' : 's'}
+          </button>
+        </div>
+      )}
+    >
+      <SearchFilters
+        filters={filters}
+        onChange={patch}
+        categories={categories}
+        hasLocation={hasLocation}
+        onReset={reset}
+        resultCount={visibleProviders.length}
+        cityOptions={cityOptions}
+        languageOptions={languageOptions}
+      />
+    </AdaptiveOverlay>
+  );
+
+  const detailAndPreview = (
+    <>
+      {openId && (
+        <ProviderDetailModal
+          providerId={openId}
+          user={user}
+          onClose={() => setOpenId(null)}
+          onUpdated={fetchProviders}
+        />
+      )}
+      {previewType && (
+        <JourneyPreviewModal
+          plan={blueprints.find((b) => b.type === previewType)}
+          starting={startingJourney}
+          onBegin={beginJourney}
+          onClose={() => setPreviewType(null)}
+        />
+      )}
+    </>
+  );
+
+  // ── Mobile: map behind + draggable results sheet + quick filters ──
+  if (isMobile) {
+    return (
+      <div className="exm exm-mobile">
+        <div className="exm-m">
+          <div className="exm-mbar">
+            <div className="exm-search">
+              <Search size={18} />
+              <input
+                placeholder="Search clinics, doctors, farms…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                aria-label="Search providers"
+              />
+              {query && <button className="exm-clear" onClick={() => setQuery('')} aria-label="Clear search"><X size={15} /></button>}
+            </div>
+            <button className="exm-mfilter" onClick={() => setShowFilters(true)} aria-label={`Filters${activeFilterCount ? `, ${activeFilterCount} active` : ''}`} aria-haspopup="dialog">
+              <SlidersHorizontal size={18} />
+              {activeFilterCount > 0 && <span className="exm-fcount">{activeFilterCount}</span>}
+            </button>
+          </div>
+          <QuickFilters filters={filters} patch={patch} presentTypes={presentTypes} languageOptions={languageOptions} />
+          <div className="exm-mstage">
+            <div className="exm-mmap">{mapPanel}</div>
+            <ResultsSheet snap={sheetSnap} onSnap={setSheetSnap}>
+              <div className="exm-sheet-count">
+                {loading ? 'Finding providers…' : `${visibleProviders.length} provider${visibleProviders.length === 1 ? '' : 's'}`}
+              </div>
+              <div ref={listRef}>{resultsBody}</div>
+              <JourneyOffers offers={blueprints} starting={startingJourney} onBegin={beginJourney} onPreview={setPreviewType} compact />
+            </ResultsSheet>
+          </div>
+        </div>
+        {filterSheet}
+        {detailAndPreview}
+        <style>{CSS}</style>
+      </div>
+    );
+  }
+
+  // ── Desktop / large-tablet: the classic split view (unchanged) ──
   return (
     <div className="exm">
       {/* Top bar */}
@@ -383,69 +676,21 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
 
         {/* Results list */}
         <div className={`exm-list ${mobileView === 'list' ? 'mshow' : 'mhide'}`} ref={listRef}>
-          {loading ? (
-            <div className="exm-loading"><Loader2 className="exm-spin" size={26} /> Finding providers…</div>
-          ) : visibleProviders.length === 0 ? (
-            <div className="exm-empty">
-              <Store size={34} />
-              <h4>No providers match your filters</h4>
-              <p>Try widening your search or resetting the filters — or begin a guided journey below.</p>
-              <button className="exm-resetbtn" onClick={reset}>Reset filters</button>
-              <JourneyOffers offers={blueprints} starting={startingJourney} onBegin={beginJourney} onPreview={setPreviewType} compact />
-            </div>
-          ) : (
-            <div className="exm-cards">
-              {visibleProviders.map((p) => (
-                <div key={p.id} data-pid={p.id}>
-                  <ProviderListingCard
-                    provider={p}
-                    onOpen={(pr) => setOpenId(pr.id)}
-                    onHover={setHoverId}
-                    active={hoverId === p.id || activeId === p.id}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
+          {resultsBody}
         </div>
 
         {/* Map — wrapped so a tile/render failure never takes down the usable list */}
         <div className={`exm-map ${mobileView === 'map' ? 'mshow' : 'mhide'}`}>
-          <MapErrorBoundary onSwitchToList={() => setMobileView('list')}>
-            <MapView
-              providers={visibleProviders}
-              activeId={activeId || hoverId}
-              onSelect={onSelect}
-              onHover={setHoverId}
-              userLocation={userLocation}
-              onLocate={(loc) => setUserLocation(loc)}
-              radiusKm={hasLocation ? filters.radius : null}
-            />
-          </MapErrorBoundary>
+          {mapPanel}
         </div>
       </div>
 
-      {/* Mobile view toggle */}
+      {/* Mobile view toggle (large-tablet fallback) */}
       <button className="exm-mtoggle" onClick={() => setMobileView((v) => (v === 'list' ? 'map' : 'list'))}>
         {mobileView === 'list' ? <><MapIcon size={16} /> Map</> : <><ListIcon size={16} /> List</>}
       </button>
 
-      {openId && (
-        <ProviderDetailModal
-          providerId={openId}
-          user={user}
-          onClose={() => setOpenId(null)}
-          onUpdated={fetchProviders}
-        />
-      )}
-      {previewType && (
-        <JourneyPreviewModal
-          plan={blueprints.find((b) => b.type === previewType)}
-          starting={startingJourney}
-          onBegin={beginJourney}
-          onClose={() => setPreviewType(null)}
-        />
-      )}
+      {detailAndPreview}
       <style>{CSS}</style>
     </div>
   );
@@ -722,4 +967,55 @@ const CSS = `
     transform:translateX(-50%);z-index:2600;background:var(--ink);color:#fff;border:none;border-radius:999px;
     padding:11px 22px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;box-shadow:0 6px 18px rgba(2,18,24,.35)}
 }
+
+/* ===================================================================
+   MOBILE EXPLORE (<=900px): sticky search + quick filters, full-bleed
+   map behind, draggable results sheet. Uses 100dvh-safe stage sizing.
+   =================================================================== */
+.luca .exm-mobile{min-height:0}
+.luca .exm-m{position:fixed;left:0;right:0;top:var(--exm-top,54px);bottom:0;z-index:20;
+  display:flex;flex-direction:column;background:var(--bg)}
+.luca .exm-mbar{flex:none;display:flex;gap:8px;align-items:center;padding:8px 12px;
+  background:var(--bg);border-bottom:1px solid var(--line)}
+.luca .exm-mbar .exm-search{flex:1;min-width:0;box-shadow:none;padding:9px 12px;border-radius:12px}
+.luca .exm-mfilter{flex:none;position:relative;display:inline-flex;align-items:center;justify-content:center;
+  width:44px;height:44px;border:1px solid var(--line);background:var(--surface);border-radius:12px;
+  color:var(--ink);cursor:pointer}
+.luca .exm-mfilter .exm-fcount{position:absolute;top:-6px;right:-6px;background:var(--teal-d);color:#fff;
+  border-radius:999px;font-size:10px;line-height:1.6;padding:0 6px;font-weight:700}
+.luca .exm-qf-row{flex:none;display:flex;gap:8px;overflow-x:auto;padding:8px 12px;
+  -webkit-overflow-scrolling:touch;scrollbar-width:none;background:var(--bg);border-bottom:1px solid var(--line)}
+.luca .exm-qf-row::-webkit-scrollbar{display:none}
+.luca .exm-qf{flex:none;white-space:nowrap;border:1px solid var(--line);background:var(--surface);color:var(--ink);
+  border-radius:999px;padding:8px 14px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;min-height:36px}
+.luca .exm-qf.on{background:var(--teal-d);color:#fff;border-color:var(--teal-d)}
+.luca .exm-mstage{position:relative;flex:1;min-height:0;overflow:hidden}
+.luca .exm-mmap{position:absolute;inset:0}
+.luca .exm-mmap .mv-wrap{height:100%;border-radius:0;border:none}
+.luca .exm-sheet{position:absolute;left:0;right:0;bottom:0;z-index:10;display:flex;flex-direction:column;
+  background:var(--surface);border-radius:22px 22px 0 0;box-shadow:0 -14px 40px rgba(2,18,24,.22);
+  transition:height .28s cubic-bezier(.2,.8,.2,1);overflow:hidden;max-height:100%}
+.luca .exm-sheet[data-dragging="true"]{transition:none}
+.luca .exm-sheet-handle{flex:none;display:flex;align-items:center;justify-content:center;height:26px;
+  cursor:grab;touch-action:none;-webkit-tap-highlight-color:transparent}
+.luca .exm-sheet-handle:active{cursor:grabbing}
+.luca .exm-sheet-handle:focus-visible{outline:2px solid var(--mint);outline-offset:-4px;border-radius:12px}
+.luca .exm-sheet-bar{width:44px;height:5px;border-radius:999px;background:var(--line-2)}
+.luca .exm-sheet-tabs{flex:none;display:flex;gap:8px;padding:0 14px 8px}
+.luca .exm-sheet-tab{flex:1;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:10px;
+  padding:8px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;min-height:40px}
+.luca .exm-sheet-tab:hover{border-color:var(--teal-d);color:var(--teal-d)}
+.luca .exm-sheet-count{font-size:12px;font-weight:700;color:var(--muted);padding:2px 2px 8px}
+.luca .exm-sheet-body{flex:1;min-height:0;overflow-y:auto;padding:0 14px calc(96px + env(safe-area-inset-bottom,0px));
+  -webkit-overflow-scrolling:touch}
+.luca .exm-sheet-body .exm-cards{padding-bottom:6px}
+.luca .exm-sheet-body .exm-journeys.compact{margin-top:22px}
+/* Mobile filter-sheet footer (inside the adaptive overlay) */
+.luca .exm-fs-foot{display:flex;gap:10px;align-items:center}
+.luca .exm-fs-clear{flex:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);
+  border-radius:12px;padding:12px 18px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;min-height:44px}
+.luca .exm-fs-apply{flex:1;border:none;background:var(--teal-d);color:#fff;border-radius:12px;padding:12px 18px;
+  font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;min-height:44px}
+.luca .exm-fs-apply:hover{background:var(--teal-d2)}
+@media(prefers-reduced-motion:reduce){.luca .exm-sheet{transition:none}}
 `;

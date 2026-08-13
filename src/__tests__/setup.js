@@ -36,3 +36,9 @@ if (!window.ResizeObserver) {
 if (!window.scrollTo) {
   window.scrollTo = vi.fn();
 }
+
+// jsdom does not implement Element.scrollIntoView — used by the Explore
+// marker↔list sync to bring a matching card into view.
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = function scrollIntoView() {};
+}

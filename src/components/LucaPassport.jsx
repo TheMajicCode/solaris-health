@@ -21,7 +21,7 @@ import {
   Briefcase, FileCheck, BarChart3, CalendarCheck, Sprout,
   BookOpen, Headphones, Play, Pause, Lock, Trash2, Music,
   Repeat, Shuffle, Rewind, FastForward, Upload, ListMusic,
-  CalendarClock, Volume2, VolumeX, Inbox, Mail, Copy, Fingerprint,
+  CalendarClock, Volume2, VolumeX, Inbox, Mail, Copy, Fingerprint, Grid,
 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { api } from '../lib/api.js';
@@ -455,6 +455,71 @@ textarea.input-line{resize:vertical;min-height:64px}
 .luca .week-day.today .wd-dot{outline:2px solid var(--mint);outline-offset:2px}
 .luca .checkin-cta{display:inline-flex;align-items:center;gap:7px;background:linear-gradient(150deg,#36C9A9,#159C7E);color:#fff;border:none;border-radius:12px;padding:10px 16px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 6px 18px rgba(21,156,126,.32);transition:transform .15s,box-shadow .15s}
 .luca .checkin-cta:hover{transform:translateY(-1px);box-shadow:0 9px 24px rgba(21,156,126,.4)}
+
+/* ============================================================
+   MOBILE APP SHELL (V1) — sticky header + safe-area bottom nav.
+   Desktop (>=901px) is unchanged; all rules below are mobile-only.
+   ============================================================ */
+.luca .home-btn{display:none}
+.luca .m-title{display:none}
+.luca .m-botnav{display:none}
+.luca .luca-guide-wrap{display:none}
+@media(max-width:900px){
+  /* Compact sticky header: Home (left) · title (center) · notif+profile (right) */
+  .topbar{padding:10px 12px;gap:8px}
+  .topbar .search{display:none}
+  .topbar .menu-btn{display:none}
+  .luca .home-btn{display:flex}
+  .luca .m-title{display:block;flex:1;min-width:0;font-family:'Space Grotesk',sans-serif;font-weight:700;
+    font-size:16px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left}
+  /* leave room for the fixed bottom nav so nothing hides behind it */
+  .page{padding:16px 14px calc(84px + env(safe-area-inset-bottom,0px))}
+
+  /* Fixed bottom navigation */
+  .luca .m-botnav{position:fixed;left:0;right:0;bottom:0;z-index:60;display:flex;align-items:flex-end;
+    justify-content:space-around;gap:2px;background:rgba(255,255,255,.94);backdrop-filter:blur(12px);
+    border-top:1px solid var(--line);padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px));
+    transition:transform .28s cubic-bezier(.2,.8,.2,1)}
+  .luca .m-botnav.hidden{transform:translateY(120%)}
+  .luca .m-bn-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+    min-width:0;min-height:48px;padding:6px 2px;border:none;background:transparent;color:var(--muted);
+    font-family:inherit;font-size:10.5px;font-weight:600;cursor:pointer;border-radius:12px;transition:color .15s}
+  .luca .m-bn-item span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  .luca .m-bn-item.active{color:var(--teal-d)}
+  .luca .m-bn-item.active svg{transform:translateY(-1px)}
+  .luca .m-bn-luca{flex:0 0 auto;margin-top:-22px}
+  .luca .m-bn-luca .m-bn-orb{width:54px;height:54px;border-radius:50%;
+    background:radial-gradient(circle at 50% 35%,#36C9A9,#0E5C57);color:#EAFBF6;display:grid;place-items:center;
+    box-shadow:0 6px 18px rgba(14,92,87,.42),0 0 0 4px rgba(255,255,255,.9);transition:transform .18s}
+  .luca .m-bn-luca.active .m-bn-orb,.luca .m-bn-luca:active .m-bn-orb{transform:scale(1.06)}
+  .luca .m-bn-luca .m-bn-lbl{font-size:10.5px;font-weight:700;color:var(--teal-d);margin-top:2px}
+
+  /* Practitioner "More" bottom sheet */
+  .luca .m-more-scrim{position:fixed;inset:0;z-index:75;background:rgba(6,32,30,.5);display:flex;align-items:flex-end}
+  .luca .m-more{width:100%;background:var(--surface);border-radius:20px 20px 0 0;padding:10px 12px calc(14px + env(safe-area-inset-bottom,0px));
+    box-shadow:0 -18px 50px rgba(8,40,38,.3);animation:ciUp .3s cubic-bezier(.2,.8,.2,1)}
+  .luca .m-more-grab{width:40px;height:4px;border-radius:999px;background:var(--line-2);margin:2px auto 10px}
+  .luca .m-more-item{display:flex;align-items:center;gap:12px;width:100%;text-align:left;border:none;background:transparent;
+    padding:14px 12px;border-radius:12px;font-family:inherit;font-size:15px;font-weight:600;color:var(--ink);cursor:pointer;min-height:48px}
+  .luca .m-more-item:hover{background:var(--surface-2)}
+  .luca .m-more-item svg{color:var(--teal-d);flex:none}
+  .luca .m-more-item.switch{color:var(--teal-d);border-top:1px solid var(--line);margin-top:4px}
+}
+
+/* Lightweight LUCA guide (spark companion) — visible at any width where mounted */
+.luca .luca-guide-wrap{display:block;position:fixed;right:16px;bottom:calc(86px + env(safe-area-inset-bottom,0px));z-index:55;pointer-events:none}
+@media(min-width:901px){.luca .luca-guide-wrap{bottom:22px;right:22px}}
+.luca .luca-guide{pointer-events:auto;position:relative;display:flex;align-items:flex-end;gap:10px;
+  animation:guideFloat 4.5s ease-in-out infinite}
+.luca .luca-guide-spark{width:44px;height:44px;border-radius:50%;flex:none;
+  background:radial-gradient(circle at 50% 35%,#36C9A9,#0E5C57);display:grid;place-items:center;color:#EAFBF6;
+  box-shadow:0 6px 20px rgba(14,92,87,.4),0 0 0 3px rgba(255,255,255,.85)}
+.luca .luca-guide-bubble{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:14px 14px 4px 14px;
+  padding:9px 12px;max-width:210px;font-size:12.5px;line-height:1.45;color:var(--ink);box-shadow:var(--shadow)}
+.luca .luca-guide-x{position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;border:1px solid var(--line);
+  background:var(--surface);color:var(--muted);display:grid;place-items:center;cursor:pointer;box-shadow:var(--shadow-sm)}
+@keyframes guideFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+@media(prefers-reduced-motion:reduce){.luca .luca-guide{animation:none!important}}
 `;
 
 /* ============================== HELPERS ============================== */
@@ -949,6 +1014,14 @@ function DailyCheckinModal({ user, open, onClose, onSaved }) {
         setTicked(pre);
       } catch { /* noop */ }
     })();
+  }, [open]);
+
+  // While the check-in sheet blocks the screen, ask the shell to hide the
+  // mobile bottom nav so it never overlaps the sheet.
+  useEffect(() => {
+    if (!open) return undefined;
+    window.dispatchEvent(new CustomEvent('solaris:botnav', { detail: { hidden: true } }));
+    return () => window.dispatchEvent(new CustomEvent('solaris:botnav', { detail: { hidden: false } }));
   }, [open]);
 
   if (!open) return null;
@@ -5823,6 +5896,35 @@ function AdminSystemPage() {
 }
 
 /* ============================== MAIN SHELL ============================== */
+/* Lightweight LUCA guide — a friendly spark companion. Pure CSS/SVG motion
+   (no 3D / video / animation deps). Dismissible and remembered for the session;
+   never diagnostic, never a chat. `prefers-reduced-motion` is handled in CSS. */
+function LucaGuide({ onOpen }) {
+  const [dismissed, setDismissed] = useState(() => {
+    try { return sessionStorage.getItem('solaris:guideDismissed') === '1'; } catch { return false; }
+  });
+  if (dismissed) return null;
+  const dismiss = () => {
+    setDismissed(true);
+    try { sessionStorage.setItem('solaris:guideDismissed', '1'); } catch { /* ignore */ }
+  };
+  return (
+    <div className="luca-guide-wrap">
+      <div className="luca-guide">
+        <button type="button" className="luca-guide-spark" aria-label="Open LUCA Coach" onClick={onOpen}>
+          <Sparkles size={22} strokeWidth={2.2} />
+        </button>
+        <div className="luca-guide-bubble">
+          Tap the spark whenever you'd like to explore with LUCA.
+          <button type="button" className="luca-guide-x" aria-label="Dismiss LUCA guide" onClick={dismiss}>
+            <X size={12} strokeWidth={2.4} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function LucaPassport() {
   const { user, logout, refreshUser } = useApp();
   const realRole = user?.role || 'patient';
@@ -5865,6 +5967,28 @@ export default function LucaPassport() {
   const [showApplication, setShowApplication] = useState(false);
   const [showPractitioner, setShowPractitioner] = useState(false);
   const [appStatus, setAppStatus] = useState(null); // current user's latest application
+  const [moreOpen, setMoreOpen] = useState(false); // practitioner "More" bottom sheet
+  const [navHidden, setNavHidden] = useState(false); // mobile bottom nav hidden (full sheet / blocking overlay)
+
+  // Mobile bottom nav visibility — Explore's full-height results sheet and any
+  // blocking overlay (booking / check-in) ask the shell to hide the bar via a
+  // lightweight window event, so those components stay decoupled from the shell.
+  useEffect(() => {
+    const onBotnav = (e) => setNavHidden(!!e?.detail?.hidden);
+    window.addEventListener('solaris:botnav', onBotnav);
+    return () => window.removeEventListener('solaris:botnav', onBotnav);
+  }, []);
+
+  // Changing sections always brings the mobile bottom nav back into view.
+  useEffect(() => { setNavHidden(false); }, [route.tab]);
+
+  // Escape closes the practitioner "More" sheet.
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onKey = (e) => { if (e.key === 'Escape') setMoreOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [moreOpen]);
 
   // Navigate to an area (+ optional sub-tab). Canonicalises legacy targets and
   // mirrors the result into the URL query string; the pathname is untouched.
@@ -5914,7 +6038,7 @@ export default function LucaPassport() {
   // If the active area isn't available for this persona (e.g. after a portal
   // switch), fall back to its home tab. account/identity live in the profile
   // menu, not the sidebar, so they are always allowed.
-  const ALWAYS_ALLOWED = ['account', 'identity'];
+  const ALWAYS_ALLOWED = ['account', 'identity', 'coach'];
   useEffect(() => {
     const valid = nav.flatMap((g) => g.items.map((i) => i.id));
     if (!valid.includes(route.tab) && !ALWAYS_ALLOWED.includes(route.tab)) {
@@ -6039,6 +6163,26 @@ export default function LucaPassport() {
   const meta = TAB_META[tab] || { title: 'Digital Sovereign Passport', sub: '' };
   const displayName = user?.fullName || [user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.email || 'Member';
 
+  // Mobile bottom-nav model. Member gets exactly five destinations (LUCA raised
+  // in the centre); the practitioner portal swaps in its own five with a "More"
+  // sheet. clinic_admin keeps the sidebar/drawer only (no bottom bar).
+  const showBotNav = effectiveRole === 'patient' || effectiveRole === 'practitioner';
+  const memberNavItems = [
+    { id: 'explore', label: 'Explore', icon: Compass },
+    { id: 'health', label: 'Health', icon: HeartPulse },
+    { id: 'coach', label: 'LUCA', center: true },
+    { id: 'journal', label: 'Reflection', icon: BookOpen },
+    { id: 'wallet', label: 'Economic', icon: Wallet },
+  ];
+  const practitionerNavItems = [
+    { id: 'prac-clients', label: 'Clients', icon: Users },
+    { id: 'prac-bookings', label: 'Bookings', icon: CalendarDays },
+    { id: 'coach', label: 'LUCA', center: true },
+    { id: 'prac-messages', label: 'Messages', icon: MessageSquare },
+    { id: 'more', label: 'More', icon: Grid, more: true },
+  ];
+  const botNavItems = effectiveRole === 'practitioner' ? practitionerNavItems : memberNavItems;
+
   return (
     <AudioProvider>
     <div className="luca">
@@ -6138,6 +6282,8 @@ export default function LucaPassport() {
         <div className="main">
           <header className="topbar">
             <button className="icon-btn menu-btn" onClick={() => setDrawer(true)} aria-label="Open menu"><Menu size={18} /></button>
+            <button className="icon-btn home-btn" onClick={() => go(defaultTabFor(effectiveRole))} aria-label="Home"><LayoutDashboard size={18} /></button>
+            <div className="m-title" aria-hidden="true">{tab === 'journal' ? 'Reflection' : meta.title}</div>
             <div className="search">
               <Search size={16} />
               <input placeholder="Search your passport, care, and value…" />
@@ -6163,8 +6309,88 @@ export default function LucaPassport() {
       {/* Persistent mini-player — patient experience only (except the Media sub-tab, which has its own player) */}
       <MiniPlayer hidden={(tab === 'journal' && sub === 'media') || effectiveRole !== 'patient'} />
 
-      {/* Floating LUCA assistant — patient experience only (except the LUCA Coach area) */}
-      <LucaWidget user={user} hidden={tab === 'coach' || effectiveRole !== 'patient'} go={go} />
+      {/* Lightweight LUCA guide (spark companion) — patient experience only,
+          hidden on the Coach area so it never duplicates the coach surface. */}
+      {effectiveRole === 'patient' && tab !== 'coach' && (
+        <LucaGuide onOpen={() => go('coach')} />
+      )}
+
+      {/* ---------------- MOBILE BOTTOM NAV ---------------- */}
+      {showBotNav && (
+        <nav className={`m-botnav ${navHidden ? 'hidden' : ''}`} aria-label="Primary">
+          {botNavItems.map((it) => {
+            if (it.center) {
+              const active = tab === it.id;
+              return (
+                <button
+                  key={it.id}
+                  type="button"
+                  className={`m-bn-luca ${active ? 'active' : ''}`}
+                  aria-label="LUCA Coach"
+                  aria-current={active ? 'page' : undefined}
+                  onClick={() => go(it.id)}
+                >
+                  <span className="m-bn-orb"><Sparkles size={24} strokeWidth={2.2} /></span>
+                  <span className="m-bn-lbl">{it.label}</span>
+                </button>
+              );
+            }
+            if (it.more) {
+              return (
+                <button
+                  key={it.id}
+                  type="button"
+                  className={`m-bn-item ${moreOpen ? 'active' : ''}`}
+                  aria-label="More"
+                  aria-haspopup="dialog"
+                  aria-expanded={moreOpen}
+                  onClick={() => setMoreOpen(true)}
+                >
+                  <it.icon size={20} strokeWidth={2} />
+                  <span>{it.label}</span>
+                </button>
+              );
+            }
+            const active = tab === it.id;
+            return (
+              <button
+                key={it.id}
+                type="button"
+                className={`m-bn-item ${active ? 'active' : ''}`}
+                aria-label={it.label}
+                aria-current={active ? 'page' : undefined}
+                onClick={() => go(it.id)}
+              >
+                <it.icon size={20} strokeWidth={2} />
+                <span>{it.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+      )}
+
+      {/* Practitioner "More" bottom sheet */}
+      {moreOpen && (
+        <div className="m-more-scrim" onClick={() => setMoreOpen(false)}>
+          <div className="m-more" role="dialog" aria-label="More" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div className="m-more-grab" />
+            <button type="button" className="m-more-item" onClick={() => { go('prac-availability'); setMoreOpen(false); }}>
+              <CalendarCheck size={20} strokeWidth={2} /> Availability
+            </button>
+            <button type="button" className="m-more-item" onClick={() => { go('prac-finance'); setMoreOpen(false); }}>
+              <Wallet size={20} strokeWidth={2} /> Finance
+            </button>
+            <button type="button" className="m-more-item" onClick={() => { go('prac-settings'); setMoreOpen(false); }}>
+              <Settings size={20} strokeWidth={2} /> Settings
+            </button>
+            {canSwitchPortal && (
+              <button type="button" className="m-more-item switch" onClick={() => { switchPortal('member'); setMoreOpen(false); }}>
+                <Users size={20} strokeWidth={2} /> Switch to Member portal
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {showApplication && (
         <ProviderApplication

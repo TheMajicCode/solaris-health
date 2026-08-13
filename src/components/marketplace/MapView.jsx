@@ -19,21 +19,40 @@ import React, { useEffect, useMemo, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Circle, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { LocateFixed } from 'lucide-react';
-import { typeMeta } from './ProviderBadges.jsx';
+import { LocateFixed, X, MapPin, Globe, Video, ArrowRight } from 'lucide-react';
+import { typeMeta, TypeBadge } from './ProviderBadges.jsx';
+import RatingStars from './RatingStars.jsx';
 
 const SV_CENTER = [13.6929, -89.2182]; // San Salvador
 
 // Brand palette for marker accents
 const ACCENT = { teal: '#0f766e', emerald: '#10b981', gold: '#d4a52a' };
 
+// Escape user-derived text before it enters the divIcon HTML string, so a
+// provider name can never inject markup. The compact card below is built from
+// React elements only (never innerHTML), per the marketplace safety rules.
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// Read the demo-seed meta (languages / modality) stored under hours_of_operation.
+function readMeta(p) {
+  let obj = p?.hours_of_operation;
+  if (typeof obj === 'string') { try { obj = JSON.parse(obj); } catch { obj = null; } }
+  return (obj && typeof obj === 'object' && obj.meta) ? obj.meta : {};
+}
+const MODALITY_LABEL = { virtual: 'Virtual', in_person: 'In person', hybrid: 'Virtual & in person' };
+
 function pinIcon(provider, active) {
   const meta = typeMeta(provider.provider_type);
   const color = provider.featured ? ACCENT.gold : ACCENT[meta.accent] || ACCENT.teal;
   const scale = active ? 1.18 : 1;
   const ring = provider.vtv_certified ? '#d4a52a' : '#ffffff';
+  const label = escapeHtml(`${provider.business_name || 'Provider'}${provider.rating ? `, rated ${Number(provider.rating).toFixed(1)} of 5` : ''}`);
   const html = `
-    <div class="mv-pin${active ? ' mv-pin-active' : ''}" style="transform:scale(${scale})">
+    <div class="mv-pin${active ? ' mv-pin-active' : ''}" style="transform:scale(${scale})" role="button" aria-label="${label}">
       <div class="mv-pin-body" style="background:${color};border-color:${ring}">
         <span class="mv-pin-rating">${provider.rating ? Number(provider.rating).toFixed(1) : '—'}</span>
       </div>
@@ -46,6 +65,38 @@ function pinIcon(provider, active) {
     iconAnchor: [20, 46],
     popupAnchor: [0, -44],
   });
+}
+
+// Compact, in-viewport provider card shown over the map for the selected pin.
+// Built entirely from React elements + escaped text (no raw HTML injection).
+// Shows only real listing fields and offers a single primary action.
+function MapProviderCard({ provider, onOpen, onClose }) {
+  if (!provider) return null;
+  const meta = readMeta(provider);
+  const langs = Array.isArray(meta.languages) ? meta.languages : [];
+  const modality = MODALITY_LABEL[meta.modality] || null;
+  const loc = [provider.city, provider.region].filter(Boolean).join(', ');
+  return (
+    <div className="mv-card" role="dialog" aria-label={`${provider.business_name || 'Provider'} summary`}>
+      <button type="button" className="mv-card-x" onClick={onClose} aria-label="Close provider card"><X size={16} /></button>
+      <div className="mv-card-head">
+        <TypeBadge type={provider.provider_type} />
+        {provider.rating > 0 && <RatingStars value={Number(provider.rating)} size={13} showValue count={provider.review_count} />}
+      </div>
+      <div className="mv-card-name">{provider.business_name}</div>
+      {loc && <div className="mv-card-row"><MapPin size={13} /> {loc}</div>}
+      <div className="mv-card-chips">
+        {modality && <span className="mv-card-chip">{meta.modality === 'virtual' ? <Video size={12} /> : <MapPin size={12} />} {modality}</span>}
+        {langs.slice(0, 3).map((l) => <span key={l} className="mv-card-chip"><Globe size={12} /> {l}</span>)}
+      </div>
+      <div className="mv-card-foot">
+        {provider.price_range && <span className="mv-card-price">{provider.price_range}</span>}
+        <button type="button" className="mv-card-btn" onClick={() => onOpen?.(provider)}>
+          View &amp; book <ArrowRight size={14} />
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function userIcon() {
@@ -129,6 +180,7 @@ function LocateControl({ onLocate }) {
 
 export default function MapView({
   providers = [], activeId, onSelect, onHover, userLocation, onLocate, radiusKm, center,
+  onOpenDetail, onClearActive, showCard = true,
 }) {
   const valid = useMemo(
     () => providers
@@ -182,6 +234,13 @@ export default function MapView({
         <InvalidateOnResize />
         <LocateControl onLocate={onLocate} />
       </MapContainer>
+      {showCard && active && (
+        <MapProviderCard
+          provider={active}
+          onOpen={onOpenDetail}
+          onClose={() => onClearActive?.()}
+        />
+      )}
       <style>{CSS}</style>
     </div>
   );
@@ -206,4 +265,23 @@ const CSS = `
   display:grid;place-items:center;color:var(--teal-d);transition:all .15s ease}
 .luca .mv-locate:hover{background:var(--mint-soft);border-color:var(--mint);color:var(--mint-ink)}
 .luca .leaflet-control-attribution{font-size:9px;background:rgba(255,255,255,.7)}
+/* Selected-provider compact card, kept inside the map viewport. */
+.luca .mv-card{position:absolute;left:12px;right:12px;bottom:14px;z-index:600;margin:0 auto;max-width:360px;
+  background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:0 12px 34px rgba(6,40,38,.26);
+  padding:13px 14px;animation:mvCardUp .22s cubic-bezier(.2,.8,.2,1)}
+@keyframes mvCardUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.luca .mv-card-x{position:absolute;top:9px;right:9px;width:28px;height:28px;border-radius:8px;border:none;
+  background:var(--surface-2);color:var(--muted);display:grid;place-items:center;cursor:pointer}
+.luca .mv-card-x:hover{background:var(--line-2);color:var(--ink)}
+.luca .mv-card-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-right:30px}
+.luca .mv-card-name{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15.5px;color:var(--ink);margin-top:7px;line-height:1.25}
+.luca .mv-card-row{display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--muted);margin-top:4px}
+.luca .mv-card-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.luca .mv-card-chip{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;color:var(--teal-d);
+  background:var(--mint-soft);border:1px solid var(--mint-line);border-radius:999px;padding:3px 9px}
+.luca .mv-card-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:11px}
+.luca .mv-card-price{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:15px;color:var(--teal-d)}
+.luca .mv-card-btn{display:inline-flex;align-items:center;gap:6px;background:var(--teal-d);color:#fff;border:none;
+  border-radius:11px;padding:9px 15px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;margin-left:auto;min-height:40px}
+.luca .mv-card-btn:hover{background:var(--teal-d2)}
 `;

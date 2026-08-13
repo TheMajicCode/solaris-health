@@ -1,0 +1,169 @@
+/**
+ * Explore mobile map/list experience — quick filters + full filter sheet,
+ * marker↔list synchronisation (both directions), and the draggable results
+ * sheet's collapsed/half/full states with a tap alternative to dragging.
+ * Covers acceptance scenarios 4, 5, 6, 7 and 8.
+ *
+ * matchMedia is forced to report a phone viewport BEFORE the component imports,
+ * so ExploreMarketplace renders its mobile branch (map behind + results sheet).
+ * Leaflet cannot lay out in jsdom, so MapView is replaced with a light stub that
+ * preserves the real marker↔list wiring (onSelect / activeId / onOpenDetail).
+ */
+import React from 'react';
+import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { render, screen, within, fireEvent, waitFor } from '@testing-library/react';
+
+// Force a phone viewport (max-width queries match) before anything reads it.
+beforeAll(() => {
+  window.matchMedia = (q) => ({
+    matches: /max-width/.test(q),
+    media: q,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => {},
+  });
+});
+
+const PROVIDERS = [
+  {
+    id: 1, business_name: 'Aura Dental', provider_type: 'dentist', rating: 4.8, review_count: 42,
+    city: 'San Salvador', region: 'San Salvador', price_range: '$$', verified: true,
+    latitude: 13.7, longitude: -89.2,
+    hours_of_operation: { meta: { modality: 'in_person', languages: ['Spanish', 'English'], days: ['mon', 'tue'] } },
+  },
+  {
+    id: 2, business_name: 'Verde Nutrition', provider_type: 'nutritionist', rating: 4.2, review_count: 10,
+    city: 'Santa Ana', region: 'Santa Ana', price_range: '$',
+    latitude: 13.9, longitude: -89.5,
+    hours_of_operation: { meta: { modality: 'virtual', languages: ['English'] } },
+  },
+];
+
+vi.mock('../state/AppContext.jsx', () => ({
+  useApp: () => ({
+    setExploreFilter: vi.fn(), setTab: vi.fn(),
+    setPendingProviderId: vi.fn(), setPendingCurate: vi.fn(),
+  }),
+  AppProvider: ({ children }) => children,
+}));
+
+vi.mock('../lib/api.js', () => ({
+  api: new Proxy({}, {
+    get: (_t, prop) => {
+      if (prop === 'getProviders') return () => Promise.resolve({ providers: PROVIDERS });
+      return () => Promise.resolve({});
+    },
+  }),
+}));
+
+// Light MapView stub keeping the real sync contract.
+vi.mock('../components/marketplace/MapView.jsx', () => ({
+  default: ({ providers = [], activeId, onSelect, onOpenDetail, onClearActive }) => {
+    const active = providers.find((p) => p.id === activeId);
+    return (
+      <div data-testid="mapview">
+        {providers.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            data-testid={`marker-${p.id}`}
+            aria-label={`Select ${p.business_name} on map`}
+            onClick={() => onSelect && onSelect(p)}
+          >
+            {p.business_name}
+          </button>
+        ))}
+        {active && (
+          <div data-testid="map-card" role="dialog" aria-label={`${active.business_name} summary`}>
+            <span data-testid="map-card-name">{active.business_name}</span>
+            <button type="button" onClick={() => onOpenDetail && onOpenDetail(active)}>View &amp; book</button>
+            <button type="button" aria-label="Close provider card" onClick={() => onClearActive && onClearActive()}>x</button>
+          </div>
+        )}
+      </div>
+    );
+  },
+}));
+
+import ExploreMarketplace from '../components/marketplace/ExploreMarketplace.jsx';
+
+const renderExplore = async () => {
+  const utils = render(<ExploreMarketplace user={{ id: 1, role: 'patient' }} />);
+  await waitFor(() => expect(document.querySelector('[data-pid="1"] .plc')).toBeTruthy());
+  return utils;
+};
+
+describe('quick filters + full filter sheet', () => {
+  it('renders quick-filter chips mapped to real fields and toggles one', async () => {
+    await renderExplore();
+    const group = screen.getByRole('group', { name: 'Quick filters' });
+    // Real-field chips only (rating / modality / verified / value-to-value / type).
+    const topRated = within(group).getByRole('button', { name: 'Top rated' });
+    expect(within(group).getByRole('button', { name: 'Virtual' })).toBeInTheDocument();
+    expect(within(group).getByRole('button', { name: 'Verified' })).toBeInTheDocument();
+    expect(within(group).getByRole('button', { name: 'Value-to-value' })).toBeInTheDocument();
+    expect(topRated).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(topRated);
+    expect(within(group).getByRole('button', { name: 'Top rated' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('opens an accessible full filter sheet with Clear + Apply(count) and closes on Escape', async () => {
+    await renderExplore();
+    fireEvent.click(screen.getByRole('button', { name: /^Filters/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Filter providers' });
+    expect(within(dialog).getByRole('button', { name: /Clear all/i })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: /Show \d+ result/i })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Close filters' })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Filter providers' })).toBeNull());
+  });
+});
+
+describe('marker ↔ list synchronisation', () => {
+  it('selecting a marker opens its map card and highlights the matching list item', async () => {
+    await renderExplore();
+    fireEvent.click(screen.getByTestId('marker-2'));
+    // Map card for the selected provider appears.
+    expect(screen.getByTestId('map-card-name')).toHaveTextContent('Verde Nutrition');
+    // Matching list card is highlighted (plc-active).
+    const listItem = document.querySelector('[data-pid="2"] .plc');
+    expect(listItem).toHaveClass('plc-active');
+  });
+
+  it('selecting a list item selects + centres its marker (map card shows the same provider)', async () => {
+    await renderExplore();
+    const card1 = document.querySelector('[data-pid="1"] .plc');
+    fireEvent.click(card1);
+    // The map receives the active id and shows the matching provider card.
+    expect(screen.getByTestId('map-card-name')).toHaveTextContent('Aura Dental');
+    expect(document.querySelector('[data-pid="1"] .plc')).toHaveClass('plc-active');
+  });
+});
+
+describe('draggable results sheet states + tap alternative', () => {
+  it('exposes a handle with state + non-drag tap controls (Show map / Show results)', async () => {
+    await renderExplore();
+    const handle = screen.getByRole('button', { name: /Results sheet/i });
+    expect(screen.getByRole('button', { name: 'Show map' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Show results' })).toBeInTheDocument();
+
+    // Tap "Show results" → full (expanded); "Show map" → collapsed.
+    fireEvent.click(screen.getByRole('button', { name: 'Show results' }));
+    expect(screen.getByRole('button', { name: /Results sheet \(full\)/i })).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Show map' }));
+    expect(screen.getByRole('button', { name: /Results sheet \(collapsed\)/i })).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('keyboard arrows on the handle resize the sheet (non-drag alternative)', async () => {
+    await renderExplore();
+    const handle = screen.getByRole('button', { name: /Results sheet/i });
+    fireEvent.keyDown(handle, { key: 'ArrowUp' });
+    expect(screen.getByRole('button', { name: /Results sheet/i })).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.keyDown(screen.getByRole('button', { name: /Results sheet/i }), { key: 'ArrowDown' });
+    fireEvent.keyDown(screen.getByRole('button', { name: /Results sheet/i }), { key: 'ArrowDown' });
+    expect(screen.getByRole('button', { name: /Results sheet \(collapsed\)/i })).toHaveAttribute('aria-expanded', 'false');
+  });
+});

@@ -35,16 +35,17 @@ describe('BookingFlow (booking-only gate, AT-8)', () => {
   it('shows booking-only policy copy at review and confirmation, with no payment affordance', async () => {
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
 
-    const { container } = render(
+    render(
       <BookingFlow providerId={1} provider={provider} services={services} user={{}} onClose={() => {}} />,
     );
 
     // Step 1 -> pick the service.
     fireEvent.click(screen.getByText('Consultation'));
 
-    // Step 2 -> a slot becomes available; select it.
+    // Step 2 -> a slot becomes available; select it. The adaptive overlay renders
+    // through a portal into <body>, so query the document rather than the mount.
     const slot = await waitFor(() => {
-      const el = container.querySelector('.tsp-slot');
+      const el = document.querySelector('.tsp-slot');
       if (!el) throw new Error('slot not rendered yet');
       return el;
     });

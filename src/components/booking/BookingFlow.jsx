@@ -13,14 +13,14 @@
  *   onBooked     (booking)=>void  — fired after a successful request
  */
 import React, { useState, useEffect, useCallback } from 'react';
-import { createPortal } from 'react-dom';
 import {
-  X, Loader2, Check, ChevronRight, ChevronLeft, Calendar, Clock, Tag,
+  Loader2, Check, ChevronRight, ChevronLeft, Calendar, Clock, Tag,
   MapPin, FileText, ShieldCheck, CalendarPlus, PartyPopper,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '../../lib/api.js';
 import TimeSlotPicker from './TimeSlotPicker.jsx';
+import AdaptiveOverlay from '../ui/AdaptiveOverlay.jsx';
 import { fmtTime, fmtDateLong, downloadICS, tzLabel } from '../../lib/calendar-utils.js';
 
 const STEPS = ['Service', 'Date & Time', 'Details', 'Review', 'Done'];
@@ -116,12 +116,31 @@ export default function BookingFlow({ providerId, provider: provIn, services: sv
   // the viewport. The app's `.page` route wrapper carries a `transform`, which
   // would otherwise become the containing block and center this overlay far
   // down the (tall) page, out of view.
-  return createPortal(
-    <div className="luca">
-    <div className="bkf-scrim" onClick={onClose}>
-      <div className="bkf" onClick={(e) => e.stopPropagation()}>
-        <button className="bkf-x" onClick={onClose} aria-label="Close"><X size={18} /></button>
-
+  return (
+    <AdaptiveOverlay
+      open
+      onClose={onClose}
+      size="md"
+      title="Book an appointment"
+      ariaLabel="Book an appointment"
+      footer={step < 4 && !loadingProv ? (
+        <>
+          {step > 0 ? (
+            <button className="bkf-btn ghost" onClick={() => setStep((s) => Math.max(0, s - 1))}><ChevronLeft size={15} /> Back</button>
+          ) : <span />}
+          {step < 3 ? (
+            <button className="bkf-btn primary" disabled={!canNext} onClick={() => setStep((s) => s + 1)}>
+              Continue <ChevronRight size={15} />
+            </button>
+          ) : (
+            <button className="bkf-btn primary" disabled={submitting || !slot} onClick={submit}>
+              {submitting ? <><Loader2 className="bkf-spin" size={15} /> Booking…</> : <>Confirm booking <Check size={15} /></>}
+            </button>
+          )}
+        </>
+      ) : null}
+    >
+      <div className="bkf-inner">
         {/* Stepper */}
         {step < 4 && (
           <div className="bkf-steps">
@@ -249,28 +268,9 @@ export default function BookingFlow({ providerId, provider: provIn, services: sv
           </div>
         )}
 
-        {/* Footer nav */}
-        {step < 4 && !loadingProv && (
-          <div className="bkf-foot">
-            {step > 0 ? (
-              <button className="bkf-btn ghost" onClick={() => setStep((s) => Math.max(0, s - 1))}><ChevronLeft size={15} /> Back</button>
-            ) : <span />}
-            {step < 3 ? (
-              <button className="bkf-btn primary" disabled={!canNext} onClick={() => setStep((s) => s + 1)}>
-                Continue <ChevronRight size={15} />
-              </button>
-            ) : (
-              <button className="bkf-btn primary" disabled={submitting || !slot} onClick={submit}>
-                {submitting ? <><Loader2 className="bkf-spin" size={15} /> Booking…</> : <>Confirm booking <Check size={15} /></>}
-              </button>
-            )}
-          </div>
-        )}
       </div>
       <style>{CSS}</style>
-    </div>
-    </div>,
-    document.body
+    </AdaptiveOverlay>
   );
 }
 
