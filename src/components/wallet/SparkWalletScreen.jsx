@@ -514,6 +514,18 @@ function WalletSetupOverlay({ mode, onClose, onDone }) {
         .sws-overlay{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:flex-end;justify-content:center;
           background:rgba(6,20,18,0.5);backdrop-filter:blur(2px);animation:swsfade .16s ease}
         @keyframes swsfade{from{opacity:0}to{opacity:1}}
+        /* Portaled to document.body: re-declare the light Economic Passport palette
+           locally so the sheet + nested SparkWalletSetup resolve to light values
+           (global :root defines a dark --surface/--error). Scoped to this sheet only. */
+        .sws-sheet{
+          --ink:#0A2B29; --teal:#0E5C57; --teal-d:#06403B; --teal-d2:#0A524C;
+          --mint:#2FBE9F; --mint-soft:#DAF3EC; --mint-line:#BFE8DD; --mint-ink:#0B6A57;
+          --terra-ink:#7A4A21;
+          --surface:#FFFFFF; --surface-2:#F6FAF8;
+          --line:#E1ECE8; --line-2:#EBF3F0;
+          --muted:#5C716E; --muted-2:#8AA09C;
+          --error:#B23B3B;
+        }
         .sws-sheet{width:100%;max-width:520px;max-height:92vh;display:flex;flex-direction:column;background:var(--surface,#fff);
           border-radius:20px 20px 0 0;box-shadow:0 -12px 40px rgba(3,14,13,0.28);animation:swsrise .2s ease}
         @keyframes swsrise{from{transform:translateY(24px)}to{transform:translateY(0)}}
