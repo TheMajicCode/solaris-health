@@ -10,7 +10,7 @@
  */
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, act } from '@testing-library/react';
 
 // Mutable mock state for the provider hook.
 const walletState = {};
@@ -32,12 +32,17 @@ function readyState(overrides = {}) {
     loading: false,
     error: null,
     vaultPresent: true,
+    legacyPresent: false,
     vaultStatusText: 'Encrypted on this device. Restore on another device with your recovery words.',
+    privacy: { supported: true, enabled: false, loading: false, error: '' },
     isSending: false,
     refresh: vi.fn(),
     send: vi.fn().mockResolvedValue({}),
     createInvoice: vi.fn().mockResolvedValue({ invoice: { encodedInvoice: 'lnbcrt1invoice' } }),
     unlockFromVault: vi.fn().mockResolvedValue(),
+    setPrivacyEnabled: vi.fn().mockResolvedValue(true),
+    migrateLegacy: vi.fn().mockResolvedValue(true),
+    refreshPrivacy: vi.fn(),
     ...overrides,
   };
 }
@@ -92,6 +97,49 @@ describe('SparkWalletScreen — Send validation', () => {
     fireEvent.click(screen.getByText('Review'));
     expect(screen.getByText(/exceeds your available balance/i)).toBeInTheDocument();
     expect(walletState.send).not.toHaveBeenCalled();
+  });
+});
+
+describe('SparkWalletScreen — Bitcoin transaction privacy (truthful, correction §4)', () => {
+  it('renders the privacy setting with a truthful explanation and no anonymity claim', () => {
+    render(<SparkWalletScreen />);
+    expect(screen.getByText('Bitcoin transaction privacy')).toBeInTheDocument();
+    expect(screen.getByText(/can be seen through the public/i)).toBeInTheDocument();
+    expect(screen.getByText(/not anonymity and does not make your wallet invisible/i)).toBeInTheDocument();
+    expect(screen.getByText(/Privacy mode is OFF/i)).toBeInTheDocument();
+  });
+
+  it('explicitly enables privacy through the provider when toggled on', async () => {
+    render(<SparkWalletScreen />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('switch', { name: /Bitcoin transaction privacy/i }));
+    });
+    expect(walletState.setPrivacyEnabled).toHaveBeenCalledWith(true);
+  });
+
+  it('shows the ON state and a graceful message when the SDK privacy control is unavailable', () => {
+    Object.assign(walletState, readyState({ privacy: { supported: true, enabled: true, loading: false, error: '' } }));
+    render(<SparkWalletScreen />);
+    expect(screen.getByText(/Privacy mode is ON/i)).toBeInTheDocument();
+
+    Object.assign(walletState, readyState({ privacy: { supported: false, enabled: false, loading: false, error: '' } }));
+    render(<SparkWalletScreen />);
+    expect(screen.getByText(/unavailable in this preview SDK/i)).toBeInTheDocument();
+  });
+});
+
+describe('SparkWalletScreen — legacy migration offer (correction §1)', () => {
+  it('offers the one-time legacy-move card ONLY when a legacy vault is present and no scoped wallet is active', () => {
+    Object.assign(walletState, readyState({ status: 'idle', legacyPresent: true }));
+    render(<SparkWalletScreen />);
+    expect(screen.getByText(/Move an older wallet to this account/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Move this legacy wallet to this Solaris account/i })).toBeInTheDocument();
+  });
+
+  it('does NOT offer the legacy card when no legacy vault exists', () => {
+    Object.assign(walletState, readyState({ status: 'idle', legacyPresent: false }));
+    render(<SparkWalletScreen />);
+    expect(screen.queryByText(/Move an older wallet to this account/i)).not.toBeInTheDocument();
   });
 });
 

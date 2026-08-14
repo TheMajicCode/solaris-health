@@ -1,13 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { X, Download, Share } from 'lucide-react';
+import { useApp } from '../state/AppContext.jsx';
 
 /* ────────────────────────────────────────────────────────────────────────────
- * PWAInstallInvitation — the "Keep Solaris close" install prompt (spec §5).
+ * PWAInstallInvitation — the "Keep Solaris close" install prompt (spec §5, correction §3).
  *
  * BEHAVIOUR (exact):
- *  • Capture `beforeinstallprompt`, preventDefault(), and stash the event. Only
- *    call event.prompt() AFTER the user taps "Install Solaris". Never fake a
- *    native install success when the event is unavailable.
+ *  • Capture `beforeinstallprompt`, preventDefault(), and stash the event ALWAYS
+ *    (so a genuine installability signal is never lost). Only call event.prompt()
+ *    AFTER the user taps "Install Solaris". Never fake a native install success
+ *    when the event is unavailable.
+ *  • AUTH GATING (correction §3): the invitation is shown ONLY during the
+ *    UNAUTHENTICATED welcome / account-creation journey. It is hidden the moment
+ *    a Solaris account is authenticated, so it can NEVER cover the wallet screens
+ *    or the fixed mobile navigation. On logout it may reappear (subject to the
+ *    standalone + cooldown checks). It does NOT touch the bottom navigation.
  *  • iOS Safari cannot fire beforeinstallprompt → show the exact manual fallback
  *    "Tap Share, then Add to Home Screen." instead of a native prompt.
  *  • "Not now" sets a seven-day dismissal cooldown (localStorage timestamp).
@@ -62,6 +69,9 @@ function dismissedRecently() {
 }
 
 export default function PWAInstallInvitation() {
+  const app = useApp();
+  const authed = !!app?.user;               // authenticated Solaris session?
+
   const [visible, setVisible] = useState(false);
   const [deferred, setDeferred] = useState(null); // stashed beforeinstallprompt event
   const [showIosHint, setShowIosHint] = useState(false);
@@ -70,11 +80,13 @@ export default function PWAInstallInvitation() {
   useEffect(() => {
     if (isStandalone() || dismissedRecently()) return undefined;
 
-    // Chrome / Android / desktop: wait for the installability signal.
+    // Chrome / Android / desktop: wait for the installability signal. We ALWAYS
+    // capture + stash the genuine event so it is never lost; we only surface the
+    // invitation when the visitor is NOT authenticated (correction §3).
     const onBeforeInstall = (e) => {
       e.preventDefault();       // suppress the mini-infobar
       setDeferred(e);           // stash — used only when the user taps Install
-      setVisible(true);
+      if (!authed) setVisible(true);
     };
     // Clean up once the app is actually installed.
     const onInstalled = () => {
@@ -89,7 +101,7 @@ export default function PWAInstallInvitation() {
     // iOS Safari never fires beforeinstallprompt — surface the manual invitation
     // (deferred stays null so we only ever show the exact Share instructions).
     let iosTimer;
-    if (iosMode) {
+    if (iosMode && !authed) {
       iosTimer = setTimeout(() => setVisible(true), 1200);
     }
 
@@ -98,7 +110,20 @@ export default function PWAInstallInvitation() {
       window.removeEventListener('appinstalled', onInstalled);
       if (iosTimer) clearTimeout(iosTimer);
     };
-  }, [iosMode]);
+  }, [iosMode, authed]);
+
+  // Auth transitions: hide the moment an account signs in (so it can never cover
+  // the authenticated wallet screens or the fixed mobile nav); on sign-out it may
+  // reappear when a genuine install signal is available and not in cooldown.
+  useEffect(() => {
+    if (authed) {
+      setVisible(false);
+      setShowIosHint(false);
+      return;
+    }
+    if (isStandalone() || dismissedRecently()) return;
+    if (deferred || iosMode) setVisible(true);
+  }, [authed, deferred, iosMode]);
 
   const dismiss = () => {
     setVisible(false);
@@ -120,7 +145,9 @@ export default function PWAInstallInvitation() {
     setShowIosHint(true);
   };
 
-  if (!visible) return null;
+  // Hard guard: NEVER render while authenticated (defence-in-depth over the
+  // effects above) so the invitation can never overlay the wallet screens.
+  if (authed || !visible) return null;
 
   return (
     <div className="pwa-invite" role="dialog" aria-labelledby="pwa-invite-title" aria-describedby="pwa-invite-body">

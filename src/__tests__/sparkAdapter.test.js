@@ -20,6 +20,7 @@ import {
   createSparkWallet, restoreSparkWallet, isSparkBusy,
   isValidSats, walletTransfer, walletCreateLightningInvoice,
   isSparkSending, hasActiveWallet,
+  sparkPrivacySupported, walletGetWalletSettings, walletSetPrivacyEnabled,
 } from '../lib/spark/adapter.js';
 
 afterEach(() => { vi.unstubAllEnvs(); });
@@ -152,5 +153,17 @@ describe('send/receive safety — validation before any SDK/wallet use', () => {
   it('walletCreateLightningInvoice validates integer positive sats before any SDK call', async () => {
     await expect(walletCreateLightningInvoice({ amountSats: 0 })).rejects.toThrow(/whole number of sats/i);
     await expect(walletCreateLightningInvoice({ amountSats: 2.5 })).rejects.toThrow(/whole number of sats/i);
+  });
+});
+
+describe('privacy status (spec §4) — capability + no active wallet', () => {
+  it('reports the SDK privacy control as supported (installed 0.9.0)', () => {
+    expect(sparkPrivacySupported()).toBe(true);
+  });
+
+  it('reading/setting privacy requires an active wallet (none in tests)', async () => {
+    expect(hasActiveWallet()).toBe(false);
+    await expect(walletGetWalletSettings()).rejects.toThrow(/no active spark wallet/i);
+    await expect(walletSetPrivacyEnabled(true)).rejects.toThrow(/no active spark wallet/i);
   });
 });

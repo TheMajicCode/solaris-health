@@ -197,6 +197,39 @@ export async function walletCreateLightningInvoice({ amountSats, memo } = {}) {
   });
 }
 
+/* ----------------------------- privacy status (spec §4) ----------------------------- */
+
+/**
+ * Whether this build's Spark SDK exposes the wallet privacy controls. The
+ * installed @buildonspark/spark-sdk 0.9.0 ships getWalletSettings() and
+ * setPrivacyEnabled(); this is a static capability flag so the UI can degrade
+ * gracefully if a future build drops them.
+ */
+export function sparkPrivacySupported() {
+  return true;
+}
+
+/**
+ * Read the active wallet's privacy settings from the SDK. Returns the SDK
+ * WalletSettings ({ ownerIdentityPublicKey, privateEnabled }) or throws if there
+ * is no active wallet. No secret is involved — the identity key is PUBLIC.
+ * @returns {Promise<{ownerIdentityPublicKey:string, privateEnabled:boolean}|undefined>}
+ */
+export async function walletGetWalletSettings() {
+  return requireWallet().getWalletSettings();
+}
+
+/**
+ * Enable/disable Bitcoin transaction privacy on the active wallet via the SDK.
+ * This toggles whether BTC transaction history is hidden from the public Spark
+ * endpoints; it does NOT make the wallet anonymous. Returns the updated
+ * WalletSettings.
+ * @returns {Promise<{ownerIdentityPublicKey:string, privateEnabled:boolean}|undefined>}
+ */
+export async function walletSetPrivacyEnabled(enabled) {
+  return requireWallet().setPrivacyEnabled(!!enabled);
+}
+
 /**
  * Classify a PUBLIC Spark address for the optional address-linking consent.
  * spark1… → spark-mainnet ; sparkrt1… → spark-regtest. No secret involved.

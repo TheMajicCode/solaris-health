@@ -115,7 +115,7 @@ export default function SparkWalletCard({ onWalletReady }) {
   const savePassphraseAndFinish = async () => {
     if (busy) return;
     setError('');
-    if (passphrase.length < 8) { setError('Use an unlock passphrase of at least 8 characters.'); return; }
+    if (passphrase.length < 12) { setError('Use an unlock passphrase of at least 12 characters.'); return; }
     if (passphrase !== passphrase2) { setError('The two passphrases do not match.'); return; }
     setBusy(true);
     try {
@@ -257,7 +257,7 @@ export default function SparkWalletCard({ onWalletReady }) {
                 <div className="spk-warn">
                   <p className="spk-warn-title"><Lock size={14} /> Encrypt this wallet on this device</p>
                   <p className="spk-safe" style={{ margin: 0 }}>
-                    Choose an unlock passphrase (at least 8 characters). It encrypts your wallet on this
+                    Choose an unlock passphrase (at least 12 characters). It encrypts your wallet on this
                     device and is required to unlock it later. Solaris never receives it.
                   </p>
                 </div>
@@ -265,7 +265,7 @@ export default function SparkWalletCard({ onWalletReady }) {
                 <input
                   id="spk-pass" className="input" type="password" value={passphrase}
                   onChange={(e) => setPassphrase(e.target.value)} autoComplete="new-password"
-                  spellCheck={false} placeholder="At least 8 characters"
+                  spellCheck={false} placeholder="At least 12 characters"
                 />
                 <label className="spk-label" htmlFor="spk-pass2" style={{ marginTop: 8 }}>Confirm passphrase</label>
                 <input

@@ -2,9 +2,10 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   Wallet, ShieldCheck, RefreshCw, ArrowDownLeft, ArrowUpRight, Plus, Copy, Check,
-  Eye, EyeOff, Lock, AlertTriangle, Loader2, ChevronLeft, Zap,
+  Eye, EyeOff, Lock, AlertTriangle, Loader2, ChevronLeft, Zap, Shield, ArrowRightLeft,
 } from 'lucide-react';
 import { useSparkWallet } from '../../state/SparkWalletContext.jsx';
+import { useApp } from '../../state/AppContext.jsx';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * SparkWalletScreen — the DEFAULT "Wallet" tab of the Economic Passport (spec §4).
@@ -69,6 +70,7 @@ export default function SparkWalletScreen() {
       <div className="spw">
         <WalletHeader />
         <LockedCard />
+        {spark.legacyPresent && <LegacyMigrationCard />}
         <Style />
       </div>
     );
@@ -87,6 +89,7 @@ export default function SparkWalletScreen() {
             on this device on the {spark.network} test network — never with real funds.
           </p>
         </div>
+        {spark.legacyPresent && <LegacyMigrationCard />}
         <Style />
       </div>
     );
@@ -134,6 +137,8 @@ export default function SparkWalletScreen() {
               <Plus size={18} /> <span>Add test funds</span>
             </button>
           </div>
+
+          <PrivacySetting />
         </>
       )}
 
@@ -336,6 +341,123 @@ function SendPanel({ onBack }) {
   );
 }
 
+/* ────────────────────────────────────────────────────────────────────────────
+ * PrivacySetting — TRUTHFUL Bitcoin transaction privacy control (correction §4).
+ *
+ * Explains plainly that, by default, this wallet's BTC transaction history is
+ * visible through the PUBLIC Spark endpoints; privacy mode hides that BTC history
+ * while token activity may remain visible. It does NOT claim anonymity, complete
+ * sovereignty, or that the wallet becomes invisible on-chain. The user explicitly
+ * turns it on or off; state is read from the SDK after unlock.
+ * ──────────────────────────────────────────────────────────────────────────── */
+function PrivacySetting() {
+  const spark = useSparkWallet();
+  const p = spark.privacy || { supported: false, enabled: false, loading: false, error: '' };
+  const [busy, setBusy] = useState(false);
+
+  const toggle = async () => {
+    if (busy || p.loading) return;
+    setBusy(true);
+    try { await spark.setPrivacyEnabled(!p.enabled); }
+    catch { /* error surfaced via spark.privacy.error */ }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="spw-card spw-privacy">
+      <p className="spw-panel-title"><Shield size={16} /> Bitcoin transaction privacy</p>
+      {!p.supported ? (
+        <p className="spw-panel-note">Privacy control is unavailable in this preview SDK.</p>
+      ) : (
+        <>
+          <p className="spw-panel-note">
+            By default, this wallet’s Bitcoin transaction history can be seen through the public
+            Spark network endpoints. Turning on privacy mode asks Spark to hide your BTC transaction
+            history from those public endpoints. Token activity may still be visible. This is not
+            anonymity and does not make your wallet invisible on-chain.
+          </p>
+          <div className="spw-privacy-row">
+            <span className="spw-privacy-state">
+              {p.enabled ? <ShieldCheck size={15} /> : <Shield size={15} />}
+              {p.enabled ? 'Privacy mode is ON' : 'Privacy mode is OFF'}
+            </span>
+            <button
+              className={`spw-toggle${p.enabled ? ' spw-toggle-on' : ''}`}
+              role="switch" aria-checked={p.enabled} aria-label="Bitcoin transaction privacy"
+              onClick={toggle} disabled={busy || p.loading}
+            >
+              {(busy || p.loading) ? <Loader2 size={14} className="spw-spin" /> : <span className="spw-knob" />}
+            </button>
+          </div>
+          {p.error && <p className="spw-err">{p.error}</p>}
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * LegacyMigrationCard — one-time explicit move of the LEGACY global wallet into
+ * THIS Solaris account (correction §1). Requires the legacy unlock passphrase and
+ * an explicit confirmation that this is the intended account. The legacy vault is
+ * only removed after a successful re-encrypt + read-back inside migrateLegacy().
+ * ──────────────────────────────────────────────────────────────────────────── */
+function LegacyMigrationCard() {
+  const spark = useSparkWallet();
+  const app = useApp();
+  const email = app?.user?.email || 'this account';
+  const [pass, setPass] = useState('');
+  const [confirmed, setConfirmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [done, setDone] = useState(false);
+
+  const move = async () => {
+    if (busy) return;
+    setErr(''); setBusy(true);
+    try { await spark.migrateLegacy(pass); setPass(''); setDone(true); }
+    catch (e) { setErr(e?.message || 'Could not move the legacy wallet.'); }
+    finally { setBusy(false); }
+  };
+
+  if (done) {
+    return (
+      <div className="spw-card spw-legacy">
+        <p className="spw-panel-title"><Check size={16} /> Legacy wallet moved</p>
+        <p className="spw-panel-note">This wallet now belongs to your Solaris account and is locked on this device. Unlock it above with its passphrase.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="spw-card spw-legacy">
+      <p className="spw-panel-title"><ArrowRightLeft size={16} /> Move an older wallet to this account</p>
+      <p className="spw-panel-note">
+        An older, account-less wallet was found on this device. You can move it into your Solaris
+        account once. Your existing wallet is only replaced after a successful, verified move.
+      </p>
+      <label className="spw-label" htmlFor="spw-legacy-pass">Legacy wallet passphrase</label>
+      <input
+        id="spw-legacy-pass" className="spw-input" type="password" value={pass}
+        onChange={(e) => setPass(e.target.value)} autoComplete="off" spellCheck={false}
+        placeholder="The passphrase for the older wallet"
+      />
+      <label className="spw-check">
+        <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
+        <span>Move this legacy wallet to <b>{email}</b>.</span>
+      </label>
+      {err && <p className="spw-err">{err}</p>}
+      <button
+        className="spw-btn" onClick={move}
+        disabled={busy || !confirmed || pass.length < 1} aria-busy={busy}
+        style={{ marginTop: 10 }}
+      >
+        {busy ? <><Loader2 size={15} className="spw-spin" /> Moving…</> : 'Move this legacy wallet to this Solaris account'}
+      </button>
+    </div>
+  );
+}
+
 /* Light Solaris palette (dark-green / mint / cream / restrained gold) — matches
    the Economic Passport surfaces. Tokens inherited from LucaPassport CSS vars. */
 function Style() {
@@ -395,6 +517,17 @@ function Style() {
       .spw-empty-sub{font-size:13px;color:var(--muted,#5C726B);line-height:1.55;margin:6px 0 0}
       .spw-locked .spw-label,.spw-locked .spw-input{text-align:left}
       .spw-err{color:var(--error,#B23B3B);font-size:12.5px;margin:8px 0 0}
+      .spw-privacy{margin-top:12px}
+      .spw-privacy-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:6px}
+      .spw-privacy-state{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:700;color:var(--ink,#0A2B29)}
+      .spw-toggle{position:relative;width:46px;height:26px;flex:none;border-radius:999px;border:1px solid var(--line,#E1ECE8);
+        background:var(--surface-2,#F0F5F3);cursor:pointer;transition:.18s;display:inline-flex;align-items:center;padding:0 3px}
+      .spw-toggle-on{background:var(--mint,#2FBE9F);border-color:var(--mint,#2FBE9F);justify-content:flex-end}
+      .spw-toggle:disabled{opacity:.6;cursor:default}
+      .spw-knob{width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(3,14,13,0.3)}
+      .spw-legacy{border-color:#EBD3A0;background:linear-gradient(160deg,#FCF7EC,#FFFFFF)}
+      .spw-check{display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--ink,#0A2B29);margin-top:10px;line-height:1.5;cursor:pointer}
+      .spw-check input{margin-top:2px}
       .spw-spin{animation:spwspin 1s linear infinite}
       @keyframes spwspin{to{transform:rotate(360deg)}}
     `}</style>
