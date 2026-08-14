@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   Wallet, ShieldCheck, RefreshCw, ArrowDownLeft, ArrowUpRight, Plus, Copy, Check,
-  Eye, EyeOff, Lock, AlertTriangle, Loader2, ChevronLeft, Zap, Shield, ArrowRightLeft,
+  Eye, EyeOff, Lock, AlertTriangle, Loader2, ChevronLeft, Zap, Shield, ArrowRightLeft, X,
 } from 'lucide-react';
 import { useSparkWallet } from '../../state/SparkWalletContext.jsx';
 import { useApp } from '../../state/AppContext.jsx';
+import SparkWalletSetup from '../SparkWalletSetup.jsx';
 
 /* ────────────────────────────────────────────────────────────────────────────
  * SparkWalletScreen — the DEFAULT "Wallet" tab of the Economic Passport (spec §4).
@@ -41,6 +43,7 @@ export default function SparkWalletScreen() {
   const spark = useSparkWallet();
   const [panel, setPanel] = useState('home');      // home | receive | send
   const [showFull, setShowFull] = useState(false);
+  const [setupMode, setSetupMode] = useState(null); // null | 'create' | 'restore' — empty-wallet setup overlay
   const { copied, copy } = useCopy();
 
   // Refresh balance whenever we enter the ready home panel.
@@ -85,11 +88,32 @@ export default function SparkWalletScreen() {
           <div className="spw-empty-icon"><Wallet size={22} /></div>
           <p className="spw-empty-title">No Spark wallet on this device yet</p>
           <p className="spw-empty-sub">
-            Create your Spark wallet during onboarding under “Reclaim Your Wealth”. It is created
-            on this device on the {spark.network} test network — never with real funds.
+            Set up your Spark wallet right here. It is created on this device on the {spark.network}
+            {' '}test network — never with real funds — and encrypted on this device with your own passphrase.
           </p>
+          {spark.enabled ? (
+            <div className="spw-empty-actions">
+              <button className="spw-btn" onClick={() => setSetupMode('create')}>
+                <Plus size={16} /> Create Spark wallet
+              </button>
+              <button className="spw-btn spw-btn-ghost" onClick={() => setSetupMode('restore')}>
+                <RefreshCw size={15} /> Restore existing wallet
+              </button>
+            </div>
+          ) : (
+            <p className="spw-note" style={{ justifyContent: 'center' }}>
+              <AlertTriangle size={14} /> {spark.disabledReason || 'The Spark wallet is turned off in this build.'}
+            </p>
+          )}
         </div>
         {spark.legacyPresent && <LegacyMigrationCard />}
+        {setupMode && (
+          <WalletSetupOverlay
+            mode={setupMode}
+            onClose={() => setSetupMode(null)}
+            onDone={() => { setSetupMode(null); spark.refresh?.(); }}
+          />
+        )}
         <Style />
       </div>
     );
@@ -458,6 +482,59 @@ function LegacyMigrationCard() {
   );
 }
 
+/* ────────────────────────────────────────────────────────────────────────────
+ * WalletSetupOverlay — responsive bottom-sheet / full-screen overlay that hosts
+ * the ONE reusable SparkWalletSetup flow from the Economic Passport empty-wallet
+ * state (correction §1). It does NOT replay onboarding screens, the profile form,
+ * or the health assessment, and never resets completed onboarding state — it only
+ * mounts the shared secure setup flow. On a successful adopt, SparkWalletSetup
+ * fires onDone, the overlay closes, and the wallet home renders immediately.
+ * ──────────────────────────────────────────────────────────────────────────── */
+function WalletSetupOverlay({ mode, onClose, onDone }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return createPortal(
+    <div className="sws-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="sws-sheet" role="dialog" aria-modal="true" aria-label={mode === 'restore' ? 'Restore Spark wallet' : 'Create Spark wallet'}>
+        <div className="sws-sheet-head">
+          <span className="sws-sheet-title">
+            <Wallet size={16} /> {mode === 'restore' ? 'Restore existing wallet' : 'Create Spark wallet'}
+          </span>
+          <button className="sws-sheet-close" onClick={onClose} aria-label="Close wallet setup"><X size={18} /></button>
+        </div>
+        <div className="sws-sheet-body">
+          <SparkWalletSetup variant="passport" initialMode={mode} onDone={onDone} />
+        </div>
+      </div>
+      <style>{`
+        .sws-overlay{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:flex-end;justify-content:center;
+          background:rgba(6,20,18,0.5);backdrop-filter:blur(2px);animation:swsfade .16s ease}
+        @keyframes swsfade{from{opacity:0}to{opacity:1}}
+        .sws-sheet{width:100%;max-width:520px;max-height:92vh;display:flex;flex-direction:column;background:var(--surface,#fff);
+          border-radius:20px 20px 0 0;box-shadow:0 -12px 40px rgba(3,14,13,0.28);animation:swsrise .2s ease}
+        @keyframes swsrise{from{transform:translateY(24px)}to{transform:translateY(0)}}
+        .sws-sheet-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;
+          border-bottom:1px solid var(--line,#E1ECE8);flex:none}
+        .sws-sheet-title{display:inline-flex;align-items:center;gap:8px;font-weight:700;font-size:15px;color:var(--ink,#0A2B29)}
+        .sws-sheet-title svg{color:var(--teal,#0E5C57)}
+        .sws-sheet-close{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;flex:none;
+          border:1px solid var(--line,#E1ECE8);background:var(--surface,#fff);border-radius:9px;color:var(--muted,#5C726B);cursor:pointer}
+        .sws-sheet-close:hover{background:var(--mint-soft,#DAF3EC);color:var(--teal,#0E5C57)}
+        .sws-sheet-body{padding:16px;overflow-y:auto;-webkit-overflow-scrolling:touch}
+        @media (min-width:600px){
+          .sws-overlay{align-items:center}
+          .sws-sheet{border-radius:18px;max-height:88vh}
+        }
+      `}</style>
+    </div>,
+    document.body,
+  );
+}
+
 /* Light Solaris palette (dark-green / mint / cream / restrained gold) — matches
    the Economic Passport surfaces. Tokens inherited from LucaPassport CSS vars. */
 function Style() {
@@ -515,6 +592,7 @@ function Style() {
       .spw-done-title,.spw-locked-title,.spw-empty-title{font-weight:700;font-size:15px;color:var(--ink,#0A2B29);margin:0 0 4px}
       .spw-locked,.spw-empty{text-align:center}
       .spw-empty-sub{font-size:13px;color:var(--muted,#5C726B);line-height:1.55;margin:6px 0 0}
+      .spw-empty-actions{display:flex;flex-direction:column;gap:8px;margin-top:14px;text-align:left}
       .spw-locked .spw-label,.spw-locked .spw-input{text-align:left}
       .spw-err{color:var(--error,#B23B3B);font-size:12.5px;margin:8px 0 0}
       .spw-privacy{margin-top:12px}

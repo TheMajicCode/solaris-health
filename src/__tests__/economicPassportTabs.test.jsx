@@ -64,6 +64,23 @@ describe('Economic Passport tab row (scroll variant)', () => {
     expect(onSelect).toHaveBeenCalledWith('wallet'); // wraps from last -> first
   });
 
+  it('shows an obvious right-edge fade + chevron affordance (decorative, aria-hidden) when the row can scroll', () => {
+    const { container } = render(
+      <SubTabs ariaLabel="Economic Passport sections" scroll active="wallet" onSelect={vi.fn()} items={EP_ITEMS} />,
+    );
+    // The scrollable row is wrapped so the affordance can overlay its right edge.
+    const wrap = container.querySelector('.subtabs-scroll-wrap');
+    expect(wrap).toBeTruthy();
+    const fade = wrap.querySelector('.subtabs-scroll-fade');
+    expect(fade).toBeTruthy();
+    // Affordance never steals focus or SR attention (no meaningless clipped label).
+    expect(fade.getAttribute('aria-hidden')).toBe('true');
+    expect(fade.style.pointerEvents).toBe('none');
+    // The four tabs still live inside the real tablist (nothing dropped).
+    const list = within(wrap).getByRole('tablist');
+    expect(within(list).getAllByRole('tab')).toHaveLength(4);
+  });
+
   it('non-scroll consumers keep the wrapping layout (Economic Passport change is opt-in)', () => {
     render(<SubTabs ariaLabel="LUCA Coach sections" active="coach" onSelect={vi.fn()} items={[{ id: 'coach', label: 'Coach' }, { id: 'intelligence', label: 'Intelligence' }]} />);
     const list = screen.getByRole('tablist', { name: 'LUCA Coach sections' });

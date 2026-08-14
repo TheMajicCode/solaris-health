@@ -5204,6 +5204,7 @@ function InboxPage({ user, go, onUnread }) {
    language — mint-tinted active pill on a soft neutral track. */
 export function SubTabs({ items, active, onSelect, ariaLabel, scroll = false }) {
   const listRef = useRef(null);
+  const [overflowRight, setOverflowRight] = useState(false);
   const onKeyDown = (e, idx) => {
     if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
     e.preventDefault();
@@ -5212,18 +5213,39 @@ export function SubTabs({ items, active, onSelect, ariaLabel, scroll = false }) 
     onSelect(items[next].id);
   };
   const hasActive = items.some((x) => x.id === active);
-  // Opt-in scroll variant (Economic Passport only): keep the active tab visible
-  // when the row overflows horizontally. Other tab bars are unaffected.
+  // Opt-in scroll variant (Economic Passport only): keep the COMPLETE active tab
+  // visible when the row overflows horizontally. Other tab bars are unaffected.
   useEffect(() => {
     if (!scroll || !listRef.current) return;
     const el = listRef.current.querySelector('[aria-selected="true"]');
     if (el && el.scrollIntoView) el.scrollIntoView({ inline: 'nearest', block: 'nearest' });
   }, [scroll, active]);
+  // Track whether more tabs remain off the right edge, to show an obvious
+  // fade + chevron affordance instead of a meaningless clipped label (§2).
+  useEffect(() => {
+    if (!scroll) return;
+    const el = listRef.current;
+    if (!el) return;
+    const update = () => {
+      const more = el.scrollWidth - el.clientWidth - el.scrollLeft > 1;
+      setOverflowRight(more);
+    };
+    update();
+    el.addEventListener('scroll', update, { passive: true });
+    let ro;
+    if (typeof ResizeObserver !== 'undefined') { ro = new ResizeObserver(update); ro.observe(el); }
+    window.addEventListener('resize', update);
+    return () => {
+      el.removeEventListener('scroll', update);
+      if (ro) ro.disconnect();
+      window.removeEventListener('resize', update);
+    };
+  }, [scroll, items.length, active]);
   const wrapStyle = scroll
     ? { gap: 4, background: '#F1F5F3', borderRadius: 999, padding: 4, marginBottom: 18, width: '100%', maxWidth: '100%',
         flexWrap: 'nowrap', overflowX: 'auto', scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch' }
     : { gap: 4, background: '#F1F5F3', borderRadius: 999, padding: 4, marginBottom: 18, width: 'fit-content', maxWidth: '100%' };
-  return (
+  const list = (
     <div ref={listRef} role="tablist" aria-label={ariaLabel || 'Sections'}
       className={scroll ? 'row subtabs-scroll' : 'row wrap'} style={wrapStyle}>
       {items.map((it, idx) => {
@@ -5249,6 +5271,23 @@ export function SubTabs({ items, active, onSelect, ariaLabel, scroll = false }) 
           </button>
         );
       })}
+    </div>
+  );
+  if (!scroll) return list;
+  // Wrap the scrollable row so the fade/chevron can overlay its right edge. The
+  // affordance is purely decorative (aria-hidden, non-focusable): the tablist
+  // itself keeps full keyboard + screen-reader behavior.
+  return (
+    <div className="subtabs-scroll-wrap" style={{ position: 'relative', width: '100%', maxWidth: '100%' }}>
+      {list}
+      <div aria-hidden="true" className="subtabs-scroll-fade"
+        style={{ opacity: overflowRight ? 1 : 0, pointerEvents: 'none',
+          position: 'absolute', top: 0, bottom: 0, right: 0, width: 40, borderRadius: 999,
+          display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 4,
+          background: 'linear-gradient(90deg, rgba(241,245,243,0) 0%, #F1F5F3 70%)',
+          transition: 'opacity .18s ease' }}>
+        <ChevronRight size={16} strokeWidth={2.5} color="var(--muted,#8AA09C)" />
+      </div>
     </div>
   );
 }

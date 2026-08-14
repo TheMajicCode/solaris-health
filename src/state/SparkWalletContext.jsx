@@ -173,6 +173,14 @@ export function SparkWalletProvider({ children }) {
     if (mnemonic && passphrase) {
       const uid = await resolveUserId();
       if (!uid) { const err = new Error('Sign in to save this wallet to your account.'); setError(err.message); throw err; }
+      // Never silently overwrite an existing account-scoped vault on this device
+      // (correction §1 / req 10). A fresh wallet only writes when there is none.
+      let existing = false;
+      try { existing = await hasVault(uid); } catch { existing = false; }
+      if (existing) {
+        const err = new Error('This Solaris account already has a wallet on this device.');
+        setError(err.message); throw err;
+      }
       try { await saveVaultMnemonic(uid, mnemonic, passphrase); await refreshVaultPresence(uid); }
       catch (e) { setError(e?.message || 'Could not encrypt the wallet on this device.'); throw e; }
     }
