@@ -489,8 +489,11 @@ textarea.input-line{resize:vertical;min-height:64px}
   .luca .m-bn-item{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
     min-width:0;min-height:48px;padding:6px 2px;border:none;background:transparent;color:var(--muted);
     font-family:inherit;font-size:10.5px;font-weight:600;cursor:pointer;border-radius:12px;transition:color .15s}
-  .luca .m-bn-item span{white-space:normal;text-align:center;line-height:1.05;overflow:hidden;overflow-wrap:anywhere;
-    max-width:100%;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;min-height:calc(1.05em * 2)}
+  /* Labels stay on ONE line, never split inside a word (e.g. "Communications").
+     Responsive type + slight negative tracking keeps the longest label fully
+     visible inside its 1fr column at 360/390/412px without page overflow. */
+  .luca .m-bn-item span{white-space:nowrap;text-align:center;line-height:1.15;max-width:100%;
+    font-size:clamp(7px,2.2vw,10.5px);letter-spacing:-.2px}
   .luca .m-bn-item.active{color:var(--teal-d)}
   .luca .m-bn-item.active svg{transform:translateY(-1px)}
   .luca .m-bn-luca{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
@@ -512,6 +515,12 @@ textarea.input-line{resize:vertical;min-height:64px}
   .luca .m-more-item svg{color:var(--teal-d);flex:none}
   .luca .m-more-item.switch{color:var(--teal-d);border-top:1px solid var(--line);margin-top:4px}
 }
+
+/* Economic Passport sub-tabs: hide only the visual scrollbar of the opt-in
+   horizontally scrollable tab row. Keyboard/pointer scrolling and focus are
+   unaffected; only Economic Passport uses .subtabs-scroll. */
+.subtabs-scroll{scrollbar-width:none;-ms-overflow-style:none}
+.subtabs-scroll::-webkit-scrollbar{display:none}
 
 `;
 
@@ -5193,7 +5202,8 @@ function InboxPage({ user, go, onUnread }) {
    A small, accessible pill bar used by the consolidated areas (LUCA Coach,
    Journal, Messages, Economic Passport, Settings). Reuses the existing visual
    language — mint-tinted active pill on a soft neutral track. */
-function SubTabs({ items, active, onSelect, ariaLabel }) {
+export function SubTabs({ items, active, onSelect, ariaLabel, scroll = false }) {
+  const listRef = useRef(null);
   const onKeyDown = (e, idx) => {
     if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
     e.preventDefault();
@@ -5202,8 +5212,20 @@ function SubTabs({ items, active, onSelect, ariaLabel }) {
     onSelect(items[next].id);
   };
   const hasActive = items.some((x) => x.id === active);
+  // Opt-in scroll variant (Economic Passport only): keep the active tab visible
+  // when the row overflows horizontally. Other tab bars are unaffected.
+  useEffect(() => {
+    if (!scroll || !listRef.current) return;
+    const el = listRef.current.querySelector('[aria-selected="true"]');
+    if (el && el.scrollIntoView) el.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  }, [scroll, active]);
+  const wrapStyle = scroll
+    ? { gap: 4, background: '#F1F5F3', borderRadius: 999, padding: 4, marginBottom: 18, width: '100%', maxWidth: '100%',
+        flexWrap: 'nowrap', overflowX: 'auto', scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch' }
+    : { gap: 4, background: '#F1F5F3', borderRadius: 999, padding: 4, marginBottom: 18, width: 'fit-content', maxWidth: '100%' };
   return (
-    <div role="tablist" aria-label={ariaLabel || 'Sections'} className="row wrap" style={{ gap: 4, background: '#F1F5F3', borderRadius: 999, padding: 4, marginBottom: 18, width: 'fit-content', maxWidth: '100%' }}>
+    <div ref={listRef} role="tablist" aria-label={ariaLabel || 'Sections'}
+      className={scroll ? 'row subtabs-scroll' : 'row wrap'} style={wrapStyle}>
       {items.map((it, idx) => {
         const Icon = it.icon;
         const on = active === it.id;
@@ -5219,7 +5241,8 @@ function SubTabs({ items, active, onSelect, ariaLabel }) {
             className="row"
             style={{ gap: 7, alignItems: 'center', border: 'none', cursor: 'pointer', borderRadius: 999, padding: '8px 15px', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap',
               background: on ? '#fff' : 'transparent', color: on ? 'var(--ink)' : 'var(--muted,#8AA09C)',
-              boxShadow: on ? '0 1px 4px rgba(0,0,0,.08)' : 'none' }}
+              boxShadow: on ? '0 1px 4px rgba(0,0,0,.08)' : 'none',
+              ...(scroll ? { flexShrink: 0, scrollSnapAlign: 'start' } : {}) }}
           >
             {Icon && <Icon size={15} strokeWidth={2} />} {it.label}
             {it.badge > 0 && <span className="badge" style={{ background: 'var(--gold)', color: '#3C2807', borderRadius: 999, fontSize: 10.5, fontWeight: 700, padding: '1px 7px', marginLeft: 2 }}>{it.badge}</span>}
@@ -5338,6 +5361,7 @@ function EconomicPassportArea({ user, go, sub }) {
     <div>
       <SubTabs
         ariaLabel="Economic Passport sections"
+        scroll
         active={active}
         onSelect={(id) => go('wallet', id)}
         items={[
