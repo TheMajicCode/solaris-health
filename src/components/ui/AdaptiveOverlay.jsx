@@ -121,7 +121,7 @@ export default function AdaptiveOverlay({
 }
 
 const CSS = `
-.luca .aov-scrim{position:fixed;inset:0;z-index:1000;background:rgba(6,30,28,.55);backdrop-filter:blur(4px);
+.luca .aov-scrim{position:fixed;inset:0;z-index:6000;background:rgba(6,30,28,.55);backdrop-filter:blur(4px);
   display:flex;align-items:flex-end;justify-content:center;animation:aovFade .15s ease}
 @keyframes aovFade{from{opacity:0}to{opacity:1}}
 .luca .aov{position:relative;display:flex;flex-direction:column;width:100%;background:var(--canvas);
