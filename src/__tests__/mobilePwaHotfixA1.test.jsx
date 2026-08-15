@@ -89,44 +89,51 @@ const renderExplore = async () => {
 const precedes = (a, b) =>
   !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 
-describe('§1 Explore mobile header — normal-flow order', () => {
-  it('renders the approved description verbatim in a dedicated header block', async () => {
+describe('§1 Explore mobile header — compact, content-first (A.2 supersedes A.1)', () => {
+  it('retains the heading + approved description for screen readers only (no visible duplicate)', async () => {
     await renderExplore();
-    const desc = document.querySelector('.exm-mdesc');
+    // Heading + description survive for assistive tech, but as visually-hidden nodes.
+    const heading = screen.getByRole('heading', { name: 'Explore' });
+    expect(heading).toBeInTheDocument();
+    expect(heading.classList.contains('exm-sr')).toBe(true);
+    const desc = document.querySelector('p.exm-sr');
     expect(desc).toBeTruthy();
     expect(desc.textContent).toBe(APPROVED_DESC);
-    // The title sits directly above the description inside the header block.
-    const head = document.querySelector('.exm-mhead');
-    expect(within(head).getByRole('heading', { name: 'Explore' })).toBeInTheDocument();
+    // The old visible header block is gone from the default mobile visual.
+    expect(document.querySelector('.exm-mhead')).toBeNull();
+    expect(document.querySelector('.exm-mtitle')).toBeNull();
+    expect(document.querySelector('.exm-mdesc')).toBeNull();
   });
 
-  it('orders the header regions title → desc → search → quick filters → Recommend → segmented → content', async () => {
+  it('orders the compact controls search → quick filters → two guidance buttons → segmented → content', async () => {
     await renderExplore();
-    const title = document.querySelector('.exm-mtitle');
-    const desc = document.querySelector('.exm-mdesc');
     const bar = document.querySelector('.exm-mbar');
     const quick = screen.getByRole('group', { name: 'Quick filters' });
-    const rec = document.querySelector('.exm-mrec-btn');
+    const guide = document.querySelector('.exm-mguide');
     const seg = screen.getByRole('group', { name: 'Choose map or list view' });
     const stage = document.querySelector('.exm-mstage');
-    [title, desc, bar, quick, rec, seg, stage].forEach((n) => expect(n).toBeTruthy());
-    // Each region strictly precedes the next in normal document flow.
-    expect(precedes(title, desc)).toBe(true);
-    expect(precedes(desc, bar)).toBe(true);
+    [bar, quick, guide, seg, stage].forEach((n) => expect(n).toBeTruthy());
     expect(precedes(bar, quick)).toBe(true);
-    expect(precedes(quick, rec)).toBe(true);
-    expect(precedes(rec, seg)).toBe(true);
+    expect(precedes(quick, guide)).toBe(true);
+    expect(precedes(guide, seg)).toBe(true);
     expect(precedes(seg, stage)).toBe(true);
+    // Exactly two equal guidance buttons: Recommend + Guided journeys.
+    const gbtns = guide.querySelectorAll('.exm-mgbtn');
+    expect(gbtns.length).toBe(2);
+    expect(within(guide).getByRole('button', { name: /Recommend/i })).toBeInTheDocument();
+    expect(within(guide).getByRole('button', { name: /Guided journeys/i })).toBeInTheDocument();
   });
 
-  it('does not lay out the header with negative margins / absolute / fixed arithmetic', async () => {
+  it('lays out the visually-hidden heading with the standard clip technique, not a layout hack', async () => {
     await renderExplore();
     const css = Array.from(document.querySelectorAll('style')).map((s) => s.textContent).join('\n');
-    // Isolate the mobile header rules and assert they are static, in-flow blocks.
-    const headRules = css.match(/\.luca \.exm-m(head|title|desc)\{[^}]*\}/g) || [];
-    expect(headRules.length).toBeGreaterThan(0);
-    headRules.forEach((rule) => {
-      expect(rule).not.toMatch(/position:\s*(absolute|fixed)/);
+    const srRule = (css.match(/\.luca \.exm-sr\{[^}]*\}/) || [])[0];
+    expect(srRule).toBeTruthy();
+    // Off-screen via clip/absolute — the compact control rows themselves stay in-flow.
+    expect(srRule).toMatch(/overflow:\s*hidden/);
+    const controlRules = css.match(/\.luca \.exm-m(bar|guide|tools|stage)\{[^}]*\}/g) || [];
+    expect(controlRules.length).toBeGreaterThan(0);
+    controlRules.forEach((rule) => {
       expect(rule).not.toMatch(/margin[^;:]*:\s*-/);
     });
   });

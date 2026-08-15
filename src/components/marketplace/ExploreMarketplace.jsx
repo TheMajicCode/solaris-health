@@ -9,7 +9,7 @@
  */
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, MapPin, Map as MapIcon, List as ListIcon, Loader2, Store, Plus, X, Sprout, Sparkles, RefreshCw, ArrowRight, Compass, Clock, Headphones, Stethoscope, Heart, Brain, Activity, BookOpen, CheckCircle2, Footprints, SlidersHorizontal, ChevronDown } from 'lucide-react';
+import { Search, MapPin, Map as MapIcon, List as ListIcon, Loader2, Store, Plus, X, Sprout, Sparkles, RefreshCw, ArrowRight, Compass, Clock, Headphones, Stethoscope, Heart, Brain, Activity, BookOpen, CheckCircle2, Footprints, SlidersHorizontal } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '../../lib/api.js';
 import { useApp } from '../../state/AppContext.jsx';
@@ -204,10 +204,11 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
   const [hoverId, setHoverId] = useState(null);
   const [openId, setOpenId] = useState(null);
   const [bookingProviderId, setBookingProviderId] = useState(null); // open BookingFlow directly for this provider
-  const [journeysOpen, setJourneysOpen] = useState(false);          // mobile "Guided journeys" accordion (collapsed by default)
+  const [journeysOpen, setJourneysOpen] = useState(false);          // mobile "Guided journeys" bottom sheet (closed by default)
   const [mobileView, setMobileView] = useState('map'); // map | list (default map)
   const [showFilters, setShowFilters] = useState(false);
   const listRef = useRef(null);
+  const journeysScrollRef = useRef(0); // remembers list scroll while the Guided journeys sheet is open
   const isMobile = useIsMobile(900);
 
   // Keep the fixed mobile Explore stage docked just below the app's sticky
@@ -396,19 +397,23 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
   );
 
   // Shared map panel with marker↔list sync (compact card + open-detail wiring).
+  // Mobile has no genuine hover — Leaflet still emits marker mouseover on
+  // touch/pan, so the anchored preview must track ONLY activeId (else a stale
+  // hoverId keeps it open after the X clears activeId).
   const mapPanel = (
     <MapErrorBoundary onSwitchToList={() => { setMobileView('list'); }}>
       <MapView
         providers={visibleProviders}
-        activeId={activeId || hoverId}
+        activeId={isMobile ? activeId : (activeId || hoverId)}
         onSelect={onSelect}
-        onHover={setHoverId}
+        onHover={isMobile ? undefined : setHoverId}
         userLocation={userLocation}
         onLocate={(loc) => setUserLocation(loc)}
         radiusKm={hasLocation ? filters.radius : null}
         onOpenDetail={(pr) => setOpenId(pr.id)}
         onBook={(pr) => setBookingProviderId(pr.id)}
-        onClearActive={() => setActiveId(null)}
+        onClearActive={() => { setActiveId(null); setHoverId(null); }}
+        anchored={isMobile}
       />
     </MapErrorBoundary>
   );
@@ -502,8 +507,14 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
     // "Recommend for me" — surfaces LUCA's recommendation as a bottom sheet whose
     // primary action opens the EXACT recommended practitioner (deep-link by id).
     const openRecommendedProvider = () => {
-      if (curated?.curatedJourney?.providerId) {
-        setOpenId(curated.curatedJourney.providerId);
+      const pid = curated?.curatedJourney?.providerId;
+      if (pid) {
+        // Select AND reveal the exact recommended provider on the map (its marker
+        // becomes active + its anchored preview shows), then open its full detail —
+        // not a mere navigate/search.
+        setActiveId(pid);
+        setMobileView('map');
+        setOpenId(pid);
       } else {
         const q = curated?.curatedJourney?.specialty || curated?.curatedJourney?.title || '';
         if (q) setQuery(q);
@@ -552,38 +563,59 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
       </AdaptiveOverlay>
     );
 
-    // Guided journeys — one compact accordion row, collapsed by default, showing
-    // the journey count + chevron; expanding reveals the existing journey cards
-    // in a single mobile column. No duplicated data / no new API.
-    const guidedJourneysMobile = blueprints.length > 0 ? (
-      <div className="exm-gj">
-        <button
-          type="button"
-          className="exm-gj-row"
-          aria-expanded={journeysOpen}
-          onClick={() => setJourneysOpen((o) => !o)}
-        >
-          <span className="exm-gj-label"><Compass size={16} /> Guided journeys</span>
-          <span className="exm-gj-right">
-            <span className="exm-gj-count">{blueprints.length}</span>
-            <ChevronDown size={18} className={`exm-gj-chev${journeysOpen ? ' open' : ''}`} />
-          </span>
-        </button>
-        {journeysOpen && (
-          <div className="exm-gj-body">
-            <JourneyOffers offers={blueprints} starting={startingJourney} onBegin={beginJourney} onPreview={setPreviewType} compact hideHead />
+    // Guided journeys — opened from the guidance button as a mobile bottom sheet
+    // (AdaptiveOverlay). One-column journey cards from the existing blueprint data
+    // (no duplicated fixtures / no new API). Closing returns to the previous
+    // Map/List state and list scroll position, both captured on open.
+    const openGuidedJourneys = () => {
+      journeysScrollRef.current = listRef.current ? listRef.current.scrollTop : 0;
+      setJourneysOpen(true);
+    };
+    const closeGuidedJourneys = () => {
+      setJourneysOpen(false);
+      // The mobile surface stays mounted beneath the sheet, so restoring the list
+      // scroll on the next frame lands us exactly where we were.
+      requestAnimationFrame(() => {
+        if (listRef.current) listRef.current.scrollTop = journeysScrollRef.current;
+      });
+    };
+    const guidedJourneysSheet = (
+      <AdaptiveOverlay
+        open={journeysOpen}
+        onClose={closeGuidedJourneys}
+        title="Guided journeys"
+        ariaLabel="Guided journeys"
+        size="md"
+        closeLabel="Close guided journeys"
+      >
+        {blueprints.length > 0 ? (
+          <div className="exm-gjs">
+            <JourneyOffers
+              offers={blueprints}
+              starting={startingJourney}
+              // Selecting a journey uses the existing flows. The plan preview and
+              // begin overlays sit below this sheet's z-index, so close the sheet
+              // first, then hand off to the existing journey flow.
+              onBegin={(t) => { setJourneysOpen(false); beginJourney(t); }}
+              onPreview={(t) => { setJourneysOpen(false); setPreviewType(t); }}
+              compact
+              hideHead
+            />
           </div>
+        ) : (
+          <div className="exm-curated-loading">No guided journeys are available right now.</div>
         )}
-      </div>
-    ) : null;
+      </AdaptiveOverlay>
+    );
 
     const mobileTree = (
       <div className="exm exm-mobile">
-        <div className="exm-m">
-          <div className="exm-mhead">
-            <h1 className="exm-mtitle">Explore</h1>
-            <p className="exm-mdesc">Discover trusted health &amp; wellness providers near you — clinics, farms, healers, and more.</p>
-          </div>
+        <div className="exm-m" role="region" aria-label="Explore providers">
+          {/* Heading + description kept for assistive tech only — the big visible
+              heading/description are intentionally omitted on mobile so results
+              own the screen. Desktop still renders the visible header. */}
+          <h1 className="exm-sr">Explore</h1>
+          <p className="exm-sr">Discover trusted health &amp; wellness providers near you — clinics, farms, healers, and more.</p>
           <div className="exm-mbar">
             <div className="exm-search">
               <Search size={18} />
@@ -601,65 +633,69 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
             </button>
           </div>
           <QuickFilters filters={filters} patch={patch} presentTypes={presentTypes} languageOptions={languageOptions} />
-          <button type="button" className="exm-mrec-btn" onClick={() => curateForMe(false)} disabled={curating} aria-haspopup="dialog">
-            {curating ? <Loader2 size={16} className="exm-spin" /> : <Sparkles size={16} />}
-            Recommend for me
-          </button>
-          <div className="exm-mseg" role="group" aria-label="Choose map or list view">
-            <button
-              type="button"
-              className={`exm-seg${mobileView === 'map' ? ' on' : ''}`}
-              aria-pressed={mobileView === 'map'}
-              onClick={() => setMobileView('map')}
-            >
-              <MapIcon size={16} /> Map
+          {/* Two equal guidance actions: LUCA recommendation + guided journeys. */}
+          <div className="exm-mguide">
+            <button type="button" className="exm-mgbtn" onClick={() => curateForMe(false)} disabled={curating} aria-haspopup="dialog">
+              {curating ? <Loader2 size={16} className="exm-spin" /> : <Sparkles size={16} />}
+              Recommend
             </button>
-            <button
-              type="button"
-              className={`exm-seg${mobileView === 'list' ? ' on' : ''}`}
-              aria-pressed={mobileView === 'list'}
-              onClick={() => setMobileView('list')}
-            >
-              <ListIcon size={16} /> List
+            <button type="button" className="exm-mgbtn" onClick={openGuidedJourneys} aria-haspopup="dialog">
+              <Compass size={16} />
+              Guided journeys
             </button>
+          </div>
+          {/* Compact Map/List selector sharing its row with the result count. */}
+          <div className="exm-mtools">
+            <span className="exm-mcount" aria-live="polite">{countLabel}</span>
+            <div className="exm-mseg" role="group" aria-label="Choose map or list view">
+              <button
+                type="button"
+                className={`exm-seg${mobileView === 'map' ? ' on' : ''}`}
+                aria-pressed={mobileView === 'map'}
+                onClick={() => setMobileView('map')}
+              >
+                <MapIcon size={15} /> Map
+              </button>
+              <button
+                type="button"
+                className={`exm-seg${mobileView === 'list' ? ' on' : ''}`}
+                aria-pressed={mobileView === 'list'}
+                onClick={() => setMobileView('list')}
+              >
+                <ListIcon size={15} /> List
+              </button>
+            </div>
           </div>
           <div className="exm-mstage">
             {mobileView === 'map' ? (
               <div className="exm-mmap">{mapPanel}</div>
             ) : (
               <div className="exm-mlist" ref={listRef}>
-                <div className="exm-mlist-count">{countLabel}</div>
                 {loading ? (
                   <div className="exm-loading"><Loader2 className="exm-spin" size={26} /> Finding providers…</div>
                 ) : visibleProviders.length === 0 ? (
-                  <>
-                    <div className="exm-empty">
-                      <Store size={34} />
-                      <h4>No providers match your filters</h4>
-                      <p>Try widening your search or resetting the filters — or begin a guided journey below.</p>
-                      <button className="exm-resetbtn" onClick={reset}>Reset filters</button>
-                    </div>
-                    {guidedJourneysMobile}
-                  </>
+                  <div className="exm-empty">
+                    <Store size={34} />
+                    <h4>No providers match your filters</h4>
+                    <p>Try widening your search or resetting the filters — or open Guided journeys above.</p>
+                    <button className="exm-resetbtn" onClick={reset}>Reset filters</button>
+                  </div>
                 ) : (
-                  <>
-                    <div className="exm-cards">
-                      {visibleProviders.map((p) => (
-                        <div key={p.id} data-pid={p.id} className="exm-mlist-item">
-                          <ProviderListingCard
-                            provider={p}
-                            onOpen={handleCardOpen}
-                            onHover={setHoverId}
-                            active={hoverId === p.id || activeId === p.id}
-                          />
-                          <button type="button" className="exm-showmap" onClick={() => showOnMap(p)}>
-                            <MapPin size={14} /> Show on map
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    {guidedJourneysMobile}
-                  </>
+                  <div className="exm-cards">
+                    {visibleProviders.map((p) => (
+                      <div key={p.id} data-pid={p.id} className="exm-mlist-item">
+                        <ProviderListingCard
+                          provider={p}
+                          onOpen={handleCardOpen}
+                          onHover={setHoverId}
+                          active={hoverId === p.id || activeId === p.id}
+                        />
+                        <button type="button" className="exm-showmap" onClick={() => showOnMap(p)}>
+                          <MapPin size={14} /> Show on map
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
             )}
@@ -667,6 +703,7 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
         </div>
         {filterSheet}
         {recommendSheet}
+        {guidedJourneysSheet}
         {detailAndPreview}
         <style>{CSS}</style>
       </div>
@@ -1096,15 +1133,11 @@ const CSS = `
    sub + Member badge) beneath it so the Member badge never appears inside the
    Explore content on mobile. */
 .luca.exm-mobile-active .page-head{display:none}
-/* In-flow Explore header: title then description, in normal document order with
-   no negative margins / absolute / fixed arithmetic. No divider or control
-   crosses the description — the header block itself has no bottom border; the
-   search bar below carries its own separator. */
-.luca .exm-mhead{flex:none;padding:12px 12px 8px;background:var(--bg)}
-.luca .exm-mtitle{font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:700;
-  color:var(--ink);margin:0;line-height:1.2}
-.luca .exm-mdesc{font-size:13px;color:var(--muted);margin:4px 0 0;line-height:1.45}
-.luca .exm-mbar{flex:none;display:flex;gap:8px;align-items:center;padding:8px 12px;
+/* Visually-hidden heading/description: removed from the mobile visual so results
+   own the screen, but preserved in the DOM for screen readers. */
+.luca .exm-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.luca .exm-mbar{flex:none;display:flex;gap:8px;align-items:center;padding:3px 12px;
   background:var(--bg);border-bottom:1px solid var(--line)}
 .luca .exm-mbar .exm-search{flex:1;min-width:0;box-shadow:none;padding:9px 12px;border-radius:12px}
 .luca .exm-mfilter{flex:none;position:relative;display:inline-flex;align-items:center;justify-content:center;
@@ -1112,20 +1145,32 @@ const CSS = `
   color:var(--ink);cursor:pointer}
 .luca .exm-mfilter .exm-fcount{position:absolute;top:-6px;right:-6px;background:var(--teal-d);color:#fff;
   border-radius:999px;font-size:10px;line-height:1.6;padding:0 6px;font-weight:700}
-.luca .exm-qf-row{flex:none;display:flex;gap:8px;overflow-x:auto;padding:8px 12px;
+.luca .exm-qf-row{flex:none;display:flex;gap:8px;overflow-x:auto;padding:3px 12px;
   -webkit-overflow-scrolling:touch;scrollbar-width:none;background:var(--bg);border-bottom:1px solid var(--line)}
 .luca .exm-qf-row::-webkit-scrollbar{display:none}
 .luca .exm-qf{flex:none;white-space:nowrap;border:1px solid var(--line);background:var(--surface);color:var(--ink);
-  border-radius:999px;padding:8px 14px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;min-height:36px}
+  border-radius:999px;padding:6px 14px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;min-height:30px}
 .luca .exm-qf.on{background:var(--teal-d);color:#fff;border-color:var(--teal-d)}
-/* Map | List segmented switch — a clear, always-visible toggle (no draggable
-   sheet). Two equal buttons; the active one is filled. */
-.luca .exm-mseg{flex:none;display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:8px 12px;
-  background:var(--bg);border-bottom:1px solid var(--line)}
-.luca .exm-seg{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);
-  background:var(--surface);color:var(--ink);border-radius:11px;padding:9px;font-size:13px;font-weight:700;
-  cursor:pointer;font-family:inherit;min-height:42px}
-.luca .exm-seg.on{background:var(--teal-d);color:#fff;border-color:var(--teal-d)}
+/* Two equal guidance buttons: Recommend (sparkle) + Guided journeys (compass). */
+.luca .exm-mguide{flex:none;display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 12px 4px;background:var(--bg)}
+.luca .exm-mgbtn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--mint-line);
+  background:var(--mint-soft);color:var(--teal-d);border-radius:12px;padding:8px 10px;font-size:13px;font-weight:700;
+  cursor:pointer;font-family:inherit;min-height:44px;min-width:0}
+.luca .exm-mgbtn svg{flex:none}
+.luca .exm-mgbtn:hover{background:var(--mint);border-color:var(--mint);color:var(--mint-ink)}
+.luca .exm-mgbtn:disabled{opacity:.6;cursor:default}
+/* Compact Map/List selector sharing its row with the live result count. */
+.luca .exm-mtools{flex:none;display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:2px 12px;background:var(--bg);border-bottom:1px solid var(--line)}
+.luca .exm-mcount{font-size:12px;font-weight:700;color:var(--muted);min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.luca .exm-mseg{flex:none;display:inline-flex;gap:0;border:1px solid var(--line);border-radius:10px;
+  overflow:hidden;background:var(--surface)}
+.luca .exm-seg{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:none;
+  background:transparent;color:var(--ink);padding:0 16px;font-size:13px;font-weight:700;
+  cursor:pointer;font-family:inherit;min-height:40px}
+.luca .exm-seg+.exm-seg{border-left:1px solid var(--line)}
+.luca .exm-seg.on{background:var(--teal-d);color:#fff}
 .luca .exm-mstage{position:relative;flex:1;min-height:0;overflow:hidden}
 .luca .exm-mmap{position:absolute;inset:0}
 .luca .exm-mmap .mv-wrap{height:100%;border-radius:0;border:none}
@@ -1133,37 +1178,16 @@ const CSS = `
    padding clears the fixed bottom nav (its height + safe-area inset). */
 .luca .exm-mlist{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
   padding:10px 12px calc(96px + env(safe-area-inset-bottom,0px));background:var(--bg)}
-.luca .exm-mlist-count{font-size:12px;font-weight:700;color:var(--muted);padding:2px 2px 10px}
 .luca .exm-mlist .exm-cards{display:flex;flex-direction:column;gap:12px}
 .luca .exm-mlist-item{display:flex;flex-direction:column;gap:0}
 .luca .exm-showmap{align-self:stretch;width:100%;margin-top:8px;display:inline-flex;align-items:center;
   justify-content:center;gap:6px;border:1px solid var(--line);background:var(--surface);color:var(--teal-d);
   border-radius:10px;padding:11px 13px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;min-height:44px}
 .luca .exm-showmap:hover{border-color:var(--teal-d);background:var(--mint-soft)}
-.luca .exm-mlist .exm-journeys.compact{margin-top:14px}
-/* "Recommend for me" — sparkle action beneath the quick filters (full width). */
-.luca .exm-mrec-btn{flex:none;display:inline-flex;align-items:center;justify-content:center;gap:8px;margin:0 12px 8px;
-  border:1px solid var(--mint-line);background:var(--mint-soft);color:var(--teal-d);border-radius:12px;
-  padding:10px 14px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit;min-height:44px}
-.luca .exm-mrec-btn:hover{background:var(--mint);border-color:var(--mint);color:var(--mint-ink)}
-.luca .exm-mrec-btn:disabled{opacity:.6;cursor:default}
 .luca .exm-mrec-cards{display:flex;flex-direction:column;gap:12px;padding-top:4px}
-/* Guided journeys — one compact collapsible accordion row (count + chevron). */
-.luca .exm-gj{margin-top:16px;border:1px solid var(--line);border-radius:14px;background:var(--surface);overflow:hidden}
-.luca .exm-gj-row{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;
-  background:none;border:none;cursor:pointer;font-family:inherit;padding:14px 15px;min-height:52px;color:var(--ink)}
-.luca .exm-gj-label{display:inline-flex;align-items:center;gap:9px;font-size:14.5px;font-weight:700;color:var(--ink)}
-.luca .exm-gj-label svg{color:var(--teal-d);flex:none}
-.luca .exm-gj-right{display:inline-flex;align-items:center;gap:9px}
-.luca .exm-gj-count{min-width:22px;height:22px;padding:0 7px;border-radius:999px;background:var(--mint-soft);
-  color:var(--teal-d);font-size:12px;font-weight:800;display:inline-flex;align-items:center;justify-content:center}
-.luca .exm-gj-chev{color:var(--muted);transition:transform .2s ease}
-.luca .exm-gj-chev.open{transform:rotate(180deg)}
-.luca .exm-gj-body{padding:0 12px 14px;border-top:1px solid var(--line)}
-.luca .exm-gj-body .exm-journeys{margin-top:0}
-.luca .exm-gj-body .exm-journeys-grid{grid-template-columns:1fr}
-/* Selected-provider map card must clear the fixed bottom nav on mobile Explore. */
-.luca .exm-mmap .mv-card{bottom:calc(78px + env(safe-area-inset-bottom,0px))}
+/* Guided journeys bottom sheet — one-column journey cards inside AdaptiveOverlay. */
+.luca .exm-gjs .exm-journeys{margin-top:0}
+.luca .exm-gjs .exm-journeys-grid{grid-template-columns:1fr}
 /* Mobile filter-sheet footer (inside the adaptive overlay) */
 .luca .exm-fs-foot{display:flex;gap:10px;align-items:center}
 .luca .exm-fs-clear{flex:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);

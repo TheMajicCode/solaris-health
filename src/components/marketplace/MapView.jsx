@@ -15,7 +15,7 @@
  *   radiusKm       number | null — draws a search radius around userLocation
  *   center         [lat, lon] default center
  */
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Circle, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -139,6 +139,135 @@ function MapProviderCard({ provider, onOpen, onBook, onClose }) {
   );
 }
 
+// Compact, marker-anchored preview shown on MOBILE for the selected pin. It is
+// intentionally small (never covers most of the map), positioned above the
+// marker, and re-anchored on every pan/zoom so the map stays fully interactive
+// while it is open. Built from React elements + escaped text only. Shows only
+// real listing fields: thumbnail, name, type, rating, short location, one
+// modality indicator, a small close, and compact Open / Book actions.
+function MarkerPreview({ map, provider, onOpen, onBook, onClose }) {
+  const cardRef = useRef(null);
+  const [pos, setPos] = useState(null);
+  const latlng = useMemo(() => {
+    const lat = Number(provider?.latitude);
+    const lng = Number(provider?.longitude);
+    return (Number.isFinite(lat) && Number.isFinite(lng)) ? [lat, lng] : null;
+  }, [provider?.latitude, provider?.longitude]);
+
+  // Keep the preview anchored to the marker across pan/zoom (map stays live).
+  useEffect(() => {
+    if (!map || !latlng) return undefined;
+    const update = () => {
+      try { const p = map.latLngToContainerPoint(latlng); setPos({ x: p.x, y: p.y }); }
+      catch { /* map not laid out yet */ }
+    };
+    update();
+    map.on('move zoom viewreset resize', update);
+    return () => { map.off('move zoom viewreset resize', update); };
+  }, [map, latlng]);
+
+  // Auto-pan once when the selection changes so there is room ABOVE the marker
+  // for the preview — clearing the compact controls, safe-area and bottom nav.
+  useEffect(() => {
+    if (!map || !latlng) return undefined;
+    const CW = 280, CH = 210;
+    const pan = () => {
+      const s = map.getSize();
+      if (!s || !s.x) return;
+      const half = Math.min(CW, s.x - 24) / 2 + 14;
+      try {
+        map.panInside(latlng, {
+          paddingTopLeft: L.point(half, CH + 44),
+          paddingBottomRight: L.point(half, 60),
+        });
+      } catch { /* noop */ }
+    };
+    pan();
+    const t = setTimeout(pan, 280); // re-run after any flyTo animation settles
+    return () => clearTimeout(t);
+  }, [map, provider?.id, latlng]);
+
+  if (!provider || !map || !pos) return null;
+  const meta = readMeta(provider);
+  const modality = MODALITY_LABEL[meta.modality] || null;
+  const loc = [provider.city, provider.region].filter(Boolean).join(', ');
+  const cover = provider.cover_photo_url || provider.profile_photo_url;
+  const size = map.getSize();
+  const vw = size?.x || 320;
+  const CW = Math.min(280, vw - 24);
+  let left = pos.x - CW / 2;
+  left = Math.max(8, Math.min(left, vw - CW - 8));
+  const top = pos.y - 16; // card bottom sits 16px above the marker tip
+  const arrowLeft = Math.max(18, Math.min(pos.x - left, CW - 18));
+  const stop = (e) => e.stopPropagation();
+  const handleClose = (e) => {
+    if (e) { e.preventDefault?.(); e.stopPropagation?.(); }
+    onClose?.();
+  };
+  return (
+    <div
+      className="mv-prev"
+      ref={cardRef}
+      role="dialog"
+      aria-label={`${provider.business_name || 'Provider'} summary`}
+      style={{ left, top, width: CW }}
+      onPointerDown={stop}
+      onClick={stop}
+    >
+      <button
+        type="button"
+        className="mv-prev-x"
+        onPointerDown={stop}
+        onClick={handleClose}
+        aria-label="Close provider preview"
+      ><X size={15} /></button>
+      <button
+        type="button"
+        className="mv-prev-body"
+        onClick={() => onOpen?.(provider)}
+        aria-label={`Open ${provider.business_name || 'provider'} details`}
+      >
+        <div className="mv-prev-media">
+          {cover
+            ? <img src={cover} alt={provider.business_name || 'Provider'} loading="lazy" />
+            : <div className="mv-prev-noimg"><MapPin size={18} /></div>}
+        </div>
+        <div className="mv-prev-info">
+          <div className="mv-prev-type"><TypeBadge type={provider.provider_type} /></div>
+          <div className="mv-prev-name">{provider.business_name}</div>
+          {provider.rating > 0 && (
+            <div className="mv-prev-rate"><RatingStars value={Number(provider.rating)} size={12} showValue count={provider.review_count} /></div>
+          )}
+          {loc && <div className="mv-prev-loc"><MapPin size={12} /> {loc}</div>}
+          {modality && (
+            <div className="mv-prev-mod">{meta.modality === 'virtual' ? <Video size={12} /> : <MapPin size={12} />} {modality}</div>
+          )}
+        </div>
+      </button>
+      <div className="mv-prev-foot">
+        <button type="button" className="mv-prev-btn ghost" onClick={() => onOpen?.(provider)}>Open</button>
+        <button type="button" className="mv-prev-btn" onClick={() => onBook?.(provider)}>Book <ArrowRight size={13} /></button>
+      </div>
+      <span className="mv-prev-arrow" style={{ left: arrowLeft }} aria-hidden="true" />
+    </div>
+  );
+}
+
+// Expose the Leaflet map instance to the sibling overlay (MarkerPreview), which
+// lives outside <MapContainer> and needs to project marker coordinates.
+function MapReady({ onReady }) {
+  const map = useMap();
+  useEffect(() => { onReady?.(map); }, [map, onReady]);
+  return null;
+}
+
+// Tap on an empty part of the map closes the anchored preview (marker clicks do
+// not bubble to the map, so selecting a pin is unaffected). No-op on desktop.
+function MapClickClose({ enabled, onClose }) {
+  useMapEvents({ click: () => { if (enabled) onClose?.(); } });
+  return null;
+}
+
 function userIcon() {
   return L.divIcon({
     html: '<div class="mv-userdot"><div class="mv-userpulse"></div></div>',
@@ -220,8 +349,11 @@ function LocateControl({ onLocate }) {
 
 export default function MapView({
   providers = [], activeId, onSelect, onHover, userLocation, onLocate, radiusKm, center,
-  onOpenDetail, onBook, onClearActive, showCard = true,
+  onOpenDetail, onBook, onClearActive, showCard = true, anchored = false,
 }) {
+  // On mobile (anchored) we need the Leaflet map instance in the sibling overlay
+  // to project the selected marker and to auto-pan; captured via <MapReady>.
+  const [mapObj, setMapObj] = useState(null);
   const valid = useMemo(
     () => providers
       .map((p) => ({ ...p, latitude: Number(p.latitude), longitude: Number(p.longitude) }))
@@ -273,14 +405,28 @@ export default function MapView({
         <FlyTo target={target} />
         <InvalidateOnResize />
         <LocateControl onLocate={onLocate} />
+        {anchored && <MapReady onReady={setMapObj} />}
+        {anchored && <MapClickClose enabled={!!active} onClose={() => onClearActive?.()} />}
       </MapContainer>
       {showCard && active && (
-        <MapProviderCard
-          provider={active}
-          onOpen={onOpenDetail}
-          onBook={onBook}
-          onClose={() => onClearActive?.()}
-        />
+        anchored
+          ? (
+            <MarkerPreview
+              map={mapObj}
+              provider={active}
+              onOpen={onOpenDetail}
+              onBook={onBook}
+              onClose={() => onClearActive?.()}
+            />
+          )
+          : (
+            <MapProviderCard
+              provider={active}
+              onOpen={onOpenDetail}
+              onBook={onBook}
+              onClose={() => onClearActive?.()}
+            />
+          )
       )}
       <style>{CSS}</style>
     </div>
@@ -331,4 +477,36 @@ const CSS = `
 .luca .mv-card-btn:hover{background:var(--teal-d2)}
 .luca .mv-card-btn.ghost{background:var(--surface-2);color:var(--teal-d);border:1px solid var(--mint-line)}
 .luca .mv-card-btn.ghost:hover{background:var(--mint-soft)}
+/* ── Mobile: compact marker-anchored preview (positioned above the pin) ── */
+.luca .mv-prev{position:absolute;z-index:600;transform:translateY(-100%);
+  background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 28px rgba(6,40,38,.28);
+  padding:10px;max-width:290px;max-height:210px;overflow:hidden;
+  display:flex;flex-direction:column;gap:8px;animation:mvCardUp .2s cubic-bezier(.2,.8,.2,1)}
+.luca .mv-prev-x{position:absolute;top:6px;right:6px;z-index:2;width:26px;height:26px;border-radius:8px;border:none;
+  background:var(--surface-2);color:var(--muted);display:grid;place-items:center;cursor:pointer}
+.luca .mv-prev-x:hover{background:var(--line-2);color:var(--ink)}
+.luca .mv-prev-body{display:flex;gap:10px;align-items:flex-start;text-align:left;border:none;background:none;
+  padding:0;margin:0;cursor:pointer;font-family:inherit;width:100%;min-width:0}
+.luca .mv-prev-media{flex:none;width:72px;height:72px;border-radius:11px;overflow:hidden;background:var(--surface-2)}
+.luca .mv-prev-media img{width:100%;height:100%;object-fit:cover;display:block}
+.luca .mv-prev-noimg{width:100%;height:100%;display:grid;place-items:center;color:var(--muted);
+  background:linear-gradient(135deg,var(--mint-soft),var(--surface-2))}
+.luca .mv-prev-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;padding-right:24px}
+.luca .mv-prev-type{display:flex;min-width:0}
+.luca .mv-prev-name{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14px;color:var(--ink);
+  line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.luca .mv-prev-rate{min-width:0}
+.luca .mv-prev-loc,.luca .mv-prev-mod{display:flex;align-items:center;gap:4px;font-size:11.5px;color:var(--muted);
+  min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.luca .mv-prev-loc svg,.luca .mv-prev-mod svg{flex:none}
+.luca .mv-prev-mod{color:var(--teal-d);font-weight:600}
+.luca .mv-prev-foot{display:flex;gap:8px}
+.luca .mv-prev-btn{flex:1 1 0;display:inline-flex;align-items:center;justify-content:center;gap:5px;background:var(--teal-d);
+  color:#fff;border:none;border-radius:10px;padding:8px 12px;font-weight:700;font-size:12.5px;cursor:pointer;
+  font-family:inherit;min-height:40px}
+.luca .mv-prev-btn:hover{background:var(--teal-d2)}
+.luca .mv-prev-btn.ghost{background:var(--surface-2);color:var(--teal-d);border:1px solid var(--mint-line)}
+.luca .mv-prev-btn.ghost:hover{background:var(--mint-soft)}
+.luca .mv-prev-arrow{position:absolute;bottom:-7px;width:14px;height:14px;background:var(--surface);
+  border-right:1px solid var(--line);border-bottom:1px solid var(--line);transform:translateX(-50%) rotate(45deg)}
 `;

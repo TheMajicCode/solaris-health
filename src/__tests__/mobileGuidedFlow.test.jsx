@@ -34,8 +34,8 @@ const PROVIDERS = [
 ];
 
 const BLUEPRINTS = [
-  { type: 'heart', title: 'Heart Health Journey', specialty: 'cardiology', steps: [] },
-  { type: 'sleep', title: 'Better Sleep Journey', specialty: 'sleep', steps: [] },
+  { type: 'heart', label: 'Heart Health Journey', specialty: 'cardiology', steps: [] },
+  { type: 'sleep', label: 'Better Sleep Journey', specialty: 'sleep', steps: [] },
 ];
 
 const RECS = {
@@ -91,41 +91,55 @@ vi.mock('../components/marketplace/MapView.jsx', () => ({
 import ExploreMarketplace from '../components/marketplace/ExploreMarketplace.jsx';
 
 const renderExplore = async () => {
-  const utils = render(<ExploreMarketplace user={{ id: 1, role: 'patient' }} />);
+  // Stable shell `.luca` root so the mobile portal target never migrates into a
+  // transient overlay's own `.luca` (mirrors the real LucaPassport shell).
+  const utils = render(
+    <div className="luca">
+      <ExploreMarketplace user={{ id: 1, role: 'patient' }} />
+    </div>
+  );
   await waitFor(() => expect(screen.getByTestId('marker-7')).toBeTruthy());
   return utils;
 };
 
-describe('Recommend for me', () => {
-  it('shows the sparkle button and opens a recommendation sheet that deep-links the exact provider', async () => {
+describe('Recommend (compact guidance button)', () => {
+  it('opens a recommendation sheet and reveals + opens the exact recommended provider', async () => {
     await renderExplore();
-    const recBtn = screen.getByRole('button', { name: /Recommend for me/i });
+    const recBtn = screen.getByRole('button', { name: /^Recommend$/i });
     expect(recBtn).toBeInTheDocument();
     fireEvent.click(recBtn);
     await screen.findByRole('dialog', { name: 'LUCA recommendations' });
     // The recommendation resolves asynchronously; wait for its card content.
     await waitFor(() => expect(document.querySelector('.exm-cc.journey')).toBeTruthy());
     expect(document.querySelector('.exm-cc.journey h5').textContent).toBe('Aura Dental');
-    // Primary action opens the exact recommended provider (deep-link by id).
+    // Primary action reveals + opens the exact recommended provider (deep-link by id).
     const view = await screen.findByRole('button', { name: /View this provider/i });
     fireEvent.click(view);
-    // Sheet closes and the provider detail opens for the recommended id.
+    // Sheet closes; the recommended provider is revealed on the map (marker active).
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'LUCA recommendations' })).toBeNull());
+    const card = await screen.findByTestId('map-card');
+    expect(within(card).getByTestId('map-card-name')).toHaveTextContent('Aura Dental');
+    expect(screen.getByRole('button', { name: 'Map' })).toHaveAttribute('aria-pressed', 'true');
   });
 });
 
-describe('Guided journeys accordion', () => {
-  it('is collapsed by default (count shown, cards hidden) and expands to one column', async () => {
+describe('Guided journeys (bottom sheet)', () => {
+  it('opens the AdaptiveOverlay sheet with one-column journey cards and a visible close', async () => {
     await renderExplore();
-    // Switch to the list stage where the accordion lives.
-    fireEvent.click(screen.getByRole('button', { name: 'List' }));
-    const row = screen.getByRole('button', { name: /Guided journeys/i });
-    expect(row).toHaveAttribute('aria-expanded', 'false');
-    expect(within(row).getByText(String(BLUEPRINTS.length))).toBeInTheDocument();
-    expect(document.querySelector('.exm-gj-body')).toBeNull();
-    fireEvent.click(row);
-    expect(screen.getByRole('button', { name: /Guided journeys/i })).toHaveAttribute('aria-expanded', 'true');
-    expect(document.querySelector('.exm-gj-body')).toBeTruthy();
+    const btn = screen.getByRole('button', { name: /Guided journeys/i });
+    expect(btn).toBeInTheDocument();
+    // No sheet until tapped.
+    expect(screen.queryByRole('dialog', { name: 'Guided journeys' })).toBeNull();
+    fireEvent.click(btn);
+    const sheet = await screen.findByRole('dialog', { name: 'Guided journeys' });
+    // One-column journey cards sourced from the existing blueprint data.
+    const cards = sheet.querySelectorAll('.exm-gjs .exm-jc');
+    expect(cards.length).toBe(BLUEPRINTS.length);
+    expect(within(sheet).getByText('Heart Health Journey')).toBeInTheDocument();
+    // Visible close (X) dismisses the sheet.
+    const close = within(sheet).getByRole('button', { name: /Close guided journeys/i });
+    fireEvent.click(close);
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Guided journeys' })).toBeNull());
   });
 });
 
