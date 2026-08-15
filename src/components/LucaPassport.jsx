@@ -549,6 +549,26 @@ textarea.input-line{resize:vertical;min-height:64px}
 .luca .ds-consent{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:12px;
   border:1px solid var(--line,#e3ece8);background:var(--surface-2,#f4faf7);cursor:pointer}
 .luca .ds-consent input{margin-top:2px;width:18px;height:18px;flex:none;accent-color:#2DB584}
+/* ===== Practitioner clinic-intake card (NODE B.1 mobile repair) ===== */
+.luca .hp-intake{display:flex;align-items:center;gap:12px}
+.luca .hp-intake-main{flex:1;min-width:0}
+.luca .hp-intake-title{display:flex;align-items:flex-start;gap:8px}
+.luca .hp-intake-title .hp-intake-name{min-width:0;overflow-wrap:anywhere;word-break:break-word}
+.luca .hp-intake-meta{margin-top:4px;overflow-wrap:anywhere;word-break:break-word}
+.luca .hp-intake-status{flex:none}
+.luca .hp-intake-cta{flex:none}
+.luca .hp-intake-cta .btn,.luca .hp-intake-cta button{min-height:44px}
+@media(max-width:767px){
+  /* Vertical composition: title → meta → status → full-width action. No overlap. */
+  .luca .hp-intake{display:block}
+  .luca .hp-intake-main{width:100%}
+  .luca .hp-intake-status{margin-top:10px}
+  .luca .hp-intake-cta{margin-top:10px}
+  .luca .hp-intake-cta .btn,.luca .hp-intake-cta button{width:100%;justify-content:center}
+  /* Accordion header: no truncated subtitle fragment while collapsed. */
+  .luca .hp-acc[data-open="false"] .hp-acc-sub{display:none}
+  .luca .hp-acc[data-open="true"] .hp-acc-sub{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.4}
+}
 
 `;
 
@@ -4914,7 +4934,7 @@ function FoundationalHealthSection() {
 }
 
 // Clinic intake forms shared through the Passport (only shown when ≥1 exists).
-function IntakeFormsSection() {
+export function IntakeFormsSection() {
   const [subs, setSubs] = useState(null);
   useEffect(() => {
     let on = true;
@@ -4937,25 +4957,23 @@ function IntakeFormsSection() {
       <SectionHead eyebrow="From your practitioners" title="Clinic intake forms" action={<Pill tone="gray">{subs.length}</Pill>} />
       <div className="col gap-3">
         {subs.map((s) => (
-          <div key={s.id} className="card-low" style={{ padding: '13px 15px', borderRadius: 12 }}>
-            <div className="between" style={{ alignItems: 'flex-start', gap: 10 }}>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div className="row gap-2" style={{ marginBottom: 4 }}>
-                  <ClipboardList size={14} className="t-teal" />
-                  <span className="small f6" style={{ color: 'var(--ink)' }}>{s.template_name || 'Intake form'}</span>
-                </div>
-                <div className="tiny muted">
-                  {s.provider_name ? `${s.provider_name} · ` : ''}{fmtShort(s.submitted_at || s.created_at)}
-                </div>
+          <div key={s.id} className="card-low hp-intake" style={{ padding: '13px 15px', borderRadius: 12 }}>
+            <div className="hp-intake-main">
+              <div className="hp-intake-title">
+                <ClipboardList size={14} className="t-teal" style={{ flex: 'none', marginTop: 2 }} />
+                <span className="small f6 hp-intake-name" style={{ color: 'var(--ink)' }}>{s.template_name || 'Intake form'}</span>
               </div>
-              <div className="row gap-2" style={{ flex: 'none', alignItems: 'center' }}>
-                {statusPill(s.status)}
-                {s.status === 'pending' ? (
-                  <Btn variant="primary" icon={ClipboardList} onClick={() => { window.location.href = `/intake?id=${s.id}`; }}>Complete</Btn>
-                ) : (
-                  <Btn icon={Eye} onClick={() => { window.location.href = `/intake?id=${s.id}`; }}>View</Btn>
-                )}
+              <div className="tiny muted hp-intake-meta">
+                {s.provider_name ? `${s.provider_name} · ` : ''}{fmtShort(s.submitted_at || s.created_at)}
               </div>
+            </div>
+            <div className="hp-intake-status">{statusPill(s.status)}</div>
+            <div className="hp-intake-cta">
+              {s.status === 'pending' ? (
+                <Btn variant="primary" icon={ClipboardList} onClick={() => { window.location.href = `/intake?id=${s.id}`; }}>Complete</Btn>
+              ) : (
+                <Btn icon={Eye} onClick={() => { window.location.href = `/intake?id=${s.id}`; }}>View</Btn>
+              )}
             </div>
           </div>
         ))}
