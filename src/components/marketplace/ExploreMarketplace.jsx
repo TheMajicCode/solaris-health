@@ -458,7 +458,7 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
           providerId={bookingProviderId}
           user={user}
           onClose={() => setBookingProviderId(null)}
-          onBooked={() => { setBookingProviderId(null); fetchProviders(); }}
+          onBooked={() => { fetchProviders(); }}
         />
       )}
     </>
