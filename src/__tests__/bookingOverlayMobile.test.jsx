@@ -31,17 +31,19 @@ const DATES = [
 ];
 
 describe('mobile Select Date & Time layout', () => {
-  it('renders one readable month with a real day grid and stacked time slots', () => {
+  it('renders a compact 7-day date strip (full month calendar rejected on phones) with stacked time slots', () => {
     render(
       <div className="luca">
         <TimeSlotPicker dates={DATES} value={null} onChange={vi.fn()} tz="America/El_Salvador" />
       </div>
     );
-    // Exactly one month heading (no dual-month clipping).
-    expect(screen.getByText(/September 2026/)).toBeInTheDocument();
-    // Bookable day cells are present and operable.
-    expect(document.querySelectorAll('.tsp-cell.has').length).toBeGreaterThan(0);
-    // Time slots for the first available date are stacked beneath the calendar.
+    // Phone shows the 7-day strip, NOT a full month grid (which is rejected here).
+    expect(document.querySelector('.tsp-narrow')).toBeTruthy();
+    expect(document.querySelectorAll('.tsp-day').length).toBe(7);
+    expect(document.querySelector('.tsp-cal')).toBeNull();
+    // "More dates" is the escape hatch to the full month grid on demand.
+    expect(screen.getByRole('button', { name: /More dates/i })).toBeInTheDocument();
+    // Time slots for the first available date are stacked beneath the strip.
     const slots = document.querySelectorAll('.tsp-slot');
     expect(slots.length).toBe(2);
     expect(screen.getByRole('button', { name: '9:00 AM' })).toBeInTheDocument();

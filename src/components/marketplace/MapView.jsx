@@ -72,15 +72,45 @@ function pinIcon(provider, active) {
 // Shows only real listing fields and always offers two visible actions:
 // "View details" (opens the provider profile) and "Book" (opens booking directly).
 function MapProviderCard({ provider, onOpen, onBook, onClose }) {
+  const cardRef = useRef(null);
   if (!provider) return null;
   const meta = readMeta(provider);
   const langs = Array.isArray(meta.languages) ? meta.languages : [];
   const modality = MODALITY_LABEL[meta.modality] || null;
   const loc = [provider.city, provider.region].filter(Boolean).join(', ');
   const cover = provider.cover_photo_url || provider.profile_photo_url;
+  // Keep any pointer/touch inside the card from bubbling to the Leaflet map
+  // beneath it (the card is a sibling overlay, but stopping propagation also
+  // guards synthetic click/tap sequences from landing on the marker underneath).
+  const stop = (e) => e.stopPropagation();
+  // Close is driven by the real pointer/click on the X: swallow the event so it
+  // never reaches the map (no immediate reselect of the same marker), clear the
+  // selection, and restore focus to the map surface so it stays keyboard-usable.
+  const handleClose = (e) => {
+    if (e) { e.preventDefault?.(); e.stopPropagation?.(); }
+    const map = cardRef.current?.closest('.mv-wrap')?.querySelector('.mv-map');
+    onClose?.();
+    if (map) {
+      if (!map.hasAttribute('tabindex')) map.setAttribute('tabindex', '-1');
+      requestAnimationFrame(() => { try { map.focus({ preventScroll: true }); } catch { /* noop */ } });
+    }
+  };
   return (
-    <div className="mv-card" role="dialog" aria-label={`${provider.business_name || 'Provider'} summary`}>
-      <button type="button" className="mv-card-x" onClick={onClose} aria-label="Close provider card"><X size={16} /></button>
+    <div
+      className="mv-card"
+      ref={cardRef}
+      role="dialog"
+      aria-label={`${provider.business_name || 'Provider'} summary`}
+      onPointerDown={stop}
+      onClick={stop}
+    >
+      <button
+        type="button"
+        className="mv-card-x"
+        onPointerDown={stop}
+        onClick={handleClose}
+        aria-label="Close provider card"
+      ><X size={16} /></button>
       <div className="mv-card-media">
         {cover
           ? <img src={cover} alt={provider.business_name || 'Provider'} loading="lazy" />
@@ -281,7 +311,7 @@ const CSS = `
   background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:0 12px 34px rgba(6,40,38,.26);
   padding:13px 14px;animation:mvCardUp .22s cubic-bezier(.2,.8,.2,1)}
 @keyframes mvCardUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
-.luca .mv-card-x{position:absolute;top:9px;right:9px;width:28px;height:28px;border-radius:8px;border:none;
+.luca .mv-card-x{position:absolute;top:7px;right:7px;width:40px;height:40px;border-radius:10px;border:none;
   background:var(--surface-2);color:var(--muted);display:grid;place-items:center;cursor:pointer}
 .luca .mv-card-x:hover{background:var(--line-2);color:var(--ink)}
 .luca .mv-card-media{width:100%;height:96px;border-radius:12px;overflow:hidden;background:var(--surface-2);margin-bottom:10px}

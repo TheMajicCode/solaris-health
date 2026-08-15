@@ -221,9 +221,20 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
       document.documentElement.style.setProperty('--exm-top', `${h}px`);
     };
     set();
+    // On mobile the Explore stage is a full-bleed opaque fixed surface with its
+    // OWN in-flow header (title + description below). Flag the .luca root so the
+    // shared PageHead (which carries the Member badge) is hidden underneath —
+    // that keeps the Member badge out of the Explore content on mobile without
+    // touching the shared navigation component.
+    const root = document.querySelector('.luca');
+    if (root) root.classList.add('exm-mobile-active');
     window.addEventListener('resize', set);
     window.addEventListener('orientationchange', set);
-    return () => { window.removeEventListener('resize', set); window.removeEventListener('orientationchange', set); };
+    return () => {
+      window.removeEventListener('resize', set);
+      window.removeEventListener('orientationchange', set);
+      if (root) root.classList.remove('exm-mobile-active');
+    };
   }, [isMobile]);
 
   // debounce search text
@@ -569,6 +580,10 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
     const mobileTree = (
       <div className="exm exm-mobile">
         <div className="exm-m">
+          <div className="exm-mhead">
+            <h1 className="exm-mtitle">Explore</h1>
+            <p className="exm-mdesc">Discover trusted health &amp; wellness providers near you — clinics, farms, healers, and more.</p>
+          </div>
           <div className="exm-mbar">
             <div className="exm-search">
               <Search size={18} />
@@ -1077,6 +1092,18 @@ const CSS = `
    the bottom nav (60) so the nav stays visible over the map/collapsed sheet. */
 .luca .exm-m{position:fixed;left:0;right:0;top:var(--exm-top,54px);bottom:0;z-index:40;
   display:flex;flex-direction:column;background:var(--bg);overflow:hidden}
+/* When the mobile Explore stage is mounted, hide the shared PageHead (title +
+   sub + Member badge) beneath it so the Member badge never appears inside the
+   Explore content on mobile. */
+.luca.exm-mobile-active .page-head{display:none}
+/* In-flow Explore header: title then description, in normal document order with
+   no negative margins / absolute / fixed arithmetic. No divider or control
+   crosses the description — the header block itself has no bottom border; the
+   search bar below carries its own separator. */
+.luca .exm-mhead{flex:none;padding:12px 12px 8px;background:var(--bg)}
+.luca .exm-mtitle{font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:700;
+  color:var(--ink);margin:0;line-height:1.2}
+.luca .exm-mdesc{font-size:13px;color:var(--muted);margin:4px 0 0;line-height:1.45}
 .luca .exm-mbar{flex:none;display:flex;gap:8px;align-items:center;padding:8px 12px;
   background:var(--bg);border-bottom:1px solid var(--line)}
 .luca .exm-mbar .exm-search{flex:1;min-width:0;box-shadow:none;padding:9px 12px;border-radius:12px}
@@ -1109,9 +1136,9 @@ const CSS = `
 .luca .exm-mlist-count{font-size:12px;font-weight:700;color:var(--muted);padding:2px 2px 10px}
 .luca .exm-mlist .exm-cards{display:flex;flex-direction:column;gap:12px}
 .luca .exm-mlist-item{display:flex;flex-direction:column;gap:0}
-.luca .exm-showmap{align-self:flex-start;margin-top:6px;display:inline-flex;align-items:center;gap:6px;
-  border:1px solid var(--line);background:var(--surface);color:var(--teal-d);border-radius:10px;
-  padding:8px 13px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;min-height:38px}
+.luca .exm-showmap{align-self:stretch;width:100%;margin-top:8px;display:inline-flex;align-items:center;
+  justify-content:center;gap:6px;border:1px solid var(--line);background:var(--surface);color:var(--teal-d);
+  border-radius:10px;padding:11px 13px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;min-height:44px}
 .luca .exm-showmap:hover{border-color:var(--teal-d);background:var(--mint-soft)}
 .luca .exm-mlist .exm-journeys.compact{margin-top:14px}
 /* "Recommend for me" — sparkle action beneath the quick filters (full width). */

@@ -13,6 +13,7 @@
  *   onUpdated   ()=>void   — called after a review so the list can refresh
  */
 import React, { useEffect, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X, MapPin, Phone, Globe, Mail, Clock, ChevronLeft, ChevronRight, Loader2,
   Award, ShieldCheck, BadgeCheck, Check, Star, ExternalLink, Tag, CalendarPlus,
@@ -114,7 +115,14 @@ export default function ProviderDetailModal({ providerId, user, onClose, onUpdat
     // scrolled down the results list.
     try { window.scrollTo(0, 0); if (document.scrollingElement) document.scrollingElement.scrollTop = 0; } catch { /* noop */ }
     document.body.style.overflow = 'hidden';
-    return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = ''; };
+    // Hide the mobile bottom nav while this blocking overlay (and any booking
+    // flow opened from it) is on screen, so it is never obstructed.
+    window.dispatchEvent(new CustomEvent('solaris:botnav', { detail: { hidden: true } }));
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+      window.dispatchEvent(new CustomEvent('solaris:botnav', { detail: { hidden: false } }));
+    };
   }, [onClose]);
 
   const submitReview = async () => {
@@ -147,8 +155,8 @@ export default function ProviderDetailModal({ providerId, user, onClose, onUpdat
   let specialties = [];
   try { specialties = p?.specialties ? (typeof p.specialties === 'string' ? JSON.parse(p.specialties) : p.specialties) : []; } catch { specialties = []; }
 
-  return (
-    <>
+  return createPortal(
+    <div className="luca">
     <div className="pdm-overlay" onClick={onClose}>
       <div className="pdm" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <button className="pdm-close" onClick={onClose} aria-label="Close"><X size={20} /></button>
@@ -375,7 +383,8 @@ export default function ProviderDetailModal({ providerId, user, onClose, onUpdat
         />
       </div>
     )}
-    </>
+    </div>,
+    document.body
   );
 }
 
@@ -470,5 +479,13 @@ const CSS = `
   .luca .pdm-grid{grid-template-columns:1fr}
   .luca .pdm-gallery{height:230px}
   .luca .pdm-name{font-size:21px}
+}
+/* Phone: full-height bottom sheet, safe-area aware, internal scroll only. */
+@media(max-width:640px){
+  .luca .pdm-overlay{align-items:stretch;padding:0;overflow:hidden}
+  .luca .pdm{max-width:none;height:100dvh;border-radius:0;display:flex;flex-direction:column;
+    padding-top:env(safe-area-inset-top,0px)}
+  .luca .pdm-scroll{max-height:none;flex:1 1 auto;
+    padding-bottom:calc(24px + env(safe-area-inset-bottom,0px))}
 }
 `;

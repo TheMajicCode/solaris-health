@@ -24,6 +24,19 @@ import { X } from 'lucide-react';
 
 const FOCUSABLE = 'a[href],button:not([disabled]),textarea,input,select,[tabindex]:not([tabindex="-1"])';
 
+// Ref-counted background scroll lock so nested overlays (e.g. booking over a
+// detail sheet) don't fight over document.body.style.overflow.
+let _lockCount = 0;
+let _prevOverflow = '';
+function lockBodyScroll() {
+  if (_lockCount === 0) { _prevOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; }
+  _lockCount += 1;
+}
+function unlockBodyScroll() {
+  _lockCount = Math.max(0, _lockCount - 1);
+  if (_lockCount === 0) document.body.style.overflow = _prevOverflow || '';
+}
+
 export default function AdaptiveOverlay({
   open = true,
   onClose,
@@ -43,7 +56,11 @@ export default function AdaptiveOverlay({
   useEffect(() => {
     if (!open) return undefined;
     window.dispatchEvent(new CustomEvent('solaris:botnav', { detail: { hidden: true } }));
-    return () => window.dispatchEvent(new CustomEvent('solaris:botnav', { detail: { hidden: false } }));
+    lockBodyScroll();
+    return () => {
+      window.dispatchEvent(new CustomEvent('solaris:botnav', { detail: { hidden: false } }));
+      unlockBodyScroll();
+    };
   }, [open]);
 
   // Escape to close + focus trap + focus restore.
@@ -109,7 +126,8 @@ const CSS = `
 @keyframes aovFade{from{opacity:0}to{opacity:1}}
 .luca .aov{position:relative;display:flex;flex-direction:column;width:100%;background:var(--canvas);
   box-shadow:0 -18px 50px rgba(8,40,38,.32);border-radius:22px 22px 0 0;
-  max-height:94dvh;height:auto;animation:aovUp .3s cubic-bezier(.2,.8,.2,1);overflow:hidden}
+  max-height:100dvh;height:auto;animation:aovUp .3s cubic-bezier(.2,.8,.2,1);overflow:hidden;
+  padding-top:env(safe-area-inset-top,0px)}
 @keyframes aovUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
 .luca .aov-grab{width:40px;height:4px;border-radius:999px;background:var(--line-2);margin:8px auto 2px;flex:none}
 .luca .aov-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 16px 10px;flex:none}

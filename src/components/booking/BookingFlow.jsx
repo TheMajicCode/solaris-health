@@ -29,6 +29,8 @@ export default function BookingFlow({ providerId, provider: provIn, services: sv
   const [provider, setProvider] = useState(provIn || null);
   const [services, setServices] = useState(svcIn || null);
   const [loadingProv, setLoadingProv] = useState(!provIn || !svcIn);
+  const [loadErr, setLoadErr] = useState(false);
+  const [slotErr, setSlotErr] = useState(false);
 
   const [step, setStep] = useState(0);
   const [service, setService] = useState(null);
@@ -41,24 +43,31 @@ export default function BookingFlow({ providerId, provider: provIn, services: sv
   const [result, setResult] = useState(null);
   const tz = tzLabel();
 
-  // Load provider + services if not supplied.
+  // Load provider + services if not supplied. On failure we set an explicit
+  // error state (not a bare toast) so the flow can show an actionable "Try
+  // again" instead of the misleading "no bookable services" empty message.
+  const loadProvider = useCallback(async (mountedRef) => {
+    setLoadingProv(true);
+    setLoadErr(false);
+    try {
+      const d = await api.getProvider(providerId);
+      if (mountedRef && !mountedRef.current) return;
+      setProvider(d.provider);
+      setServices(d.services || []);
+    } catch {
+      if (mountedRef && !mountedRef.current) return;
+      setLoadErr(true);
+    } finally {
+      if (!mountedRef || mountedRef.current) setLoadingProv(false);
+    }
+  }, [providerId]);
+
   useEffect(() => {
-    if (provIn && svcIn) return;
-    let on = true;
-    (async () => {
-      try {
-        const d = await api.getProvider(providerId);
-        if (!on) return;
-        setProvider(d.provider);
-        setServices(d.services || []);
-      } catch {
-        if (on) toast.error('Could not load provider');
-      } finally {
-        if (on) setLoadingProv(false);
-      }
-    })();
-    return () => { on = false; };
-  }, [providerId, provIn, svcIn]);
+    if (provIn && svcIn) return undefined;
+    const mountedRef = { current: true };
+    loadProvider(mountedRef);
+    return () => { mountedRef.current = false; };
+  }, [provIn, svcIn, loadProvider]);
 
   // Pre-select a service if requested or only one exists.
   useEffect(() => {
@@ -72,11 +81,13 @@ export default function BookingFlow({ providerId, provider: provIn, services: sv
   const loadSlots = useCallback(async (svc) => {
     if (!svc) return;
     setLoadingSlots(true);
+    setSlotErr(false);
     try {
       const r = await api.getAvailableSlots(providerId, svc.id);
       setSlotData(r.dates || []);
     } catch {
       setSlotData([]);
+      setSlotErr(true);
     } finally {
       setLoadingSlots(false);
     }
@@ -123,7 +134,7 @@ export default function BookingFlow({ providerId, provider: provIn, services: sv
       size="md"
       title="Book an appointment"
       ariaLabel="Book an appointment"
-      footer={step < 4 && !loadingProv ? (
+      footer={step < 4 && !loadingProv && !loadErr ? (
         <>
           {step > 0 ? (
             <button className="bkf-btn ghost" onClick={() => setStep((s) => Math.max(0, s - 1))}><ChevronLeft size={15} /> Back</button>
@@ -155,6 +166,12 @@ export default function BookingFlow({ providerId, provider: provIn, services: sv
 
         {loadingProv ? (
           <div className="bkf-loading"><Loader2 className="bkf-spin" size={24} /> Loading…</div>
+        ) : loadErr ? (
+          <div className="bkf-error" role="alert">
+            <h3>We couldn't load this provider</h3>
+            <p>The booking service didn't respond. Check your connection and try again.</p>
+            <button className="bkf-btn primary" onClick={() => loadProvider()}>Try again</button>
+          </div>
         ) : (
           <div className="bkf-body">
             {/* header */}
@@ -200,7 +217,14 @@ export default function BookingFlow({ providerId, provider: provIn, services: sv
             {step === 1 && (
               <div className="bkf-pane">
                 <h3 className="bkf-h"><Calendar size={16} /> Choose a date & time</h3>
-                <TimeSlotPicker dates={slotData} loading={loadingSlots} value={slot} onChange={setSlot} tz={tz} />
+                {slotErr ? (
+                  <div className="bkf-error inline" role="alert">
+                    <p>We couldn't load available times for this service.</p>
+                    <button className="bkf-btn primary" onClick={() => loadSlots(service)}>Try again</button>
+                  </div>
+                ) : (
+                  <TimeSlotPicker dates={slotData} loading={loadingSlots} value={slot} onChange={setSlot} tz={tz} />
+                )}
               </div>
             )}
 
@@ -318,6 +342,11 @@ const CSS = `
 .luca .bkf-prov-loc{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);margin-top:2px}
 .luca .bkf-h{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:700;color:var(--ink);margin:0 0 14px;font-family:'Space Grotesk',sans-serif}
 .luca .bkf-muted{color:var(--muted);font-size:14px}
+.luca .bkf-error{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;padding:34px 18px}
+.luca .bkf-error.inline{padding:22px 12px}
+.luca .bkf-error h3{font-family:'Space Grotesk',sans-serif;font-size:16px;color:var(--ink);margin:0}
+.luca .bkf-error p{font-size:13.5px;color:var(--muted);margin:0;line-height:1.5;max-width:320px}
+.luca .bkf-error .bkf-btn{margin-top:4px}
 .luca .bkf-svc-list{display:flex;flex-direction:column;gap:9px}
 .luca .bkf-svc{display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:left;
   border:1px solid var(--line);background:var(--surface);border-radius:13px;padding:13px 15px;cursor:pointer;transition:all .12s;font-family:inherit}
