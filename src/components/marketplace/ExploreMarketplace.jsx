@@ -9,7 +9,7 @@
  */
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, MapPin, Map as MapIcon, List as ListIcon, Loader2, Store, Plus, X, Sprout, Sparkles, RefreshCw, ArrowRight, Compass, Clock, Headphones, Stethoscope, Heart, Brain, Activity, BookOpen, CheckCircle2, Footprints, SlidersHorizontal } from 'lucide-react';
+import { Search, MapPin, Map as MapIcon, List as ListIcon, Loader2, Store, Plus, X, Sprout, Sparkles, RefreshCw, ArrowRight, Compass, Clock, Headphones, Stethoscope, Heart, Brain, Activity, BookOpen, CheckCircle2, Footprints, SlidersHorizontal, ChevronDown } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '../../lib/api.js';
 import { useApp } from '../../state/AppContext.jsx';
@@ -19,6 +19,7 @@ import ProviderListingCard from './ProviderListingCard.jsx';
 import ProviderDetailModal from './ProviderDetailModal.jsx';
 import { PROVIDER_TYPES } from './ProviderBadges.jsx';
 import AdaptiveOverlay from '../ui/AdaptiveOverlay.jsx';
+import BookingFlow from '../booking/BookingFlow.jsx';
 
 // Mobile breakpoint (matches the app shell's 900px). Kept in a hook so the
 // Explore layout can switch to the map + draggable results sheet on phones and
@@ -202,6 +203,8 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
   const [activeId, setActiveId] = useState(null);
   const [hoverId, setHoverId] = useState(null);
   const [openId, setOpenId] = useState(null);
+  const [bookingProviderId, setBookingProviderId] = useState(null); // open BookingFlow directly for this provider
+  const [journeysOpen, setJourneysOpen] = useState(false);          // mobile "Guided journeys" accordion (collapsed by default)
   const [mobileView, setMobileView] = useState('map'); // map | list (default map)
   const [showFilters, setShowFilters] = useState(false);
   const listRef = useRef(null);
@@ -393,6 +396,7 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
         onLocate={(loc) => setUserLocation(loc)}
         radiusKm={hasLocation ? filters.radius : null}
         onOpenDetail={(pr) => setOpenId(pr.id)}
+        onBook={(pr) => setBookingProviderId(pr.id)}
         onClearActive={() => setActiveId(null)}
       />
     </MapErrorBoundary>
@@ -449,6 +453,14 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
           onClose={() => setPreviewType(null)}
         />
       )}
+      {bookingProviderId && (
+        <BookingFlow
+          providerId={bookingProviderId}
+          user={user}
+          onClose={() => setBookingProviderId(null)}
+          onBooked={() => { setBookingProviderId(null); fetchProviders(); }}
+        />
+      )}
     </>
   );
 
@@ -475,6 +487,85 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
     const countLabel = loading
       ? 'Finding providers…'
       : `${visibleProviders.length} provider${visibleProviders.length === 1 ? '' : 's'}`;
+
+    // "Recommend for me" — surfaces LUCA's recommendation as a bottom sheet whose
+    // primary action opens the EXACT recommended practitioner (deep-link by id).
+    const openRecommendedProvider = () => {
+      if (curated?.curatedJourney?.providerId) {
+        setOpenId(curated.curatedJourney.providerId);
+      } else {
+        const q = curated?.curatedJourney?.specialty || curated?.curatedJourney?.title || '';
+        if (q) setQuery(q);
+      }
+      setCurateOpen(false);
+    };
+    const recommendSheet = (
+      <AdaptiveOverlay
+        open={curateOpen}
+        onClose={() => setCurateOpen(false)}
+        title="Recommended for you"
+        ariaLabel="LUCA recommendations"
+        size="md"
+        closeLabel="Close recommendations"
+        footer={curated?.curatedJourney ? (
+          <button type="button" className="exm-cc-btn" style={{ width: '100%' }} onClick={openRecommendedProvider}>
+            {curated.curatedJourney.providerId ? 'View this provider' : 'Explore related'} <ArrowRight size={15} />
+          </button>
+        ) : null}
+      >
+        {curating && !curated ? (
+          <div className="exm-curated-loading"><Loader2 size={20} className="exm-spin" /> LUCA is curating your next steps…</div>
+        ) : (
+          <div className="exm-mrec-cards">
+            {curated?.nextStep && (
+              <div className="exm-cc">
+                <span className="exm-cc-tag next">Your next step</span>
+                <h5>{curated.nextStep.title}</h5>
+                <p>{curated.nextStep.description}</p>
+                {curated.nextStep.action && <div className="exm-cc-why">{curated.nextStep.action}</div>}
+              </div>
+            )}
+            {curated?.curatedJourney && (
+              <div className="exm-cc journey">
+                <span className="exm-cc-tag journey">Recommended provider</span>
+                <h5>{curated.curatedJourney.title}</h5>
+                <p>{[curated.curatedJourney.specialty, curated.curatedJourney.city].filter(Boolean).join(' · ')}</p>
+                {curated.curatedJourney.reason && <div className="exm-cc-why">{curated.curatedJourney.reason}</div>}
+              </div>
+            )}
+            {!curating && !curated?.nextStep && !curated?.curatedJourney && (
+              <div className="exm-curated-loading">LUCA couldn’t recommend anything right now. Please try again shortly.</div>
+            )}
+          </div>
+        )}
+      </AdaptiveOverlay>
+    );
+
+    // Guided journeys — one compact accordion row, collapsed by default, showing
+    // the journey count + chevron; expanding reveals the existing journey cards
+    // in a single mobile column. No duplicated data / no new API.
+    const guidedJourneysMobile = blueprints.length > 0 ? (
+      <div className="exm-gj">
+        <button
+          type="button"
+          className="exm-gj-row"
+          aria-expanded={journeysOpen}
+          onClick={() => setJourneysOpen((o) => !o)}
+        >
+          <span className="exm-gj-label"><Compass size={16} /> Guided journeys</span>
+          <span className="exm-gj-right">
+            <span className="exm-gj-count">{blueprints.length}</span>
+            <ChevronDown size={18} className={`exm-gj-chev${journeysOpen ? ' open' : ''}`} />
+          </span>
+        </button>
+        {journeysOpen && (
+          <div className="exm-gj-body">
+            <JourneyOffers offers={blueprints} starting={startingJourney} onBegin={beginJourney} onPreview={setPreviewType} compact hideHead />
+          </div>
+        )}
+      </div>
+    ) : null;
+
     const mobileTree = (
       <div className="exm exm-mobile">
         <div className="exm-m">
@@ -495,6 +586,10 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
             </button>
           </div>
           <QuickFilters filters={filters} patch={patch} presentTypes={presentTypes} languageOptions={languageOptions} />
+          <button type="button" className="exm-mrec-btn" onClick={() => curateForMe(false)} disabled={curating} aria-haspopup="dialog">
+            {curating ? <Loader2 size={16} className="exm-spin" /> : <Sparkles size={16} />}
+            Recommend for me
+          </button>
           <div className="exm-mseg" role="group" aria-label="Choose map or list view">
             <button
               type="button"
@@ -522,13 +617,15 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
                 {loading ? (
                   <div className="exm-loading"><Loader2 className="exm-spin" size={26} /> Finding providers…</div>
                 ) : visibleProviders.length === 0 ? (
-                  <div className="exm-empty">
-                    <Store size={34} />
-                    <h4>No providers match your filters</h4>
-                    <p>Try widening your search or resetting the filters — or begin a guided journey below.</p>
-                    <button className="exm-resetbtn" onClick={reset}>Reset filters</button>
-                    <JourneyOffers offers={blueprints} starting={startingJourney} onBegin={beginJourney} onPreview={setPreviewType} compact />
-                  </div>
+                  <>
+                    <div className="exm-empty">
+                      <Store size={34} />
+                      <h4>No providers match your filters</h4>
+                      <p>Try widening your search or resetting the filters — or begin a guided journey below.</p>
+                      <button className="exm-resetbtn" onClick={reset}>Reset filters</button>
+                    </div>
+                    {guidedJourneysMobile}
+                  </>
                 ) : (
                   <>
                     <div className="exm-cards">
@@ -546,7 +643,7 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
                         </div>
                       ))}
                     </div>
-                    <JourneyOffers offers={blueprints} starting={startingJourney} onBegin={beginJourney} onPreview={setPreviewType} compact />
+                    {guidedJourneysMobile}
                   </>
                 )}
               </div>
@@ -554,6 +651,7 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
           </div>
         </div>
         {filterSheet}
+        {recommendSheet}
         {detailAndPreview}
         <style>{CSS}</style>
       </div>
@@ -694,12 +792,12 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
   );
 }
 
-function JourneyOffers({ offers, starting, onBegin, onPreview, compact }) {
+function JourneyOffers({ offers, starting, onBegin, onPreview, compact, hideHead }) {
   if (!offers || offers.length === 0) return null;
   return (
     <div className={`exm-journeys${compact ? ' compact' : ''}`}>
-      <div className="exm-journeys-head"><Compass size={16} /> Begin a guided journey</div>
-      <p className="exm-journeys-sub">A complete, step-by-step program LUCA walks beside you — habits, guided audio, activities and a recommended practitioner, all waiting in your Journal.</p>
+      {!hideHead && <div className="exm-journeys-head"><Compass size={16} /> Begin a guided journey</div>}
+      {!hideHead && <p className="exm-journeys-sub">A complete, step-by-step program LUCA walks beside you — habits, guided audio, activities and a recommended practitioner, all waiting in your Journal.</p>}
       <div className="exm-journeys-grid">
         {offers.map((j) => {
           const kinds = [...new Set((j.steps || []).map((s) => s.kind))];
@@ -1015,7 +1113,30 @@ const CSS = `
   border:1px solid var(--line);background:var(--surface);color:var(--teal-d);border-radius:10px;
   padding:8px 13px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;min-height:38px}
 .luca .exm-showmap:hover{border-color:var(--teal-d);background:var(--mint-soft)}
-.luca .exm-mlist .exm-journeys.compact{margin-top:22px}
+.luca .exm-mlist .exm-journeys.compact{margin-top:14px}
+/* "Recommend for me" — sparkle action beneath the quick filters (full width). */
+.luca .exm-mrec-btn{flex:none;display:inline-flex;align-items:center;justify-content:center;gap:8px;margin:0 12px 8px;
+  border:1px solid var(--mint-line);background:var(--mint-soft);color:var(--teal-d);border-radius:12px;
+  padding:10px 14px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit;min-height:44px}
+.luca .exm-mrec-btn:hover{background:var(--mint);border-color:var(--mint);color:var(--mint-ink)}
+.luca .exm-mrec-btn:disabled{opacity:.6;cursor:default}
+.luca .exm-mrec-cards{display:flex;flex-direction:column;gap:12px;padding-top:4px}
+/* Guided journeys — one compact collapsible accordion row (count + chevron). */
+.luca .exm-gj{margin-top:16px;border:1px solid var(--line);border-radius:14px;background:var(--surface);overflow:hidden}
+.luca .exm-gj-row{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;
+  background:none;border:none;cursor:pointer;font-family:inherit;padding:14px 15px;min-height:52px;color:var(--ink)}
+.luca .exm-gj-label{display:inline-flex;align-items:center;gap:9px;font-size:14.5px;font-weight:700;color:var(--ink)}
+.luca .exm-gj-label svg{color:var(--teal-d);flex:none}
+.luca .exm-gj-right{display:inline-flex;align-items:center;gap:9px}
+.luca .exm-gj-count{min-width:22px;height:22px;padding:0 7px;border-radius:999px;background:var(--mint-soft);
+  color:var(--teal-d);font-size:12px;font-weight:800;display:inline-flex;align-items:center;justify-content:center}
+.luca .exm-gj-chev{color:var(--muted);transition:transform .2s ease}
+.luca .exm-gj-chev.open{transform:rotate(180deg)}
+.luca .exm-gj-body{padding:0 12px 14px;border-top:1px solid var(--line)}
+.luca .exm-gj-body .exm-journeys{margin-top:0}
+.luca .exm-gj-body .exm-journeys-grid{grid-template-columns:1fr}
+/* Selected-provider map card must clear the fixed bottom nav on mobile Explore. */
+.luca .exm-mmap .mv-card{bottom:calc(78px + env(safe-area-inset-bottom,0px))}
 /* Mobile filter-sheet footer (inside the adaptive overlay) */
 .luca .exm-fs-foot{display:flex;gap:10px;align-items:center}
 .luca .exm-fs-clear{flex:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);

@@ -61,6 +61,7 @@ import LevelBadge from './passport/LevelBadge.jsx';
 import ContributionLedger from './contributions/ContributionLedger.jsx';
 import SparkWalletScreen from './wallet/SparkWalletScreen.jsx';
 import AuraAdmin from './clinic/AuraAdmin.jsx';
+import AdaptiveOverlay from './ui/AdaptiveOverlay.jsx';
 import toast from 'react-hot-toast';
 
 /* ============================== DESIGN SYSTEM ============================== */
@@ -398,18 +399,11 @@ textarea.input-line{resize:vertical;min-height:64px}
 .luca .queue-ico{width:26px;height:26px;border-radius:8px;background:linear-gradient(150deg,#0E5C57,#0A413D);color:#E7F8F3;display:grid;place-items:center;flex:none}
 .luca .queue-title{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 @media(max-width:520px){.luca .mini-player{left:12px;right:12px;transform:none;width:auto}}
-/* Daily check-in modal */
-.luca .ci-overlay{position:fixed;inset:0;z-index:10000;background:rgba(8,32,30,.55);backdrop-filter:blur(3px);display:flex;align-items:flex-end;justify-content:center;animation:ciFade .2s ease}
-@keyframes ciFade{from{opacity:0}to{opacity:1}}
-.luca .ci-modal{width:min(560px,100%);max-height:92vh;overflow-y:auto;background:var(--surface,#fff);border-radius:22px 22px 0 0;box-shadow:0 -18px 60px rgba(8,40,38,.3);animation:ciUp .32s cubic-bezier(.2,.8,.2,1)}
-@media(min-width:640px){.luca .ci-overlay{align-items:center}.luca .ci-modal{border-radius:22px}}
-@keyframes ciUp{from{transform:translateY(40px);opacity:.4}to{transform:translateY(0);opacity:1}}
-.luca .ci-head{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:12px;padding:18px 20px 14px;background:linear-gradient(160deg,#0E5C57,#0A413D);color:#EAFBF6;border-radius:22px 22px 0 0}
-@media(max-width:639px){.luca .ci-head{border-radius:22px 22px 0 0}}
-.luca .ci-head h3{margin:0;font-size:16px;font-weight:700;font-family:var(--serif,inherit)}
-.luca .ci-head .ci-x{margin-left:auto;background:rgba(255,255,255,.15);border:none;color:#EAFBF6;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;cursor:pointer}
-.luca .ci-head .ci-x:hover{background:rgba(255,255,255,.26)}
-.luca .ci-body{padding:18px 20px 22px;display:flex;flex-direction:column;gap:20px}
+/* Daily check-in modal — hosted inside the shared AdaptiveOverlay (portal to
+   <body>, in-viewport, sticky footer, safe-area, internal scroll). */
+.luca .ci-greet{display:flex;align-items:center;gap:12px;padding:2px 0 12px;color:var(--ink)}
+.luca .ci-greet h3{margin:0;font-size:15.5px;font-weight:700;font-family:var(--serif,inherit);line-height:1.35}
+.luca .ci-body{display:flex;flex-direction:column;gap:20px;padding-top:2px}
 .luca .ci-slider{display:flex;flex-direction:column;gap:8px}
 .luca .ci-slider .ci-slabel{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--ink)}
 .luca .ci-slider .ci-sval{margin-left:auto;font-size:13px;font-weight:700;color:var(--mint);min-width:26px;text-align:right}
@@ -1025,13 +1019,8 @@ function DailyCheckinModal({ user, open, onClose, onSaved }) {
     })();
   }, [open]);
 
-  // While the check-in sheet blocks the screen, ask the shell to hide the
-  // mobile bottom nav so it never overlaps the sheet.
-  useEffect(() => {
-    if (!open) return undefined;
-    window.dispatchEvent(new CustomEvent('solaris:botnav', { detail: { hidden: true } }));
-    return () => window.dispatchEvent(new CustomEvent('solaris:botnav', { detail: { hidden: false } }));
-  }, [open]);
+  // NOTE: the mobile bottom nav is hidden automatically by AdaptiveOverlay
+  // (shared solaris:botnav event) for as long as this blocking sheet is open.
 
   if (!open) return null;
 
@@ -1070,26 +1059,36 @@ function DailyCheckinModal({ user, open, onClose, onSaved }) {
   const bonus = celebrate ? celebrate.awards.find((a) => a.points > 5) : null;
 
   return (
-    <div className="ci-overlay" onClick={(e) => { if (e.target === e.currentTarget && !saving) onClose(); }}>
-      <div className="ci-modal" role="dialog" aria-modal="true" aria-label="Daily check-in">
-        {celebrate ? (
-          <div className="ci-celebrate">
-            <div className="ci-spark">🌟</div>
-            <div className="ci-love-badge">+{totalPoints} LOVE</div>
-            {bonus && <div className="ci-bonus">+{bonus.points} LOVE • {bonus.label}</div>}
-            {celebrate.currentStreak >= 2 && (
-              <div className="ci-streak-line">Your streak: {celebrate.currentStreak} days 🔥</div>
-            )}
-            <div className="small muted" style={{ marginTop: 6 }}>Beautifully done, {user.firstName || 'friend'}. See you tomorrow.</div>
+    <AdaptiveOverlay
+      open
+      onClose={() => { if (!saving) onClose(); }}
+      dismissable={!saving}
+      title="Daily check-in"
+      ariaLabel="Daily check-in"
+      size="md"
+      footer={celebrate ? null : (
+        <Btn variant="primary block" icon={Check} onClick={submit} disabled={saving} style={{ width: '100%' }}>
+          {saving ? 'Saving…' : 'Save my check-in'}
+        </Btn>
+      )}
+    >
+      {celebrate ? (
+        <div className="ci-celebrate">
+          <div className="ci-spark">🌟</div>
+          <div className="ci-love-badge">+{totalPoints} LOVE</div>
+          {bonus && <div className="ci-bonus">+{bonus.points} LOVE • {bonus.label}</div>}
+          {celebrate.currentStreak >= 2 && (
+            <div className="ci-streak-line">Your streak: {celebrate.currentStreak} days 🔥</div>
+          )}
+          <div className="small muted" style={{ marginTop: 6 }}>Beautifully done, {user.firstName || 'friend'}. See you tomorrow.</div>
+        </div>
+      ) : (
+        <>
+          <div className="ci-greet">
+            <LucaAvatar size="sm" />
+            <h3>How are you feeling today, {user.firstName || 'friend'}?</h3>
           </div>
-        ) : (
-          <>
-            <div className="ci-head">
-              <LucaAvatar size="sm" />
-              <h3>How are you feeling today, {user.firstName || 'friend'}?</h3>
-              <button className="ci-x" onClick={onClose} aria-label="Close"><X size={17} /></button>
-            </div>
-            <div className="ci-body">
+          <div className="ci-body">
               <div>
                 <div className="ci-eyebrow">Mind · Body · Heart · Spirit</div>
                 <div className="col" style={{ gap: 16, marginTop: 10 }}>
@@ -1172,15 +1171,10 @@ function DailyCheckinModal({ user, open, onClose, onSaved }) {
                       border: '1px solid #dde7e2', fontSize: 13.5, fontFamily: 'inherit', color: '#0A2B29' }} />
                 )}
               </div>
-
-              <Btn variant="primary block" icon={Check} onClick={submit} disabled={saving}>
-                {saving ? 'Saving…' : 'Save my check-in'}
-              </Btn>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+          </div>
+        </>
+      )}
+    </AdaptiveOverlay>
   );
 }
 
@@ -1579,6 +1573,16 @@ function LucaRecommends({ recs, loading, go, user, vitality = 0, focus = [] }) {
   }
   const nsTarget = ns.target || (!vitality ? 'health' : 'journal');
   const nsCta = ns.cta || (!vitality ? 'Start assessment' : 'Check in today');
+  // "Check in today" must land on Health Passport AND auto-open the daily check-in
+  // overlay — routed through the typed navigation action so the shell handles it.
+  const nsIsCheckin = /check.?in/i.test(nsCta) || ns.action === 'start_checkin';
+  const runNextStep = () => {
+    if (nsIsCheckin) {
+      window.dispatchEvent(new CustomEvent('solaris:navigate', { detail: { tab: 'health', action: 'checkin' } }));
+    } else {
+      go(nsTarget);
+    }
+  };
 
   // ── Card 2: "Curated Journey" (gold) — server value or a smart fallback ──
   const cj = recs?.curatedJourney;
@@ -1602,7 +1606,7 @@ function LucaRecommends({ recs, loading, go, user, vitality = 0, focus = [] }) {
             </div>
           ) : null}
           <button
-            onClick={() => go(nsTarget)}
+            onClick={runNextStep}
             style={{ marginTop: 13, alignSelf: 'flex-start', padding: '8px 16px', borderRadius: 10, cursor: 'pointer', border: '1px solid rgba(159,231,214,.35)', background: 'rgba(159,231,214,.14)', color: '#E7F8F3', fontSize: 13, fontWeight: 600, display: 'inline-flex', gap: 6, alignItems: 'center' }}
           >
             {nsCta} <ArrowRight size={14} />
@@ -5882,7 +5886,7 @@ function AdminSystemPage() {
 
 /* ============================== MAIN SHELL ============================== */
 export default function LucaPassport() {
-  const { user, logout, refreshUser } = useApp();
+  const { user, logout, refreshUser, setPendingProviderId, setPendingCurate } = useApp();
   const realRole = user?.role || 'patient';
   const baseEffectiveRole = normalizeSolarisRole(realRole);
   const isProvider = user?.isProvider === true;
@@ -5967,11 +5971,26 @@ export default function LucaPassport() {
   }, [canSwitchPortal]);
 
   // Cross-component navigation (e.g. "Begin a guided journey" -> Health Passport).
+  // Typed navigation action: { tab, sub, providerId, curate, action }. Beyond the
+  // plain area/sub-tab hop this can (a) deep-link a specific practitioner profile
+  // in Explore, (b) trigger "Recommend for me" curation on Explore mount, and
+  // (c) route to Health Passport and auto-open the daily check-in overlay.
   useEffect(() => {
-    const onNav = (e) => { if (e?.detail?.tab) go(e.detail.tab, e.detail.sub); };
+    const onNav = (e) => {
+      const d = e?.detail || {};
+      if (d.providerId != null) setPendingProviderId?.(d.providerId);
+      if (d.curate) setPendingCurate?.(true);
+      const wantsCheckin = d.action === 'checkin' || d.action === 'start_checkin';
+      const targetTab = wantsCheckin ? 'health' : d.tab;
+      if (targetTab) go(targetTab, d.sub);
+      if (wantsCheckin) {
+        // Let the Health Passport surface mount before asking it to open check-in.
+        setTimeout(() => window.dispatchEvent(new CustomEvent('solaris:open-checkin')), 320);
+      }
+    };
     window.addEventListener('solaris:navigate', onNav);
     return () => window.removeEventListener('solaris:navigate', onNav);
-  }, [go]);
+  }, [go, setPendingProviderId, setPendingCurate]);
 
   // Browser Back / Forward — re-read the area, sub-tab, and portal from the URL.
   useEffect(() => {

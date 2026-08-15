@@ -69,8 +69,9 @@ function pinIcon(provider, active) {
 
 // Compact, in-viewport provider card shown over the map for the selected pin.
 // Built entirely from React elements + escaped text (no raw HTML injection).
-// Shows only real listing fields and offers a single primary action.
-function MapProviderCard({ provider, onOpen, onClose }) {
+// Shows only real listing fields and always offers two visible actions:
+// "View details" (opens the provider profile) and "Book" (opens booking directly).
+function MapProviderCard({ provider, onOpen, onBook, onClose }) {
   if (!provider) return null;
   const meta = readMeta(provider);
   const langs = Array.isArray(meta.languages) ? meta.languages : [];
@@ -95,10 +96,13 @@ function MapProviderCard({ provider, onOpen, onClose }) {
         {modality && <span className="mv-card-chip">{meta.modality === 'virtual' ? <Video size={12} /> : <MapPin size={12} />} {modality}</span>}
         {langs.slice(0, 3).map((l) => <span key={l} className="mv-card-chip"><Globe size={12} /> {l}</span>)}
       </div>
+      {provider.price_range && <div className="mv-card-price">{provider.price_range}</div>}
       <div className="mv-card-foot">
-        {provider.price_range && <span className="mv-card-price">{provider.price_range}</span>}
-        <button type="button" className="mv-card-btn" onClick={() => onOpen?.(provider)}>
-          View &amp; book <ArrowRight size={14} />
+        <button type="button" className="mv-card-btn ghost" onClick={() => onOpen?.(provider)}>
+          View details
+        </button>
+        <button type="button" className="mv-card-btn" onClick={() => onBook?.(provider)}>
+          Book <ArrowRight size={14} />
         </button>
       </div>
     </div>
@@ -186,7 +190,7 @@ function LocateControl({ onLocate }) {
 
 export default function MapView({
   providers = [], activeId, onSelect, onHover, userLocation, onLocate, radiusKm, center,
-  onOpenDetail, onClearActive, showCard = true,
+  onOpenDetail, onBook, onClearActive, showCard = true,
 }) {
   const valid = useMemo(
     () => providers
@@ -244,6 +248,7 @@ export default function MapView({
         <MapProviderCard
           provider={active}
           onOpen={onOpenDetail}
+          onBook={onBook}
           onClose={() => onClearActive?.()}
         />
       )}
@@ -289,9 +294,11 @@ const CSS = `
 .luca .mv-card-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
 .luca .mv-card-chip{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;color:var(--teal-d);
   background:var(--mint-soft);border:1px solid var(--mint-line);border-radius:999px;padding:3px 9px}
-.luca .mv-card-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:11px}
-.luca .mv-card-price{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:15px;color:var(--teal-d)}
-.luca .mv-card-btn{display:inline-flex;align-items:center;gap:6px;background:var(--teal-d);color:#fff;border:none;
-  border-radius:11px;padding:9px 15px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;margin-left:auto;min-height:40px}
+.luca .mv-card-price{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:15px;color:var(--teal-d);margin-top:9px}
+.luca .mv-card-foot{display:flex;align-items:center;gap:8px;margin-top:11px}
+.luca .mv-card-btn{flex:1 1 0;display:inline-flex;align-items:center;justify-content:center;gap:6px;background:var(--teal-d);color:#fff;border:none;
+  border-radius:11px;padding:9px 15px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;min-height:42px}
 .luca .mv-card-btn:hover{background:var(--teal-d2)}
+.luca .mv-card-btn.ghost{background:var(--surface-2);color:var(--teal-d);border:1px solid var(--mint-line)}
+.luca .mv-card-btn.ghost:hover{background:var(--mint-soft)}
 `;
