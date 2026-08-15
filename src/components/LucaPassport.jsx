@@ -23,6 +23,7 @@ import {
   BookOpen, Headphones, Play, Pause, Lock, Trash2, Music,
   Repeat, Shuffle, Rewind, FastForward, Upload, ListMusic,
   CalendarClock, Volume2, VolumeX, Inbox, Mail, Copy, Fingerprint, Grid,
+  ChevronDown, Smartphone,
 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { api } from '../lib/api.js';
@@ -516,6 +517,39 @@ textarea.input-line{resize:vertical;min-height:64px}
 .subtabs-scroll{scrollbar-width:none;-ms-overflow-style:none}
 .subtabs-scroll::-webkit-scrollbar{display:none}
 
+/* ===== Health Passport compact accordion rows (NODE B) ===== */
+.luca .hp-acc{border:1px solid var(--line,#e3ece8);border-radius:16px;background:var(--surface,#fff);overflow:hidden}
+.luca .hp-acc-head{display:flex;align-items:center;gap:12px;width:100%;text-align:left;border:none;background:transparent;
+  padding:15px 16px;cursor:pointer;font-family:inherit;min-height:56px}
+.luca .hp-acc-head:hover{background:var(--surface-2,#f4faf7)}
+.luca .hp-acc-ic{flex:none;width:38px;height:38px;border-radius:11px;display:grid;place-items:center;
+  background:rgba(45,181,132,.12);color:var(--teal-d,#0E5C57)}
+.luca .hp-acc-tt{flex:1;min-width:0}
+.luca .hp-acc-title{display:block;font-family:var(--font-display,'Space Grotesk',sans-serif);font-weight:700;font-size:15px;color:var(--ink);line-height:1.2}
+.luca .hp-acc-sub{display:block;font-size:12px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.luca .hp-acc-chev{flex:none;color:var(--muted);transition:transform .2s}
+.luca .hp-acc[data-open="true"] .hp-acc-chev{transform:rotate(180deg)}
+.luca .hp-acc-body{padding:6px 16px 16px;border-top:1px solid var(--line,#eef3f1)}
+.luca .hp-actrow{display:flex;align-items:flex-start;gap:12px;width:100%;text-align:left;border:1px solid var(--line,#e3ece8);
+  border-radius:14px;padding:14px;background:var(--surface,#fff);cursor:pointer;font-family:inherit;min-height:56px}
+.luca .hp-actrow:hover{border-color:var(--teal,#2DB584);background:var(--surface-2,#f4faf7)}
+.luca .hp-ar-tt{flex:1;min-width:0}
+.luca .hp-ar-title{display:block;font-size:14px;font-weight:700;color:var(--ink)}
+.luca .hp-ar-sub{display:block;font-size:12px;color:var(--muted);margin-top:2px;line-height:1.45}
+/* ===== Mock device-data sync sheet (NODE B) ===== */
+.luca .ds-opt{display:flex;align-items:center;gap:12px;width:100%;text-align:left;border:1px solid var(--line,#e3ece8);
+  border-radius:14px;padding:14px;background:var(--surface,#fff);cursor:pointer;font-family:inherit;min-height:56px}
+.luca .ds-opt:hover:not([disabled]){border-color:var(--teal,#2DB584)}
+.luca .ds-opt[aria-pressed="true"]{border:2px solid #2DB584;background:#e6f7f0}
+.luca .ds-opt[disabled]{opacity:.55;cursor:not-allowed}
+.luca .ds-metric{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line,#eef3f1)}
+.luca .ds-metric:last-child{border-bottom:none}
+.luca .ds-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;
+  padding:3px 9px;border-radius:999px;background:rgba(227,172,70,.16);color:#8a5a12}
+.luca .ds-consent{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:12px;
+  border:1px solid var(--line,#e3ece8);background:var(--surface-2,#f4faf7);cursor:pointer}
+.luca .ds-consent input{margin-top:2px;width:18px;height:18px;flex:none;accent-color:#2DB584}
+
 `;
 
 /* ============================== HELPERS ============================== */
@@ -868,6 +902,10 @@ export const LEGACY_TAB_MAP = {
   contributions: { tab: 'wallet', sub: 'contributions' },
   'gps-map': { tab: 'wallet', sub: 'network' },
   network: { tab: 'wallet', sub: 'network' },
+  // §4 — the former standalone Sovereignty surface now lives in
+  // Settings → Privacy & Sovereignty. Legacy targets redirect there.
+  sovereign: { tab: 'account', sub: 'privacy' },
+  sovereignty: { tab: 'account', sub: 'privacy' },
 };
 
 // Areas that own a set of nested sub-tabs, with the default (first) sub-tab.
@@ -2137,7 +2175,7 @@ function HealthPage({ go }) {
         <Btn variant="primary" icon={Download} onClick={exportVault} disabled={exporting}>{exporting ? 'Preparing…' : 'Export My Vault'}</Btn>
       </Card>
 
-      <SovereigntyCard onExport={exportVault} exporting={exporting} />
+      {/* §4 — Sovereignty moved to Settings → Privacy & Sovereignty. */}
 
       <GuidedJourneyTasks go={go} onOpenCheckin={() => setCheckinOpen(true)} />
 
@@ -4926,9 +4964,204 @@ function IntakeFormsSection() {
   );
 }
 
-function PassportActions({ go }) {
+// Collapsed-by-default-on-mobile helper. Uses the same 900px breakpoint the
+// mobile app shell uses everywhere else. Not reactive — the initial value is
+// all the accordions need for their default open/closed state.
+function isMobileViewport() {
+  try { return typeof window !== 'undefined' && window.matchMedia('(max-width:900px)').matches; }
+  catch { return false; }
+}
+
+/* One compact accordion row — an accessible <button> header (native keyboard
+   support: Enter/Space) with aria-expanded, a leading icon, optional subtitle /
+   trailing badge, a rotating chevron, and collapsible content. Presentation
+   only; callers own the body. */
+function HpAccordion({ icon: Icon, title, subtitle, badge, defaultOpen, children, id }) {
+  const [open, setOpen] = useState(!!defaultOpen);
+  const bodyId = `${id || 'hpacc'}-body`;
+  return (
+    <div className="hp-acc" data-open={open ? 'true' : 'false'}>
+      <button
+        type="button"
+        className="hp-acc-head"
+        aria-expanded={open}
+        aria-controls={bodyId}
+        onClick={() => setOpen((s) => !s)}
+      >
+        {Icon ? <span className="hp-acc-ic"><Icon size={18} /></span> : null}
+        <span className="hp-acc-tt">
+          <span className="hp-acc-title">{title}</span>
+          {subtitle ? <span className="hp-acc-sub">{subtitle}</span> : null}
+        </span>
+        {badge != null ? badge : null}
+        <ChevronDown className="hp-acc-chev" size={20} aria-hidden="true" />
+      </button>
+      {open ? <div className="hp-acc-body" id={bodyId}>{children}</div> : null}
+    </div>
+  );
+}
+
+/* ===== Mock device-data sync (NODE B, §2) =====================================
+   SIMULATION ONLY. No OAuth, no real Apple Health / Health Connect / Fitbit
+   bridge, no PHI, no background sync. Deterministic synthetic fixtures. Imported
+   data is written to localStorage ONLY (private to this device) and is NEVER
+   posted to the backend and NEVER auto-shared with LUCA. */
+export const DEVICE_SYNC_KEY = 'solaris:deviceSyncMock:v1';
+const DEVICE_PROVIDERS = {
+  apple: {
+    id: 'apple', label: 'Apple Health', demoTag: 'Apple Health — Demo', lastSync: '2026-08-14T21:40:00',
+    metrics: [
+      { key: 'steps', icon: Footprints, label: 'Steps (avg / day)', value: '8,240' },
+      { key: 'sleep', icon: Moon, label: 'Sleep duration', value: '7h 20m' },
+      { key: 'rhr', icon: HeartPulse, label: 'Resting heart rate', value: '62 bpm' },
+      { key: 'active', icon: Activity, label: 'Active minutes', value: '44 min' },
+    ],
+  },
+  google: {
+    id: 'google', label: 'Google Health / Fitbit', demoTag: 'Google Health / Fitbit — Demo', lastSync: '2026-08-14T20:05:00',
+    metrics: [
+      { key: 'steps', icon: Footprints, label: 'Steps (avg / day)', value: '9,110' },
+      { key: 'sleep', icon: Moon, label: 'Sleep duration', value: '6h 55m' },
+      { key: 'rhr', icon: HeartPulse, label: 'Resting heart rate', value: '58 bpm' },
+      { key: 'active', icon: Activity, label: 'Active minutes', value: '51 min' },
+    ],
+  },
+};
+function readDeviceStore() {
+  try { return JSON.parse(localStorage.getItem(DEVICE_SYNC_KEY) || '{}') || {}; }
+  catch { return {}; }
+}
+// Idempotent: keyed by a deterministic record id (provider + last-sync), so a
+// repeated import of the same snapshot never creates a duplicate record.
+export function importDeviceSnapshot(providerId) {
+  const p = DEVICE_PROVIDERS[providerId];
+  if (!p) return readDeviceStore();
+  const store = readDeviceStore();
+  const recordId = `device:${p.id}:${p.lastSync}`;
+  store[recordId] = {
+    id: recordId, provider: p.id, providerLabel: p.label, source: p.demoTag,
+    lastSync: p.lastSync, simulated: true,
+    metrics: p.metrics.map((m) => ({ key: m.key, label: m.label, value: m.value })),
+  };
+  try { localStorage.setItem(DEVICE_SYNC_KEY, JSON.stringify(store)); } catch { /* noop */ }
+  return store;
+}
+
+export function DeviceSyncSheet({ open, onClose, onImported }) {
+  const [provider, setProvider] = useState(null); // 'apple' | 'google'
+  const [consent, setConsent] = useState(false);
+  const [store, setStore] = useState(() => readDeviceStore());
+  useEffect(() => {
+    if (open) { setProvider(null); setConsent(false); setStore(readDeviceStore()); }
+  }, [open]);
+  const p = provider ? DEVICE_PROVIDERS[provider] : null;
+  const imported = Object.values(store);
+  const doImport = () => {
+    if (!p || !consent) return;
+    const next = importDeviceSnapshot(p.id);
+    setStore(next);
+    setProvider(null); setConsent(false);
+    onImported?.(Object.values(next).length);
+  };
+  const footer = p ? (
+    <>
+      <Btn onClick={() => setProvider(null)}>Back</Btn>
+      <Btn variant="primary" icon={Download} onClick={doImport} disabled={!consent}>Import to my Passport</Btn>
+    </>
+  ) : (
+    <Btn onClick={onClose} style={{ marginLeft: 'auto' }}>Done</Btn>
+  );
+  return (
+    <AdaptiveOverlay
+      open={open}
+      onClose={onClose}
+      size="md"
+      title="Sync health data from device"
+      ariaLabel="Sync health data from device"
+      footer={footer}
+    >
+      <div className="col gap-3" style={{ paddingTop: 4 }}>
+        <div className="ds-badge" style={{ alignSelf: 'flex-start' }}><Sparkles size={12} /> Simulated · Demo data</div>
+        <p className="tiny muted" style={{ lineHeight: 1.55, margin: 0 }}>
+          A safe preview of importing wearable data. No real health accounts, no sign-in, no background sync — nothing leaves this device,
+          and nothing is shared with LUCA. All figures below are synthetic demo values.
+        </p>
+
+        {!p ? (
+          <>
+            <div className="col gap-2">
+              <button type="button" className="ds-opt" aria-pressed={false} onClick={() => setProvider('apple')}>
+                <span className="hp-acc-ic"><Smartphone size={18} /></span>
+                <span className="hp-ar-tt"><span className="hp-ar-title">Apple Health — Demo</span>
+                  <span className="hp-ar-sub">Preview simulated Apple Health metrics</span></span>
+                <ChevronRight size={18} className="muted" aria-hidden="true" />
+              </button>
+              <button type="button" className="ds-opt" aria-pressed={false} onClick={() => setProvider('google')}>
+                <span className="hp-acc-ic"><Activity size={18} /></span>
+                <span className="hp-ar-tt"><span className="hp-ar-title">Google Health / Fitbit — Demo</span>
+                  <span className="hp-ar-sub">Preview simulated Google Health / Fitbit metrics</span></span>
+                <ChevronRight size={18} className="muted" aria-hidden="true" />
+              </button>
+            </div>
+
+            <div className="tiny f6" style={{ color: 'var(--muted)', marginTop: 6 }}>Roadmap — not available yet</div>
+            <div className="col gap-2">
+              <button type="button" className="ds-opt" disabled aria-disabled="true">
+                <span className="hp-acc-ic" style={{ background: 'var(--surface-2,#f4faf7)', color: 'var(--muted)' }}><Activity size={18} /></span>
+                <span className="hp-ar-tt"><span className="hp-ar-title">Connect Google Health — setup required</span>
+                  <span className="hp-ar-sub">Live connection is on the roadmap</span></span>
+              </button>
+              <button type="button" className="ds-opt" disabled aria-disabled="true">
+                <span className="hp-acc-ic" style={{ background: 'var(--surface-2,#f4faf7)', color: 'var(--muted)' }}><Smartphone size={18} /></span>
+                <span className="hp-ar-tt"><span className="hp-ar-title">Connect Apple Health — native app required</span>
+                  <span className="hp-ar-sub">Live connection is on the roadmap</span></span>
+              </button>
+            </div>
+
+            {imported.length > 0 && (
+              <div className="card-low" style={{ padding: '12px 14px', borderRadius: 12, marginTop: 4 }}>
+                <div className="row gap-2" style={{ marginBottom: 6 }}>
+                  <Lock size={13} className="t-teal" />
+                  <span className="tiny f6" style={{ color: 'var(--ink)' }}>Imported · kept private on this device</span>
+                </div>
+                <div className="tiny muted" style={{ lineHeight: 1.5 }}>
+                  {imported.map((r) => r.source).join(' · ')} — not shared with LUCA.
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="f6" style={{ color: 'var(--ink)' }}>Import preview · {p.demoTag}</div>
+            <div className="tiny muted" style={{ marginTop: -4 }}>Last sync {fmtShort(p.lastSync)} · source {p.demoTag}</div>
+            <div className="card-low" style={{ padding: '4px 14px', borderRadius: 12 }}>
+              {p.metrics.map((m) => (
+                <div key={m.key} className="ds-metric">
+                  <m.icon size={16} className="t-teal" />
+                  <span className="small" style={{ flex: 1, color: 'var(--ink)' }}>{m.label}</span>
+                  <span className="small f6" style={{ color: 'var(--ink)' }}>{m.value}</span>
+                </div>
+              ))}
+            </div>
+            <label className="ds-consent">
+              <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
+              <span className="tiny" style={{ color: 'var(--ink)', lineHeight: 1.5 }}>
+                I understand this is <strong>simulated demo data</strong>. Import it privately to my Passport on this device only —
+                it will not be shared with LUCA or anyone else unless I choose to.
+              </span>
+            </label>
+          </>
+        )}
+      </div>
+    </AdaptiveOverlay>
+  );
+}
+
+export function PassportActions({ go }) {
   const { startRetake, setExploreFilter } = useApp();
   const [showAdd, setShowAdd] = useState(false);
+  const [showDeviceSync, setShowDeviceSync] = useState(false);
+  const [deviceCount, setDeviceCount] = useState(() => Object.keys(readDeviceStore()).length);
   const [docs, setDocs] = useState([]);
   const [loadingDocs, setLoadingDocs] = useState(true);
 
@@ -4948,65 +5181,97 @@ function PassportActions({ go }) {
 
   return (
     <div className="col gap-4">
-      <Card>
-        <SectionHead eyebrow="Your Sovereign Passport" title="Actions" />
-        <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: 12 }}>
-          <div className="card-low" style={{ padding: '14px', borderRadius: 14 }}>
-            <div className="row gap-2" style={{ marginBottom: 8 }}><Chip icon={Activity} tone="teal" sm /><span className="small f6">Update your intake</span></div>
-            <p className="tiny muted" style={{ marginBottom: 12, lineHeight: 1.5 }}>Your previous scores are saved. LUCA will notice what changed.</p>
-            <Btn variant="primary" icon={RefreshCw} onClick={() => startRetake?.()}>Update my Solaris intake</Btn>
-          </div>
-          <div className="card-low" style={{ padding: '14px', borderRadius: 14 }}>
-            <div className="row gap-2" style={{ marginBottom: 8 }}><Chip icon={FileText} tone="gold" sm /><span className="small f6">Add health data</span></div>
-            <p className="tiny muted" style={{ marginBottom: 12, lineHeight: 1.5 }}>Share labs, symptoms or results — LUCA adds an educational summary.</p>
-            <Btn variant={showAdd ? '' : 'primary'} icon={showAdd ? X : Plus} onClick={() => setShowAdd((s) => !s)}>{showAdd ? 'Close' : 'Add health data'}</Btn>
-          </div>
-          <div className="card-low" style={{ padding: '14px', borderRadius: 14 }}>
-            <div className="row gap-2" style={{ marginBottom: 8 }}><Chip icon={Stethoscope} tone="mint" sm /><span className="small f6">Book more tests</span></div>
-            <p className="tiny muted" style={{ marginBottom: 12, lineHeight: 1.5 }}>Explore lab panels and diagnostic screens matched to your journey.</p>
-            <Btn icon={Compass} onClick={bookMoreTests}>Book more tests</Btn>
-          </div>
-        </div>
+      {/* §1 — ONE compact accordion row. Collapsed by default on mobile. */}
+      <HpAccordion
+        id="hp-update"
+        icon={RefreshCw}
+        title="Update my Health Passport"
+        subtitle="Intake, health data, tests & device sync"
+        defaultOpen={!isMobileViewport()}
+      >
+        <div className="col gap-2" style={{ marginTop: 6 }}>
+          <button type="button" className="hp-actrow" onClick={() => startRetake?.()}>
+            <span className="hp-acc-ic"><Activity size={18} /></span>
+            <span className="hp-ar-tt"><span className="hp-ar-title">Update your intake</span>
+              <span className="hp-ar-sub">Your previous scores are saved. LUCA will notice what changed.</span></span>
+            <ChevronRight size={18} className="muted" aria-hidden="true" />
+          </button>
 
-        {showAdd && (
-          <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--line,#e3ece8)' }}>
-            <HealthDataUpload onSaved={loadDocs} />
-          </div>
-        )}
-      </Card>
+          <button type="button" className="hp-actrow" aria-expanded={showAdd} aria-controls="hp-add-body" onClick={() => setShowAdd((s) => !s)}>
+            <span className="hp-acc-ic" style={{ background: 'rgba(227,172,70,.14)', color: '#8a5a12' }}>{showAdd ? <X size={18} /> : <FileText size={18} />}</span>
+            <span className="hp-ar-tt"><span className="hp-ar-title">{showAdd ? 'Close add health data' : 'Add health data'}</span>
+              <span className="hp-ar-sub">Share labs, symptoms or results — LUCA adds an educational summary.</span></span>
+            {showAdd ? <ChevronDown size={18} className="muted" aria-hidden="true" /> : <Plus size={18} className="muted" aria-hidden="true" />}
+          </button>
+          {showAdd && (
+            <div id="hp-add-body" style={{ padding: '4px 2px 8px' }}>
+              <HealthDataUpload onSaved={loadDocs} />
+            </div>
+          )}
+
+          <button type="button" className="hp-actrow" onClick={bookMoreTests}>
+            <span className="hp-acc-ic" style={{ background: 'rgba(45,181,132,.14)', color: 'var(--teal-d,#0E5C57)' }}><Stethoscope size={18} /></span>
+            <span className="hp-ar-tt"><span className="hp-ar-title">Book more tests</span>
+              <span className="hp-ar-sub">Explore lab panels and diagnostic screens matched to your journey.</span></span>
+            <ChevronRight size={18} className="muted" aria-hidden="true" />
+          </button>
+
+          <button type="button" className="hp-actrow" onClick={() => setShowDeviceSync(true)}>
+            <span className="hp-acc-ic"><Smartphone size={18} /></span>
+            <span className="hp-ar-tt"><span className="hp-ar-title">Add or sync health data from device</span>
+              <span className="hp-ar-sub">Preview importing wearable data — simulated, private, never shared.{deviceCount > 0 ? ` ${deviceCount} imported.` : ''}</span></span>
+            <ChevronRight size={18} className="muted" aria-hidden="true" />
+          </button>
+        </div>
+      </HpAccordion>
+
+      <DeviceSyncSheet
+        open={showDeviceSync}
+        onClose={() => setShowDeviceSync(false)}
+        onImported={(n) => setDeviceCount(n)}
+      />
 
       <FoundationalHealthSection />
 
       <IntakeFormsSection />
 
-      <Card>
-        <SectionHead eyebrow="Shared with LUCA" title="My health documents" action={<Pill tone="gray">{docs.length}</Pill>} />
-        {loadingDocs ? (
-          <CardSkeleton rows={2} />
-        ) : docs.length === 0 ? (
-          <Empty icon={FileText} title="Nothing shared yet" sub="Use “Add health data” above to share labs, symptoms or results. LUCA keeps a warm, educational summary here." />
-        ) : (
-          <div className="col gap-3">
-            {docs.map((d) => (
-              <div key={d.id} className="card-low" style={{ padding: '13px 15px', borderRadius: 12 }}>
-                <div className="between" style={{ alignItems: 'flex-start', gap: 10 }}>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div className="row gap-2" style={{ marginBottom: 4 }}>
-                      <FileText size={14} className="t-teal" />
-                      <span className="small f6" style={{ color: 'var(--ink)' }}>{d.filename || (d.doc_type === 'note' ? 'Shared note' : 'Health data')}</span>
-                      {d.provenance_level != null && <ProvenanceBadge level={d.provenance_level} />}
-                      <span className="tiny muted2">· {fmtShort(d.observed_at || d.created_at)}</span>
+      {/* §3 — Shared with LUCA as ONE compact accordion. Collapsed by default when empty. */}
+      <HpAccordion
+        id="hp-shared"
+        icon={FileText}
+        title="Shared with LUCA"
+        subtitle="Health documents you've chosen to share"
+        badge={<Pill tone="gray">{docs.length}</Pill>}
+        defaultOpen={docs.length > 0 && !isMobileViewport()}
+      >
+        <div style={{ marginTop: 6 }}>
+          {loadingDocs ? (
+            <CardSkeleton rows={2} />
+          ) : docs.length === 0 ? (
+            <Empty icon={FileText} title="Nothing shared yet" sub="Use “Add health data” above to share labs, symptoms or results. LUCA keeps a warm, educational summary here." />
+          ) : (
+            <div className="col gap-3">
+              {docs.map((d) => (
+                <div key={d.id} className="card-low" style={{ padding: '13px 15px', borderRadius: 12 }}>
+                  <div className="between" style={{ alignItems: 'flex-start', gap: 10 }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div className="row gap-2" style={{ marginBottom: 4 }}>
+                        <FileText size={14} className="t-teal" />
+                        <span className="small f6" style={{ color: 'var(--ink)' }}>{d.filename || (d.doc_type === 'note' ? 'Shared note' : 'Health data')}</span>
+                        {d.provenance_level != null && <ProvenanceBadge level={d.provenance_level} />}
+                        <span className="tiny muted2">· {fmtShort(d.observed_at || d.created_at)}</span>
+                      </div>
+                      {d.description && <div className="tiny muted" style={{ marginBottom: 6 }}>{d.description}</div>}
+                      {d.luca_summary && <div className="small" style={{ color: 'var(--ink)', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{d.luca_summary}</div>}
                     </div>
-                    {d.description && <div className="tiny muted" style={{ marginBottom: 6 }}>{d.description}</div>}
-                    {d.luca_summary && <div className="small" style={{ color: 'var(--ink)', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{d.luca_summary}</div>}
+                    <button onClick={() => removeDoc(d.id)} aria-label="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted,#6b807a)', flex: 'none' }}><Trash2 size={15} /></button>
                   </div>
-                  <button onClick={() => removeDoc(d.id)} aria-label="Delete" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted,#6b807a)', flex: 'none' }}><Trash2 size={15} /></button>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      </HpAccordion>
     </div>
   );
 }
@@ -5491,7 +5756,7 @@ function SetToggle({ label, hint, checked, onChange, disabled }) {
   );
 }
 
-function SettingsPage({ user, go, sub }) {
+export function SettingsPage({ user, go, sub }) {
   const { refreshUser, logout } = useApp();
   const active = SUBTABS.account.tabs.includes(sub) ? sub : SUBTABS.account.def;
   const [profile, setProfile] = useState(null);
@@ -5609,7 +5874,7 @@ function SettingsPage({ user, go, sub }) {
           { id: 'preferences', label: 'Preferences', icon: Settings },
           { id: 'notifications', label: 'Notifications', icon: Bell },
           { id: 'security', label: 'Security', icon: Lock },
-          { id: 'privacy', label: 'Privacy & Data', icon: ShieldCheck },
+          { id: 'privacy', label: 'Privacy & Sovereignty', icon: ShieldCheck },
         ]}
       />
 
@@ -5726,7 +5991,8 @@ function SettingsPage({ user, go, sub }) {
       )}
 
       {active === 'privacy' && (
-        <Card style={{ maxWidth: 640 }}>
+        <div className="col gap-4" style={{ maxWidth: 640 }}>
+        <Card>
           {loadingProfile ? <CardSkeleton rows={3} /> : (
             <>
               <SetToggle label="Privacy consent" hint="Store and process my health data to power my passport." checked={p.consent_privacy ?? false} onChange={(v) => setProfile({ ...p, consent_privacy: v })} />
@@ -5743,6 +6009,9 @@ function SettingsPage({ user, go, sub }) {
             </>
           )}
         </Card>
+        {/* §4 — Sovereignty card, relocated here from the Health Passport. */}
+        <SovereigntyCard />
+        </div>
       )}
     </div>
   );
