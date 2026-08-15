@@ -13,6 +13,7 @@ import React from 'react';
 import { MapPin, Navigation } from 'lucide-react';
 import RatingStars from './RatingStars.jsx';
 import ProviderBadges, { TypeBadge } from './ProviderBadges.jsx';
+import { providerCoverSm, providerAlt, isSimulated } from '../../lib/providerMedia.js';
 
 function fmtDistance(km) {
   if (km == null) return null;
@@ -31,9 +32,10 @@ function listingMeta(p) {
   return (obj && typeof obj === 'object' && obj.meta) ? obj.meta : {};
 }
 
-export default function ProviderListingCard({ provider, onOpen, onHover, active }) {
+export default function ProviderListingCard({ provider, onOpen, onHover, active, priority = false }) {
   const p = provider;
-  const cover = p.cover_photo_url || p.profile_photo_url;
+  const cover = providerCoverSm(p);
+  const sim = isSimulated(p);
   const dist = fmtDistance(p.distance_km);
   const meta = listingMeta(p);
   const modality = MODALITY_LABEL[meta.modality];
@@ -51,9 +53,11 @@ export default function ProviderListingCard({ provider, onOpen, onHover, active 
     >
       <div className="plc-media">
         {cover
-          ? <img src={cover} alt={p.business_name} loading="lazy" />
+          ? <img src={cover} alt={providerAlt(p, 'cover')} width="480" height="270"
+                 loading={priority ? 'eager' : 'lazy'} {...(priority ? { fetchPriority: 'high' } : {})} />
           : <div className="plc-noimg"><MapPin size={22} /></div>}
         {dist && <span className="plc-dist"><Navigation size={11} /> {dist}</span>}
+        {sim && <span className="plc-sim" title="Simulated demo profile">Demo</span>}
       </div>
 
       <div className="plc-body">
@@ -100,6 +104,9 @@ const CSS = `
   color:#3a2c05;font-size:10px;font-weight:800;padding:3px 8px;border-radius:999px;letter-spacing:.02em}
 .luca .plc-dist{position:absolute;bottom:8px;right:8px;background:rgba(2,32,42,.78);color:#fff;font-size:10px;
   font-weight:700;padding:3px 7px;border-radius:999px;display:inline-flex;align-items:center;gap:3px}
+.luca .plc-sim{position:absolute;top:8px;left:8px;background:rgba(10,43,41,.82);color:var(--mint-2,#7FDBB6);
+  font-size:9.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:999px;
+  border:1px solid rgba(127,219,182,.45)}
 .luca .plc-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px}
 .luca .plc-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
 .luca .plc-name{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:16px;color:var(--ink);

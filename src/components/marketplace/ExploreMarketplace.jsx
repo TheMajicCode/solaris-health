@@ -383,13 +383,14 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
     </div>
   ) : (
     <div className="exm-cards">
-      {visibleProviders.map((p) => (
+      {visibleProviders.map((p, i) => (
         <div key={p.id} data-pid={p.id}>
           <ProviderListingCard
             provider={p}
             onOpen={handleCardOpen}
             onHover={setHoverId}
             active={hoverId === p.id || activeId === p.id}
+            priority={i === 0}
           />
         </div>
       ))}
@@ -682,13 +683,14 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
                   </div>
                 ) : (
                   <div className="exm-cards">
-                    {visibleProviders.map((p) => (
+                    {visibleProviders.map((p, i) => (
                       <div key={p.id} data-pid={p.id} className="exm-mlist-item">
                         <ProviderListingCard
                           provider={p}
                           onOpen={handleCardOpen}
                           onHover={setHoverId}
                           active={hoverId === p.id || activeId === p.id}
+                          priority={i === 0}
                         />
                         <button type="button" className="exm-showmap" onClick={() => showOnMap(p)}>
                           <MapPin size={14} /> Show on map

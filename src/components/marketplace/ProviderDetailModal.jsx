@@ -18,6 +18,7 @@ import {
   X, MapPin, Phone, Globe, Mail, Clock, ChevronLeft, ChevronRight, Loader2,
   Award, ShieldCheck, BadgeCheck, Check, Star, ExternalLink, Tag, CalendarPlus,
 } from 'lucide-react';
+import { providerGallery, providerProfileSm, providerAlt, isSimulated } from '../../lib/providerMedia.js';
 import BookingFlow from '../booking/BookingFlow.jsx';
 import { MapContainer, TileLayer, Marker } from 'react-leaflet';
 import L from 'leaflet';
@@ -141,10 +142,14 @@ export default function ProviderDetailModal({ providerId, user, onClose, onUpdat
   };
 
   const p = data?.provider;
+  // Gallery: real backend photos first (when seeded), then the local synthetic
+  // demo media (cover + secondary shots + portrait). All local URLs are
+  // root-relative — nothing hotlinks at runtime.
   const photos = data
-    ? [p.cover_photo_url, ...(data.photos || []).map((x) => x.photo_url)]
-        .filter((v, i, a) => v && a.indexOf(v) === i)
+    ? providerGallery(p, [p.cover_photo_url, ...(data.photos || []).map((x) => x.photo_url)])
     : [];
+  const sim = p ? isSimulated(p) : false;
+  const portrait = p ? providerProfileSm(p) : null;
   const accent = p ? typeMeta(p.provider_type).accent : 'teal';
   let hours = null;
   try { hours = p?.hours_of_operation ? (typeof p.hours_of_operation === 'string' ? JSON.parse(p.hours_of_operation) : p.hours_of_operation) : null; } catch { hours = null; }
@@ -170,14 +175,15 @@ export default function ProviderDetailModal({ providerId, user, onClose, onUpdat
             <div className="pdm-gallery">
               {photos.length > 0 ? (
                 <>
-                  <img src={photos[slide]} alt={p.business_name} className="pdm-gimg" />
+                  <img src={photos[slide]} alt={providerAlt(p, slide === 0 ? 'cover' : 'gallery')} className="pdm-gimg"
+                       width="1100" height="619" loading="eager" fetchPriority="high" />
                   {photos.length > 1 && (
                     <>
-                      <button className="pdm-nav pdm-prev" onClick={() => setSlide((s) => (s - 1 + photos.length) % photos.length)}><ChevronLeft size={20} /></button>
-                      <button className="pdm-nav pdm-next" onClick={() => setSlide((s) => (s + 1) % photos.length)}><ChevronRight size={20} /></button>
-                      <div className="pdm-dots">
+                      <button className="pdm-nav pdm-prev" aria-label="Previous photo" onClick={() => setSlide((s) => (s - 1 + photos.length) % photos.length)}><ChevronLeft size={20} /></button>
+                      <button className="pdm-nav pdm-next" aria-label="Next photo" onClick={() => setSlide((s) => (s + 1) % photos.length)}><ChevronRight size={20} /></button>
+                      <div className="pdm-dots" role="tablist" aria-label="Photo gallery">
                         {photos.map((_, i) => (
-                          <button key={i} className={`pdm-dot${i === slide ? ' on' : ''}`} onClick={() => setSlide(i)} />
+                          <button key={i} className={`pdm-dot${i === slide ? ' on' : ''}`} aria-label={`Show photo ${i + 1} of ${photos.length}`} aria-selected={i === slide} role="tab" onClick={() => setSlide(i)} />
                         ))}
                       </div>
                     </>
@@ -185,10 +191,15 @@ export default function ProviderDetailModal({ providerId, user, onClose, onUpdat
                 </>
               ) : <div className="pdm-gnoimg"><MapPin size={32} /></div>}
               {p.featured && <span className="pdm-feat"><Award size={13} /> Featured</span>}
+              {sim && <span className="pdm-sim" title="Simulated demo profile — not a real business">Demo profile</span>}
             </div>
 
             {/* Header */}
             <div className="pdm-head">
+              {portrait && (
+                <img className="pdm-avatar" src={portrait} alt={providerAlt(p, 'portrait')}
+                     width="72" height="90" loading="lazy" />
+              )}
               <div className="pdm-head-l">
                 <TypeBadge type={p.provider_type} />
                 <h2 className="pdm-name">{p.business_name}</h2>
@@ -420,7 +431,13 @@ const CSS = `
 .luca .pdm-dot.on{background:#fff;width:20px;border-radius:4px}
 .luca .pdm-feat{position:absolute;top:14px;left:14px;display:inline-flex;align-items:center;gap:4px;
   background:linear-gradient(135deg,var(--gold),var(--gold-2));color:#3a2c05;font-size:11px;font-weight:800;padding:4px 10px;border-radius:999px}
-.luca .pdm-head{padding:18px 24px 0}
+.luca .pdm-sim{position:absolute;bottom:14px;left:14px;display:inline-flex;align-items:center;gap:4px;
+  background:rgba(10,43,41,.86);color:var(--mint-2,#7FDBB6);font-size:11px;font-weight:800;letter-spacing:.03em;
+  padding:4px 11px;border-radius:999px;border:1px solid rgba(127,219,182,.5)}
+.luca .pdm-head{padding:18px 24px 0;display:flex;gap:14px;align-items:flex-start}
+.luca .pdm-avatar{flex:none;width:72px;height:90px;border-radius:14px;object-fit:cover;
+  border:2px solid var(--mint,#2DB584);background:var(--surface-2)}
+.luca .pdm-head-l{flex:1;min-width:0}
 .luca .pdm-name{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:25px;margin:8px 0 8px;color:var(--ink);line-height:1.15}
 .luca .pdm-rate{display:flex;align-items:center;gap:8px;margin-bottom:10px}
 .luca .pdm-price{font-weight:700;color:var(--teal-d);font-family:'IBM Plex Mono',monospace}

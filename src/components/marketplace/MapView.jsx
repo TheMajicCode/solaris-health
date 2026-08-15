@@ -22,6 +22,7 @@ import 'leaflet/dist/leaflet.css';
 import { LocateFixed, X, MapPin, Globe, Video, ArrowRight } from 'lucide-react';
 import { typeMeta, TypeBadge } from './ProviderBadges.jsx';
 import RatingStars from './RatingStars.jsx';
+import { providerCoverSm, providerAlt } from '../../lib/providerMedia.js';
 
 const SV_CENTER = [13.6929, -89.2182]; // San Salvador
 
@@ -78,7 +79,7 @@ function MapProviderCard({ provider, onOpen, onBook, onClose }) {
   const langs = Array.isArray(meta.languages) ? meta.languages : [];
   const modality = MODALITY_LABEL[meta.modality] || null;
   const loc = [provider.city, provider.region].filter(Boolean).join(', ');
-  const cover = provider.cover_photo_url || provider.profile_photo_url;
+  const cover = providerCoverSm(provider);
   // Keep any pointer/touch inside the card from bubbling to the Leaflet map
   // beneath it (the card is a sibling overlay, but stopping propagation also
   // guards synthetic click/tap sequences from landing on the marker underneath).
@@ -113,7 +114,7 @@ function MapProviderCard({ provider, onOpen, onBook, onClose }) {
       ><X size={16} /></button>
       <div className="mv-card-media">
         {cover
-          ? <img src={cover} alt={provider.business_name || 'Provider'} loading="lazy" />
+          ? <img src={cover} alt={providerAlt(provider, 'cover')} loading="lazy" width="280" height="96" />
           : <div className="mv-card-noimg"><MapPin size={20} /></div>}
       </div>
       <div className="mv-card-head">
@@ -191,7 +192,7 @@ function MarkerPreview({ map, provider, onOpen, onBook, onClose }) {
   const meta = readMeta(provider);
   const modality = MODALITY_LABEL[meta.modality] || null;
   const loc = [provider.city, provider.region].filter(Boolean).join(', ');
-  const cover = provider.cover_photo_url || provider.profile_photo_url;
+  const cover = providerCoverSm(provider);
   const size = map.getSize();
   const vw = size?.x || 320;
   const CW = Math.min(280, vw - 24);
@@ -229,7 +230,7 @@ function MarkerPreview({ map, provider, onOpen, onBook, onClose }) {
       >
         <div className="mv-prev-media">
           {cover
-            ? <img src={cover} alt={provider.business_name || 'Provider'} loading="lazy" />
+            ? <img src={cover} alt={providerAlt(provider, 'cover')} loading="lazy" width="72" height="72" />
             : <div className="mv-prev-noimg"><MapPin size={18} /></div>}
         </div>
         <div className="mv-prev-info">

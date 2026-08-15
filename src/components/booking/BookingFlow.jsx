@@ -22,6 +22,7 @@ import { api } from '../../lib/api.js';
 import TimeSlotPicker from './TimeSlotPicker.jsx';
 import AdaptiveOverlay from '../ui/AdaptiveOverlay.jsx';
 import { fmtTime, fmtDateLong, downloadICS, tzLabel } from '../../lib/calendar-utils.js';
+import { providerCoverSm, providerAlt } from '../../lib/providerMedia.js';
 
 const STEPS = ['Service', 'Date & Time', 'Details', 'Review', 'Done'];
 
@@ -177,10 +178,16 @@ export default function BookingFlow({ providerId, provider: provIn, services: sv
             {/* header */}
             {step < 4 && provider && (
               <div className="bkf-prov">
-                <div className="bkf-prov-name">{provider.business_name}</div>
-                {(provider.address || provider.city) && (
-                  <div className="bkf-prov-loc"><MapPin size={12} /> {[provider.address, provider.city].filter(Boolean).join(', ')}</div>
+                {providerCoverSm(provider) && (
+                  <img className="bkf-prov-img" src={providerCoverSm(provider)} alt={providerAlt(provider, 'cover')}
+                       width="56" height="56" loading="lazy" />
                 )}
+                <div className="bkf-prov-txt">
+                  <div className="bkf-prov-name">{provider.business_name}</div>
+                  {(provider.address || provider.city) && (
+                    <div className="bkf-prov-loc"><MapPin size={12} /> {[provider.address, provider.city].filter(Boolean).join(', ')}</div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -274,6 +281,12 @@ export default function BookingFlow({ providerId, provider: provIn, services: sv
                     : "You'll receive a confirmation once the provider approves your request."}
                 </p>
                 <div className="bkf-done-card">
+                  {provider && providerCoverSm(provider) && (
+                    <div className="bkf-done-prov">
+                      <img className="bkf-prov-img" src={providerCoverSm(provider)} alt={providerAlt(provider, 'cover')} width="44" height="44" loading="lazy" />
+                      <span>{provider.business_name}</span>
+                    </div>
+                  )}
                   <div><Calendar size={14} /> {fmtDateLong(result.booking.booking_date)}</div>
                   <div><Clock size={14} /> {fmtTime(result.booking.start_time)} – {fmtTime(result.booking.end_time)} ({tz})</div>
                   <div><Tag size={14} /> {service?.service_name} · {provider?.business_name}</div>
@@ -337,7 +350,11 @@ const CSS = `
 .luca .bkf-body{padding:18px 22px;overflow:auto}
 .luca .bkf-loading{padding:50px;display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--muted)}
 .luca .bkf-spin{animation:spin 1s linear infinite}
-.luca .bkf-prov{margin-bottom:14px}
+.luca .bkf-prov{margin-bottom:14px;display:flex;align-items:center;gap:12px}
+.luca .bkf-prov-img{flex:none;width:56px;height:56px;border-radius:12px;object-fit:cover;background:var(--surface-2);border:1px solid var(--line)}
+.luca .bkf-prov-txt{min-width:0}
+.luca .bkf-done-prov{display:flex;align-items:center;gap:9px;font-weight:700;color:var(--ink);margin-bottom:4px}
+.luca .bkf-done-prov .bkf-prov-img{width:44px;height:44px;border-radius:10px}
 .luca .bkf-prov-name{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;color:var(--ink)}
 .luca .bkf-prov-loc{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);margin-top:2px}
 .luca .bkf-h{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:700;color:var(--ink);margin:0 0 14px;font-family:'Space Grotesk',sans-serif}

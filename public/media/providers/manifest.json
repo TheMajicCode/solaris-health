@@ -1,0 +1,944 @@
+{
+ "generator": "Solaris Node C marketplace media completion",
+ "asset_source": "synthetic (AI-generated via gemini-2.5-flash-image)",
+ "attribution_required": false,
+ "note": "All assets synthetic and non-identifying. Every provider using them is flagged isSimulated() and labeled 'Demo profile' in the UI.",
+ "assets": [
+  {
+   "media_key": "aguas-termales-spa",
+   "provider_id": "8d20d1e3-9a44-482d-a2ea-f4895536a245",
+   "provider_name": "Aguas Termales Spa",
+   "asset": "cover",
+   "local_files": [
+    "public/media/providers/aguas-termales-spa/cover.webp",
+    "public/media/providers/aguas-termales-spa/cover-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "aguas-termales-spa",
+   "provider_id": "8d20d1e3-9a44-482d-a2ea-f4895536a245",
+   "provider_name": "Aguas Termales Spa",
+   "asset": "g1",
+   "local_files": [
+    "public/media/providers/aguas-termales-spa/g1.webp",
+    "public/media/providers/aguas-termales-spa/g1-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "aguas-termales-spa",
+   "provider_id": "8d20d1e3-9a44-482d-a2ea-f4895536a245",
+   "provider_name": "Aguas Termales Spa",
+   "asset": "g2",
+   "local_files": [
+    "public/media/providers/aguas-termales-spa/g2.webp",
+    "public/media/providers/aguas-termales-spa/g2-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "sonrisa-dental-studio",
+   "provider_id": "58bb7334-14a7-488e-a640-965b8d7ae62a",
+   "provider_name": "Sonrisa Dental Studio",
+   "asset": "cover",
+   "local_files": [
+    "public/media/providers/sonrisa-dental-studio/cover.webp",
+    "public/media/providers/sonrisa-dental-studio/cover-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "sonrisa-dental-studio",
+   "provider_id": "58bb7334-14a7-488e-a640-965b8d7ae62a",
+   "provider_name": "Sonrisa Dental Studio",
+   "asset": "g1",
+   "local_files": [
+    "public/media/providers/sonrisa-dental-studio/g1.webp",
+    "public/media/providers/sonrisa-dental-studio/g1-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "sonrisa-dental-studio",
+   "provider_id": "58bb7334-14a7-488e-a640-965b8d7ae62a",
+   "provider_name": "Sonrisa Dental Studio",
+   "asset": "g2",
+   "local_files": [
+    "public/media/providers/sonrisa-dental-studio/g2.webp",
+    "public/media/providers/sonrisa-dental-studio/g2-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "espacio-calma-psicologia",
+   "provider_id": "38429428-e2de-48c5-8f86-f1ad7abfa6b9",
+   "provider_name": "Espacio Calma Psicolog\u00eda",
+   "asset": "cover",
+   "local_files": [
+    "public/media/providers/espacio-calma-psicologia/cover.webp",
+    "public/media/providers/espacio-calma-psicologia/cover-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "espacio-calma-psicologia",
+   "provider_id": "38429428-e2de-48c5-8f86-f1ad7abfa6b9",
+   "provider_name": "Espacio Calma Psicolog\u00eda",
+   "asset": "portrait",
+   "local_files": [
+    "public/media/providers/espacio-calma-psicologia/portrait.webp",
+    "public/media/providers/espacio-calma-psicologia/portrait-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "espacio-calma-psicologia",
+   "provider_id": "38429428-e2de-48c5-8f86-f1ad7abfa6b9",
+   "provider_name": "Espacio Calma Psicolog\u00eda",
+   "asset": "g1",
+   "local_files": [
+    "public/media/providers/espacio-calma-psicologia/g1.webp",
+    "public/media/providers/espacio-calma-psicologia/g1-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "dr-mateo-reyes",
+   "provider_id": "b75a1c72-4247-41e8-b363-cebd9c823fde",
+   "provider_name": "Dr. Mateo Reyes \u2014 Integrative Wellness",
+   "asset": "cover",
+   "local_files": [
+    "public/media/providers/dr-mateo-reyes/cover.webp",
+    "public/media/providers/dr-mateo-reyes/cover-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "dr-mateo-reyes",
+   "provider_id": "b75a1c72-4247-41e8-b363-cebd9c823fde",
+   "provider_name": "Dr. Mateo Reyes \u2014 Integrative Wellness",
+   "asset": "portrait",
+   "local_files": [
+    "public/media/providers/dr-mateo-reyes/portrait.webp",
+    "public/media/providers/dr-mateo-reyes/portrait-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "dr-mateo-reyes",
+   "provider_id": "b75a1c72-4247-41e8-b363-cebd9c823fde",
+   "provider_name": "Dr. Mateo Reyes \u2014 Integrative Wellness",
+   "asset": "g1",
+   "local_files": [
+    "public/media/providers/dr-mateo-reyes/g1.webp",
+    "public/media/providers/dr-mateo-reyes/g1-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "raices-wellness-studio",
+   "provider_id": "6ecd4a48-3484-4d08-b13c-c5d24ecfc65a",
+   "provider_name": "Ra\u00edces Wellness Studio",
+   "asset": "cover",
+   "local_files": [
+    "public/media/providers/raices-wellness-studio/cover.webp",
+    "public/media/providers/raices-wellness-studio/cover-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "raices-wellness-studio",
+   "provider_id": "6ecd4a48-3484-4d08-b13c-c5d24ecfc65a",
+   "provider_name": "Ra\u00edces Wellness Studio",
+   "asset": "g1",
+   "local_files": [
+    "public/media/providers/raices-wellness-studio/g1.webp",
+    "public/media/providers/raices-wellness-studio/g1-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "raices-wellness-studio",
+   "provider_id": "6ecd4a48-3484-4d08-b13c-c5d24ecfc65a",
+   "provider_name": "Ra\u00edces Wellness Studio",
+   "asset": "g2",
+   "local_files": [
+    "public/media/providers/raices-wellness-studio/g2.webp",
+    "public/media/providers/raices-wellness-studio/g2-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "nutrir-vida",
+   "provider_id": "46e69b84-195c-431f-8e87-2daca63bd8ac",
+   "provider_name": "Nutrir Vida",
+   "asset": "cover",
+   "local_files": [
+    "public/media/providers/nutrir-vida/cover.webp",
+    "public/media/providers/nutrir-vida/cover-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "nutrir-vida",
+   "provider_id": "46e69b84-195c-431f-8e87-2daca63bd8ac",
+   "provider_name": "Nutrir Vida",
+   "asset": "portrait",
+   "local_files": [
+    "public/media/providers/nutrir-vida/portrait.webp",
+    "public/media/providers/nutrir-vida/portrait-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "nutrir-vida",
+   "provider_id": "46e69b84-195c-431f-8e87-2daca63bd8ac",
+   "provider_name": "Nutrir Vida",
+   "asset": "g1",
+   "local_files": [
+    "public/media/providers/nutrir-vida/g1.webp",
+    "public/media/providers/nutrir-vida/g1-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "serenidad-spa",
+   "provider_id": "bd8f4f59-06bb-45d0-8bd9-5c88011b31e4",
+   "provider_name": "Serenidad Spa & Ba\u00f1os",
+   "asset": "cover",
+   "local_files": [
+    "public/media/providers/serenidad-spa/cover.webp",
+    "public/media/providers/serenidad-spa/cover-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "serenidad-spa",
+   "provider_id": "bd8f4f59-06bb-45d0-8bd9-5c88011b31e4",
+   "provider_name": "Serenidad Spa & Ba\u00f1os",
+   "asset": "g1",
+   "local_files": [
+    "public/media/providers/serenidad-spa/g1.webp",
+    "public/media/providers/serenidad-spa/g1-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "taller-respira",
+   "provider_id": "463387e1-8faa-4a3b-9cef-ed775667628a",
+   "provider_name": "Taller Respira \u2014 Breathwork",
+   "asset": "cover",
+   "local_files": [
+    "public/media/providers/taller-respira/cover.webp",
+    "public/media/providers/taller-respira/cover-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "taller-respira",
+   "provider_id": "463387e1-8faa-4a3b-9cef-ed775667628a",
+   "provider_name": "Taller Respira \u2014 Breathwork",
+   "asset": "g1",
+   "local_files": [
+    "public/media/providers/taller-respira/g1.webp",
+    "public/media/providers/taller-respira/g1-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "clinica-vida-integral",
+   "provider_id": "9036d652-6fbd-4ce8-9568-2103a03fdd1d",
+   "provider_name": "Cl\u00ednica Vida Integral",
+   "asset": "cover",
+   "local_files": [
+    "public/media/providers/clinica-vida-integral/cover.webp",
+    "public/media/providers/clinica-vida-integral/cover-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "clinica-vida-integral",
+   "provider_id": "9036d652-6fbd-4ce8-9568-2103a03fdd1d",
+   "provider_name": "Cl\u00ednica Vida Integral",
+   "asset": "portrait",
+   "local_files": [
+    "public/media/providers/clinica-vida-integral/portrait.webp",
+    "public/media/providers/clinica-vida-integral/portrait-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "clinica-vida-integral",
+   "provider_id": "9036d652-6fbd-4ce8-9568-2103a03fdd1d",
+   "provider_name": "Cl\u00ednica Vida Integral",
+   "asset": "g1",
+   "local_files": [
+    "public/media/providers/clinica-vida-integral/g1.webp",
+    "public/media/providers/clinica-vida-integral/g1-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "fuerza-funcional-gym",
+   "provider_id": "6e2d9727-1d3c-454f-8f8e-f7100fc1b8ee",
+   "provider_name": "Fuerza Funcional Gym",
+   "asset": "cover",
+   "local_files": [
+    "public/media/providers/fuerza-funcional-gym/cover.webp",
+    "public/media/providers/fuerza-funcional-gym/cover-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "fuerza-funcional-gym",
+   "provider_id": "6e2d9727-1d3c-454f-8f8e-f7100fc1b8ee",
+   "provider_name": "Fuerza Funcional Gym",
+   "asset": "g1",
+   "local_files": [
+    "public/media/providers/fuerza-funcional-gym/g1.webp",
+    "public/media/providers/fuerza-funcional-gym/g1-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "mindful-therapy-collective",
+   "provider_id": "6a02cd86-5344-45d1-9c51-15b30e5c9b0c",
+   "provider_name": "Mindful Therapy Collective",
+   "asset": "cover",
+   "local_files": [
+    "public/media/providers/mindful-therapy-collective/cover.webp",
+    "public/media/providers/mindful-therapy-collective/cover-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "mindful-therapy-collective",
+   "provider_id": "6a02cd86-5344-45d1-9c51-15b30e5c9b0c",
+   "provider_name": "Mindful Therapy Collective",
+   "asset": "portrait",
+   "local_files": [
+    "public/media/providers/mindful-therapy-collective/portrait.webp",
+    "public/media/providers/mindful-therapy-collective/portrait-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "mindful-therapy-collective",
+   "provider_id": "6a02cd86-5344-45d1-9c51-15b30e5c9b0c",
+   "provider_name": "Mindful Therapy Collective",
+   "asset": "g1",
+   "local_files": [
+    "public/media/providers/mindful-therapy-collective/g1.webp",
+    "public/media/providers/mindful-therapy-collective/g1-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "dentalcare-antigua",
+   "provider_id": "6dd62a63-218f-4978-81a1-b7a0e6e74a87",
+   "provider_name": "DentalCare Antigua",
+   "asset": "cover",
+   "local_files": [
+    "public/media/providers/dentalcare-antigua/cover.webp",
+    "public/media/providers/dentalcare-antigua/cover-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "dentalcare-antigua",
+   "provider_id": "6dd62a63-218f-4978-81a1-b7a0e6e74a87",
+   "provider_name": "DentalCare Antigua",
+   "asset": "g1",
+   "local_files": [
+    "public/media/providers/dentalcare-antigua/g1.webp",
+    "public/media/providers/dentalcare-antigua/g1-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "finca-el-roble",
+   "provider_id": "3b9eb081-e3a5-4078-a47d-121b3998bc4f",
+   "provider_name": "Finca Org\u00e1nica El Roble",
+   "asset": "cover",
+   "local_files": [
+    "public/media/providers/finca-el-roble/cover.webp",
+    "public/media/providers/finca-el-roble/cover-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "finca-el-roble",
+   "provider_id": "3b9eb081-e3a5-4078-a47d-121b3998bc4f",
+   "provider_name": "Finca Org\u00e1nica El Roble",
+   "asset": "g1",
+   "local_files": [
+    "public/media/providers/finca-el-roble/g1.webp",
+    "public/media/providers/finca-el-roble/g1-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "clinica-holistica-amanecer",
+   "provider_id": "b6636e91-3fde-46be-940e-bf6a2bd05700",
+   "provider_name": "Cl\u00ednica Hol\u00edstica Amanecer",
+   "asset": "cover",
+   "local_files": [
+    "public/media/providers/clinica-holistica-amanecer/cover.webp",
+    "public/media/providers/clinica-holistica-amanecer/cover-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "clinica-holistica-amanecer",
+   "provider_id": "b6636e91-3fde-46be-940e-bf6a2bd05700",
+   "provider_name": "Cl\u00ednica Hol\u00edstica Amanecer",
+   "asset": "g1",
+   "local_files": [
+    "public/media/providers/clinica-holistica-amanecer/g1.webp",
+    "public/media/providers/clinica-holistica-amanecer/g1-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "pura-vida-wellness",
+   "provider_id": "2d0d0680-65e3-4448-a0e4-a38870fb2c08",
+   "provider_name": "Pura Vida Wellness",
+   "asset": "cover",
+   "local_files": [
+    "public/media/providers/pura-vida-wellness/cover.webp",
+    "public/media/providers/pura-vida-wellness/cover-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "pura-vida-wellness",
+   "provider_id": "2d0d0680-65e3-4448-a0e4-a38870fb2c08",
+   "provider_name": "Pura Vida Wellness",
+   "asset": "g1",
+   "local_files": [
+    "public/media/providers/pura-vida-wellness/g1.webp",
+    "public/media/providers/pura-vida-wellness/g1-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "centro-medico-aurora",
+   "provider_id": "476fba40-5c3a-4b03-809c-54b19ac877a2",
+   "provider_name": "Centro M\u00e9dico Aurora",
+   "asset": "cover",
+   "local_files": [
+    "public/media/providers/centro-medico-aurora/cover.webp",
+    "public/media/providers/centro-medico-aurora/cover-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "centro-medico-aurora",
+   "provider_id": "476fba40-5c3a-4b03-809c-54b19ac877a2",
+   "provider_name": "Centro M\u00e9dico Aurora",
+   "asset": "portrait",
+   "local_files": [
+    "public/media/providers/centro-medico-aurora/portrait.webp",
+    "public/media/providers/centro-medico-aurora/portrait-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "centro-medico-aurora",
+   "provider_id": "476fba40-5c3a-4b03-809c-54b19ac877a2",
+   "provider_name": "Centro M\u00e9dico Aurora",
+   "asset": "g1",
+   "local_files": [
+    "public/media/providers/centro-medico-aurora/g1.webp",
+    "public/media/providers/centro-medico-aurora/g1-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "cocina-consciente",
+   "provider_id": "9f324be8-1557-4d26-9814-a8273defd629",
+   "provider_name": "Cocina Consciente Workshop",
+   "asset": "cover",
+   "local_files": [
+    "public/media/providers/cocina-consciente/cover.webp",
+    "public/media/providers/cocina-consciente/cover-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "cocina-consciente",
+   "provider_id": "9f324be8-1557-4d26-9814-a8273defd629",
+   "provider_name": "Cocina Consciente Workshop",
+   "asset": "g1",
+   "local_files": [
+    "public/media/providers/cocina-consciente/g1.webp",
+    "public/media/providers/cocina-consciente/g1-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "movimiento-studio",
+   "provider_id": "074c8999-08eb-4e6c-9e38-19a14c0d8319",
+   "provider_name": "Movimiento Studio",
+   "asset": "cover",
+   "local_files": [
+    "public/media/providers/movimiento-studio/cover.webp",
+    "public/media/providers/movimiento-studio/cover-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "movimiento-studio",
+   "provider_id": "074c8999-08eb-4e6c-9e38-19a14c0d8319",
+   "provider_name": "Movimiento Studio",
+   "asset": "g1",
+   "local_files": [
+    "public/media/providers/movimiento-studio/g1.webp",
+    "public/media/providers/movimiento-studio/g1-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "balance-nutricion",
+   "provider_id": "95f604ba-185f-436d-9f7d-66d133ab87a7",
+   "provider_name": "Balance Nutrici\u00f3n",
+   "asset": "cover",
+   "local_files": [
+    "public/media/providers/balance-nutricion/cover.webp",
+    "public/media/providers/balance-nutricion/cover-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "balance-nutricion",
+   "provider_id": "95f604ba-185f-436d-9f7d-66d133ab87a7",
+   "provider_name": "Balance Nutrici\u00f3n",
+   "asset": "portrait",
+   "local_files": [
+    "public/media/providers/balance-nutricion/portrait.webp",
+    "public/media/providers/balance-nutricion/portrait-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "balance-nutricion",
+   "provider_id": "95f604ba-185f-436d-9f7d-66d133ab87a7",
+   "provider_name": "Balance Nutrici\u00f3n",
+   "asset": "g1",
+   "local_files": [
+    "public/media/providers/balance-nutricion/g1.webp",
+    "public/media/providers/balance-nutricion/g1-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "centro-salud-ceiba",
+   "provider_id": "661d1727-e01b-4a3c-b7f4-706925eb2988",
+   "provider_name": "Centro de Salud Integral Ceiba",
+   "asset": "cover",
+   "local_files": [
+    "public/media/providers/centro-salud-ceiba/cover.webp",
+    "public/media/providers/centro-salud-ceiba/cover-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "centro-salud-ceiba",
+   "provider_id": "661d1727-e01b-4a3c-b7f4-706925eb2988",
+   "provider_name": "Centro de Salud Integral Ceiba",
+   "asset": "g1",
+   "local_files": [
+    "public/media/providers/centro-salud-ceiba/g1.webp",
+    "public/media/providers/centro-salud-ceiba/g1-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "granja-la-cosecha",
+   "provider_id": "bb49cb31-a669-4cd3-ae83-e8f34c9eab03",
+   "provider_name": "Granja Regenerativa La Cosecha",
+   "asset": "cover",
+   "local_files": [
+    "public/media/providers/granja-la-cosecha/cover.webp",
+    "public/media/providers/granja-la-cosecha/cover-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  },
+  {
+   "media_key": "granja-la-cosecha",
+   "provider_id": "bb49cb31-a669-4cd3-ae83-e8f34c9eab03",
+   "provider_name": "Granja Regenerativa La Cosecha",
+   "asset": "g1",
+   "local_files": [
+    "public/media/providers/granja-la-cosecha/g1.webp",
+    "public/media/providers/granja-la-cosecha/g1-sm.webp"
+   ],
+   "source": "synthetic",
+   "source_url": "n/a (AI-generated, not sourced)",
+   "creator": "AI-generated via gemini-2.5-flash-image (Abacus.AI RouteLLM)",
+   "license": "Synthetic asset generated for this demo; no third-party rights",
+   "source_terms": "No external source; generated on-platform for Solaris investor demo",
+   "intended_use": "Investor-demo marketplace listing imagery (simulated providers)",
+   "attribution_required": "no",
+   "notes": "Non-identifying synthetic imagery; portraits are not real people; no real patients; no trademarked branding"
+  }
+ ]
+}

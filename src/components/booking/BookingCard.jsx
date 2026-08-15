@@ -20,6 +20,7 @@ import {
   CheckCircle2, UserX, RotateCcw, ChevronRight, DollarSign, CalendarClock,
 } from 'lucide-react';
 import { fmtDate, fmtTime, countdown, downloadICS } from '../../lib/calendar-utils.js';
+import { providerCoverSm, providerAlt } from '../../lib/providerMedia.js';
 
 const STATUS = {
   pending:   { label: 'Pending',    cls: 'pending' },
@@ -47,7 +48,10 @@ export default function BookingCard({
 
   // Who/what to display in the card header.
   const title = isPatient ? (b.business_name || 'Provider') : (b.patient_name || 'Patient');
-  const photo = isPatient ? b.profile_photo_url : null;
+  // For a patient's bookings, show the provider's synthetic demo cover (resolved
+  // from the stable provider_id) when no real photo is set.
+  const provLike = isPatient && b.provider_id ? { id: b.provider_id, business_name: b.business_name, provider_type: b.provider_type } : null;
+  const photo = isPatient ? (b.profile_photo_url || providerCoverSm(provLike)) : null;
   const cd = countdown(b.booking_date, b.start_time);
   const isFuture = cd !== 'Past';
   const activeStatuses = ['pending', 'proposed', 'confirmed', 'scheduled'];
@@ -74,7 +78,7 @@ export default function BookingCard({
       <div className="bkc-main" onClick={() => onView && onView(b)} role="button" tabIndex={0}
            onKeyDown={(e) => { if (e.key === 'Enter' && onView) onView(b); }}>
         <div className="bkc-ava">
-          {photo ? <img src={photo} alt="" /> : <span>{initials(title)}</span>}
+          {photo ? <img src={photo} alt={provLike ? providerAlt(provLike, 'cover') : ''} width="46" height="46" loading="lazy" /> : <span>{initials(title)}</span>}
         </div>
         <div className="bkc-info">
           <div className="bkc-top">
