@@ -517,6 +517,39 @@ textarea.input-line{resize:vertical;min-height:64px}
 .subtabs-scroll{scrollbar-width:none;-ms-overflow-style:none}
 .subtabs-scroll::-webkit-scrollbar{display:none}
 
+/* Economic Passport tab strip on phones (NODE E.1): lay the four tabs out as a
+   compact 4-column grid so Wallet, GPS, Contributions and Network are ALL fully
+   visible with no clipped fourth tab and no horizontal scrolling. Icons stack
+   above labels; full tab names are preserved (wrapping, never abbreviated); each
+   tab keeps a >=44px touch target. Scoped to .subtabs-scroll, which ONLY the
+   Economic Passport uses — every other tab row (Coach, Communications, Account,
+   etc.) is untouched. Tablet/desktop keep the original inline row layout. */
+@media (max-width:460px){
+  .subtabs-scroll{
+    display:grid !important;
+    grid-template-columns:repeat(4,1fr) !important;
+    overflow-x:visible !important;
+    gap:4px !important;
+  }
+  .subtabs-scroll [role="tab"]{
+    flex:0 1 auto !important;
+    min-width:0 !important;
+    width:100% !important;
+    flex-direction:column !important;
+    align-items:center !important;
+    justify-content:center !important;
+    text-align:center !important;
+    gap:3px !important;
+    padding:6px 4px !important;
+    min-height:44px !important;
+    font-size:11px !important;
+    line-height:1.15 !important;
+    white-space:normal !important;
+    overflow-wrap:anywhere !important;
+  }
+  .subtabs-scroll-fade{display:none !important;}
+}
+
 /* ===== Health Passport compact accordion rows (NODE B) ===== */
 .luca .hp-acc{border:1px solid var(--line,#e3ece8);border-radius:16px;background:var(--surface,#fff);overflow:hidden}
 .luca .hp-acc-head{display:flex;align-items:center;gap:12px;width:100%;text-align:left;border:none;background:transparent;
@@ -4277,9 +4310,10 @@ function SchedulePage() {
 }
 
 /* ============================== PRACTITIONER — PATIENTS ============================== */
-function PatientsPage() {
+export function PatientsPage() {
   const [loading, setLoading] = useState(true);
   const [bookings, setBookings] = useState([]);
+  const [err, setErr] = useState(false);
   const [q, setQ] = useState('');
   const [selected, setSelected] = useState(null); // { id, name }
 
@@ -4287,14 +4321,27 @@ function PatientsPage() {
     let on = true;
     (async () => {
       try {
-        const r = await api.getPractitionerBookings();
+        // Source the roster from the authorized provider-bookings endpoint the
+        // Bookings/Finance screens already use. The legacy /practitioner/bookings
+        // contract is empty and kept only for later consolidation (do not use here).
+        const r = await api.getProviderBookings('all');
         if (on) setBookings(r.bookings || []);
-      } catch { /* noop */ } finally { if (on) setLoading(false); }
+      } catch { if (on) setErr(true); } finally { if (on) setLoading(false); }
     })();
     return () => { on = false; };
   }, []);
 
   if (loading) return <CardSkeleton rows={6} />;
+
+  if (err) {
+    return (
+      <div className="col gap-4">
+        <Card>
+          <Empty icon={Users} title="Couldn't load your patients" sub="There was a problem reaching your bookings. Please try again in a moment." />
+        </Card>
+      </div>
+    );
+  }
 
   // detail view: a single patient's timeline
   if (selected) {
@@ -4322,15 +4369,19 @@ function PatientsPage() {
     );
   }
 
-  // derive unique patients from bookings (keyed by user_id so we can drill in)
+  // Derive the unique patient roster from provider bookings. Deduplicate STRICTLY
+  // by the stable patient_id (never by display name). Rows lacking a valid
+  // patient_id are malformed and excluded so they cannot create phantom clients.
   const map = {};
   bookings.forEach((b) => {
-    const id = b.user_id || b.patient_name || 'unknown';
+    const id = b.patient_id;
+    if (!id) return; // exclude malformed rows without a stable identifier
     const name = b.patient_name || 'Unknown patient';
-    if (!map[id]) map[id] = { id: b.user_id || null, name, visits: 0, last: null, statuses: [] };
+    const when = b.booking_date || null;
+    if (!map[id]) map[id] = { id, name, visits: 0, last: null, statuses: [] };
     map[id].visits += 1;
     map[id].statuses.push(b.status || 'pending');
-    if (!map[id].last || (b.preferred_date && b.preferred_date > map[id].last)) map[id].last = b.preferred_date;
+    if (when && (!map[id].last || when > map[id].last)) map[id].last = when;
   });
   let patients = Object.values(map);
   if (q.trim()) patients = patients.filter((p) => p.name.toLowerCase().includes(q.toLowerCase()));
