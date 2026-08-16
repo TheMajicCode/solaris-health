@@ -17,6 +17,10 @@ export function AppProvider({ children }) {
   const [exploreFilter, setExploreFilter] = useState(null); // pre-select a listing type in Explore (e.g. 'diagnostic')
   const [pendingProviderId, setPendingProviderId] = useState(null); // deep-link: open this practitioner profile in Explore
   const [pendingCurate, setPendingCurate] = useState(false); // deep-link: run "Curate for me" on Explore mount
+  // §4 — a secure conversation the server just authorized, handed to the
+  // Communications → Messages surface to open EXACTLY once. Kept in memory only
+  // (never localStorage/sessionStorage); cleared after it is consumed and on logout.
+  const [pendingConversation, setPendingConversation] = useState(null);
 
   // ── Shared LUCA conversation (used by the LUCA Coach surface) ──
   const [lucaMessages, setLucaMessages] = useState(() => {
@@ -122,6 +126,7 @@ export function AppProvider({ children }) {
     forgetSessionKey(); // clear the in-memory identity secret (spec §3 logout/forget)
     setUser(null); setProfile(null); setTab('home'); setAuthView('intro'); setDemoRole(null);
     setNostrBanner({ show: false, npub: '' });
+    setPendingConversation(null); // §4 — never persist a pending secure conversation across logout
     setLucaMessages([]); setLucaLoaded(false);
     setCurrentTrack(null); setIsPlaying(false); setAudioQueue([]);
     try { sessionStorage.removeItem('luca_messages'); } catch {}
@@ -147,6 +152,7 @@ export function AppProvider({ children }) {
       exploreFilter, setExploreFilter,
       pendingProviderId, setPendingProviderId,
       pendingCurate, setPendingCurate,
+      pendingConversation, setPendingConversation,
     }}>
       {children}
     </AppContext.Provider>

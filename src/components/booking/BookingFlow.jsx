@@ -12,7 +12,7 @@
  *   onClose      ()=>void
  *   onBooked     (booking)=>void  — fired after a successful request
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Loader2, Check, ChevronRight, ChevronLeft, Calendar, Clock, Tag,
   MapPin, FileText, ShieldCheck, CalendarPlus, PartyPopper,
@@ -44,57 +44,100 @@ export default function BookingFlow({ providerId, provider: provIn, services: sv
   const [result, setResult] = useState(null);
   const tz = tzLabel();
 
+  // ── Async race guards (monotonic request tokens; StrictMode-safe) ──────────
+  // Older responses must never overwrite newer state. We guard by comparing a
+  // per-request token captured at call time against the latest token stored in
+  // a ref. Using refs (not effect cleanup) keeps React StrictMode's double
+  // mount/unmount from invalidating the only in-flight request.
+  const provReqRef = useRef(0);              // latest provider-load token
+  const slotReqRef = useRef(0);              // latest availability-request token
+  const currentServiceIdRef = useRef(null);  // id (string) of the currently selected service
+  const preselectHandledRef = useRef(false); // preselected serviceId consumed once
+
   // Load provider + services if not supplied. On failure we set an explicit
   // error state (not a bare toast) so the flow can show an actionable "Try
   // again" instead of the misleading "no bookable services" empty message.
-  const loadProvider = useCallback(async (mountedRef) => {
+  const loadProvider = useCallback(async () => {
+    const token = ++provReqRef.current;
     setLoadingProv(true);
     setLoadErr(false);
     try {
       const d = await api.getProvider(providerId);
-      if (mountedRef && !mountedRef.current) return;
+      if (token !== provReqRef.current) return; // a newer provider load superseded this one
       setProvider(d.provider);
       setServices(d.services || []);
     } catch {
-      if (mountedRef && !mountedRef.current) return;
+      if (token !== provReqRef.current) return; // stale failure — do not clobber current request
       setLoadErr(true);
     } finally {
-      if (!mountedRef || mountedRef.current) setLoadingProv(false);
+      if (token === provReqRef.current) setLoadingProv(false);
     }
   }, [providerId]);
 
   useEffect(() => {
     if (provIn && svcIn) return undefined;
-    const mountedRef = { current: true };
-    loadProvider(mountedRef);
-    return () => { mountedRef.current = false; };
+    loadProvider();
+    return undefined; // staleness handled by provReqRef (StrictMode-safe)
   }, [provIn, svcIn, loadProvider]);
 
-  // Pre-select a service if requested or only one exists.
-  useEffect(() => {
-    if (service || !services) return;
-    if (serviceId) {
-      const s = services.find((x) => x.id === serviceId);
-      if (s) setService(s);
-    }
-  }, [services, serviceId, service]);
-
+  // Request availability for the EXACT provider + service. Guarded so an older
+  // request cannot replace a newer service's slots, and cannot clear
+  // loading/errors that belong to a newer request. Retries reuse this with the
+  // current service, so they stay tied to the current provider+service.
   const loadSlots = useCallback(async (svc) => {
-    if (!svc) return;
+    if (!svc || svc.id == null) return;
+    const svcId = String(svc.id);
+    const token = ++slotReqRef.current;
+    currentServiceIdRef.current = svcId;
     setLoadingSlots(true);
     setSlotErr(false);
     try {
       const r = await api.getAvailableSlots(providerId, svc.id);
+      // Apply only if this is still the newest request AND still the current service.
+      if (token !== slotReqRef.current || svcId !== currentServiceIdRef.current) return;
       setSlotData(r.dates || []);
     } catch {
+      if (token !== slotReqRef.current || svcId !== currentServiceIdRef.current) return;
       setSlotData([]);
       setSlotErr(true);
     } finally {
-      setLoadingSlots(false);
+      if (token === slotReqRef.current) setLoadingSlots(false);
     }
   }, [providerId]);
 
-  const pickService = (s) => { setService(s); setSlot(null); setStep(1); loadSlots(s); };
+  // ONE guarded service-selection routine used by BOTH entry paths:
+  //   (1) Provider detail → Book Appointment → user taps a service here.
+  //   (2) Services & Pricing → Book for a specific service → preselected serviceId.
+  // It sets the service, clears the previously selected slot, clears stale
+  // availability data + errors, advances to Date & Time, and requests
+  // availability for the exact provider + service (same calendar as path 1).
+  const selectService = useCallback((svc) => {
+    if (!svc || svc.id == null) return;
+    setService(svc);
+    setSlot(null);       // clear previously selected slot
+    setSlotData([]);     // clear stale availability
+    setSlotErr(false);   // clear stale error
+    setStep(1);          // advance to Date & Time
+    loadSlots(svc);      // request availability for exact provider + service id
+  }, [loadSlots]);
+
+  // Preselect path: resolve the requested serviceId once services are loaded and
+  // run it through the SAME guarded routine. Matches ids defensively as strings.
+  // An invalid/unknown serviceId honestly returns the user to "Select a service".
+  useEffect(() => {
+    if (!serviceId || !services) return;
+    if (preselectHandledRef.current) return; // consume the preselection exactly once
+    preselectHandledRef.current = true;
+    const s = services.find((x) => String(x.id) === String(serviceId));
+    if (s) {
+      selectService(s);
+    } else {
+      setService(null);
+      setStep(0);
+    }
+  }, [services, serviceId, selectService]);
+
+  const pickService = (s) => selectService(s);
 
   const submit = async () => {
     if (!slot) return;

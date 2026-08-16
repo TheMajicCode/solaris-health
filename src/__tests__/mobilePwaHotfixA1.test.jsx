@@ -81,7 +81,9 @@ const renderExplore = async () => {
       <ExploreMarketplace user={{ id: 1, role: 'patient' }} />
     </div>
   );
-  await waitFor(() => expect(screen.getByTestId('marker-1')).toBeTruthy());
+  // Mobile Explore now defaults to the List stage, so wait for a list card to
+  // mount (map markers only exist once the user switches to Map).
+  await waitFor(() => expect(document.querySelector('[data-pid="1"] .plc')).toBeTruthy());
   return utils;
 };
 

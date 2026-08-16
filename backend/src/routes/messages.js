@@ -255,6 +255,109 @@ router.post('/conversations', authMiddleware, requireMessagingRole, async (req, 
   } catch (err) { console.error('messages/conversations POST', err); res.status(500).json({ error: 'Server error' }); }
 });
 
+/**
+ * Start (or fetch) a secure conversation with a marketplace practitioner, given
+ * ONLY the marketplace provider *profile* id. The browser never states which
+ * practitioner account is authoritative — the server resolves it internally by
+ * joining the selected provider profile to its owning user, and enforces every
+ * eligibility rule. All missing / unclaimed / hidden / inactive / pending /
+ * rejected / incorrectly-linked targets return the SAME neutral 404 so the
+ * client cannot enumerate accounts.
+ *
+ * Auth: requester must be authenticated (authMiddleware). Requester's real
+ * server role must be a patient/member — non-patient callers get 403. We do
+ * NOT use requireMessagingRole here because that would also admit
+ * practitioners/admins.
+ *
+ * Body: { providerId: "<marketplace provider profile id>" }  — nothing else is
+ * honoured (no contactId / otherId / recipient name / practitioner user id).
+ */
+router.post('/conversations/provider', authMiddleware, async (req, res) => {
+  try {
+    // Requester's ACTUAL server role — never trusted from the client.
+    const me = await getUser(req.user.userId);
+    if (!me) return res.status(401).json({ error: 'Session expired' });
+    if (!['patient', 'member'].includes(me.role)) {
+      return res.status(403).json({ error: 'Secure messaging is not available for this account' });
+    }
+
+    // Only the marketplace provider PROFILE id is accepted from the browser.
+    const providerId = req.body?.providerId;
+    if (!providerId || typeof providerId !== 'string') {
+      // Same neutral not-available response — never reveal why.
+      return res.status(404).json({ error: 'This profile is not available for secure messaging yet' });
+    }
+
+    // Resolve the authoritative practitioner internally. Every eligibility rule
+    // must pass or we return the SAME neutral 404. UUID cast failures (malformed
+    // ids) are caught below and mapped to the same neutral 404.
+    let target;
+    try {
+      const q = await db.query(
+        `SELECT p.id AS provider_id, u.id AS user_id, u.role AS user_role,
+                u.full_name, u.first_name, u.last_name, u.avatar_url
+           FROM provider_profiles p
+           JOIN users u ON u.id = p.user_id
+          WHERE p.id = $1
+            AND p.status = 'active'
+            AND p.hidden = false
+            AND p.approval_status = 'approved'
+            AND p.claimed = true
+            AND p.user_id IS NOT NULL
+            AND u.role = 'practitioner'
+          LIMIT 1`,
+        [providerId]
+      );
+      target = q.rows[0] || null;
+    } catch (e) {
+      // Malformed provider id (e.g. invalid UUID) → indistinguishable neutral 404.
+      target = null;
+    }
+    if (!target) {
+      return res.status(404).json({ error: 'This profile is not available for secure messaging yet' });
+    }
+
+    // Atomic upsert under the existing UNIQUE(patient_id, practitioner_id)
+    // constraint — concurrent double-taps can neither duplicate nor 500.
+    const upsert = await db.query(
+      `INSERT INTO conversations (patient_id, practitioner_id)
+       VALUES ($1, $2)
+       ON CONFLICT (patient_id, practitioner_id) DO UPDATE SET updated_at = now()
+       RETURNING *`,
+      [me.id, target.user_id]
+    );
+    const conv = upsert.rows[0];
+
+    // recipientReady = the practitioner has published an encryption public key.
+    const keyRow = await db.query('SELECT 1 FROM encryption_keys WHERE user_id=$1 LIMIT 1', [target.user_id]);
+    const recipientReady = keyRow.rowCount > 0;
+
+    // Audit with identifiers ONLY — never any message plaintext.
+    await audit({
+      actorId: me.id, action: 'message.conversation.open_provider', resourceType: 'conversation',
+      resourceId: conv.id,
+      newValues: { providerId: target.provider_id, practitionerUserId: target.user_id, recipientReady },
+      ip: clientIp(req),
+    });
+
+    const otherName = target.full_name
+      || [target.first_name, target.last_name].filter(Boolean).join(' ')
+      || 'Practitioner';
+
+    return res.status(200).json({
+      conversationId: conv.id,
+      otherId: target.user_id,
+      otherName,
+      otherRole: 'practitioner',
+      otherAvatar: target.avatar_url || null,
+      recipientReady,
+    });
+  } catch (err) {
+    console.error('messages/conversations/provider POST', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 router.get('/unread-count', authMiddleware, requireMessagingRole, async (req, res) => {
   try {
     const r = await db.query(

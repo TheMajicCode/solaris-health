@@ -89,16 +89,17 @@ vi.mock('../components/marketplace/MapView.jsx', () => ({
 
 import ExploreMarketplace from '../components/marketplace/ExploreMarketplace.jsx';
 
-// Default mobile view is the map, so wait for the map stub to mount.
+// Default mobile view is now the LIST (E2 §2), so wait for the first list card
+// to mount. Tests that need the map switch to it explicitly via showMap().
 const renderExplore = async () => {
   const utils = render(<ExploreMarketplace user={{ id: 1, role: 'patient' }} />);
-  await waitFor(() => expect(screen.getByTestId('marker-1')).toBeTruthy());
+  await waitFor(() => expect(document.querySelector('[data-pid="1"] .plc')).toBeTruthy());
   return utils;
 };
 
 const seg = (name) => screen.getByRole('button', { name });
 const showList = () => fireEvent.click(seg('List'));
-const showMap = () => fireEvent.click(seg('Map'));
+const showMap = async () => { fireEvent.click(seg('Map')); await waitFor(() => expect(screen.getByTestId('marker-1')).toBeTruthy()); };
 
 describe('quick filters + full filter sheet', () => {
   it('renders quick-filter chips mapped to real fields and toggles one', async () => {
@@ -127,28 +128,30 @@ describe('quick filters + full filter sheet', () => {
 });
 
 describe('Map | List segmented switch', () => {
-  it('defaults to Map and toggles to List (aria-pressed reflects the active view)', async () => {
+  it('defaults to List and toggles to Map (aria-pressed reflects the active view)', async () => {
     await renderExplore();
     const group = screen.getByRole('group', { name: 'Choose map or list view' });
-    expect(within(group).getByRole('button', { name: 'Map' })).toHaveAttribute('aria-pressed', 'true');
-    expect(within(group).getByRole('button', { name: 'List' })).toHaveAttribute('aria-pressed', 'false');
-    // Map stage is mounted, the single-column list stage is not.
-    expect(document.querySelector('.exm-mmap')).toBeTruthy();
-    expect(document.querySelector('.exm-mlist')).toBeNull();
-
-    showList();
+    // E2 §2 — the list is the default mobile stage.
     expect(within(group).getByRole('button', { name: 'List' })).toHaveAttribute('aria-pressed', 'true');
     expect(within(group).getByRole('button', { name: 'Map' })).toHaveAttribute('aria-pressed', 'false');
-    // List stage renders full-width single-column cards.
+    // List stage renders full-width single-column cards; the map stage is not mounted.
     expect(document.querySelector('.exm-mlist')).toBeTruthy();
     expect(document.querySelector('[data-pid="1"] .plc')).toBeTruthy();
     expect(document.querySelector('.exm-mmap')).toBeNull();
+
+    // Explicit Map transitions are preserved.
+    await showMap();
+    expect(within(group).getByRole('button', { name: 'Map' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(group).getByRole('button', { name: 'List' })).toHaveAttribute('aria-pressed', 'false');
+    expect(document.querySelector('.exm-mmap')).toBeTruthy();
+    expect(document.querySelector('.exm-mlist')).toBeNull();
   });
 });
 
 describe('marker <-> list synchronisation', () => {
   it('selecting a marker opens its map card and highlights the matching list item after switching to List', async () => {
     await renderExplore();
+    await showMap();
     fireEvent.click(screen.getByTestId('marker-2'));
     // Map card for the selected provider appears.
     expect(screen.getByTestId('map-card-name')).toHaveTextContent('Verde Nutrition');

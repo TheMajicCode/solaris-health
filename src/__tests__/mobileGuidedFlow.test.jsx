@@ -98,8 +98,16 @@ const renderExplore = async () => {
       <ExploreMarketplace user={{ id: 1, role: 'patient' }} />
     </div>
   );
-  await waitFor(() => expect(screen.getByTestId('marker-7')).toBeTruthy());
+  // Mobile Explore now defaults to the List stage, so wait for a list card to
+  // mount (map markers only exist once the user switches to Map).
+  await waitFor(() => expect(document.querySelector('[data-pid="7"] .plc')).toBeTruthy());
   return utils;
+};
+
+// Switch the mobile stage to Map and wait for the marker to mount.
+const showMap = async () => {
+  fireEvent.click(screen.getByRole('button', { name: 'Map' }));
+  await screen.findByTestId('marker-7');
 };
 
 describe('Recommend (compact guidance button)', () => {
@@ -146,6 +154,7 @@ describe('Guided journeys (bottom sheet)', () => {
 describe('Selected map card — two actions', () => {
   it('exposes View details + Book, and Book opens the booking overlay', async () => {
     await renderExplore();
+    await showMap();
     fireEvent.click(screen.getByTestId('marker-7'));
     const card = screen.getByTestId('map-card');
     expect(within(card).getByRole('button', { name: 'View details' })).toBeInTheDocument();

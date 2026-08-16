@@ -277,6 +277,12 @@ class ApiClient {
   startConversation(contactId) {
     return this.request('/messages/conversations', { method: 'POST', body: JSON.stringify({ contactId }) });
   }
+  // Secure messaging with a marketplace practitioner. The client sends ONLY the
+  // marketplace provider *profile* id; the server resolves the authoritative
+  // practitioner account and enforces every eligibility rule.
+  startProviderConversation(providerId) {
+    return this.request('/messages/conversations/provider', { method: 'POST', body: JSON.stringify({ providerId }) });
+  }
   getConversation(conversationId) { return this.request(`/messages/${conversationId}`); }
   sendMessage(payload) { return this.request('/messages/send', { method: 'POST', body: JSON.stringify(payload) }); }
   uploadAttachment(payload) { return this.request('/messages/upload', { method: 'POST', body: JSON.stringify(payload) }); }

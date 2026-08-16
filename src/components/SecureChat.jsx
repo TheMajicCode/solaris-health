@@ -18,6 +18,7 @@ import {
   Paperclip, ChevronRight, Stethoscope, User as UserIcon, AlertTriangle, KeyRound,
 } from 'lucide-react';
 import { api } from '../lib/api.js';
+import { useApp } from '../state/AppContext.jsx';
 import { loadOrCreateIdentity, cryptoAvailable } from '../lib/encryption.js';
 import MessageThread from './MessageThread.jsx';
 
@@ -100,6 +101,7 @@ const fmtAgo = (d) => {
 
 export default function SecureChat({ user, onUnread }) {
   const myId = user.userId || user.id;
+  const { pendingConversation, setPendingConversation } = useApp() || {};
   const [identity, setIdentity] = useState(null);
   const [identityErr, setIdentityErr] = useState('');
   const [conversations, setConversations] = useState([]);
@@ -190,6 +192,31 @@ export default function SecureChat({ user, onUnread }) {
       } catch { /* recipient has no key yet */ }
     }
   }, []);
+
+  /* ---- consume a pending conversation handed off from another surface
+     (e.g. "Message" on a provider profile). Open the exact server-returned
+     conversation exactly once, then clear it so it never re-opens on
+     re-render or when the user navigates back here. ---- */
+  const pendingHandledRef = useRef(false);
+  useEffect(() => {
+    if (!pendingConversation || pendingHandledRef.current) return;
+    const pc = pendingConversation;
+    const cid = pc.conversationId || pc.id;
+    if (!cid) return;
+    pendingHandledRef.current = true;
+    const conv = {
+      id: cid,
+      otherId: pc.otherId,
+      otherName: pc.otherName,
+      otherRole: pc.otherRole,
+      otherAvatar: pc.otherAvatar || null,
+    };
+    setConversations((prev) => prev.some((c) => c.id === conv.id)
+      ? prev
+      : [{ ...conv, unread: 0, lastMessage: null, updatedAt: new Date().toISOString() }, ...prev]);
+    openConversation(conv);
+    if (setPendingConversation) setPendingConversation(null);
+  }, [pendingConversation, openConversation, setPendingConversation]);
 
   /* ---- contact picker ---- */
   const openPicker = async () => {

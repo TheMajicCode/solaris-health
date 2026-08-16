@@ -23,7 +23,7 @@ import {
   BookOpen, Headphones, Play, Pause, Lock, Trash2, Music,
   Repeat, Shuffle, Rewind, FastForward, Upload, ListMusic,
   CalendarClock, Volume2, VolumeX, Inbox, Mail, Copy, Fingerprint, Grid,
-  ChevronDown, Smartphone,
+  ChevronDown, Smartphone, Home,
 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { api } from '../lib/api.js';
@@ -130,8 +130,44 @@ const CSS = `
 .become-provider.pending:hover{transform:none;box-shadow:none}
 
 /* topbar */
-.topbar{display:flex;align-items:center;gap:12px;padding:13px 24px;position:sticky;top:0;z-index:30;
+/* padding-top honours the iOS safe-area inset (notch/status bar) so the top row
+   never sits under the status bar in a standalone PWA. Falls back to 0px on
+   desktop/tablet, preserving existing geometry. viewport-fit=cover is set in index.html. */
+.topbar{display:flex;align-items:center;gap:12px;
+  padding:calc(13px + env(safe-area-inset-top,0px)) 24px 13px;position:sticky;top:0;z-index:30;
   background:rgba(238,244,241,.82);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+/* Home control — warm orange/gold gradient orb, persistent in the sticky header.
+   Role-aware target handled in JSX (members → member Dashboard, practitioners → practitioner home). */
+.luca .home-btn.home-orb{width:44px;height:44px;border-radius:13px;border:1px solid rgba(224,138,42,.55);
+  background:linear-gradient(145deg,#F6B34A 0%,#EE8A2A 52%,#D9781E 100%);color:#3A2408;
+  box-shadow:0 4px 14px rgba(224,138,42,.42),0 1px 0 rgba(255,255,255,.35) inset;
+  transition:transform .15s ease,box-shadow .18s ease}
+.luca .home-btn.home-orb:hover{background:linear-gradient(145deg,#F8BC5A 0%,#F0932F 52%,#E07E21 100%);color:#3A2408;
+  transform:translateY(-1px);box-shadow:0 6px 20px rgba(224,138,42,.52),0 1px 0 rgba(255,255,255,.4) inset}
+.luca .home-btn.home-orb:active{transform:translateY(0)}
+.luca .home-btn.home-orb:focus-visible{outline:3px solid rgba(224,138,42,.9);outline-offset:2px}
+
+/* Communications binder (§6) — two semantic folders side by side on desktop,
+   stacked to a single column on phones. */
+.luca .comm-binder{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;align-items:start}
+.luca .comm-folder{border-radius:16px;padding:14px;border:1px solid var(--line);background:var(--surface);
+  box-shadow:var(--shadow-sm)}
+.luca .comm-folder.others{border-color:rgba(14,92,87,.28);
+  background:linear-gradient(180deg,rgba(14,92,87,.06),rgba(14,92,87,.02))}
+.luca .comm-folder.yourself{border-color:rgba(194,118,27,.30);
+  background:linear-gradient(180deg,rgba(194,118,27,.07),rgba(194,118,27,.02))}
+.luca .comm-folder-h{display:flex;align-items:center;gap:10px;margin-bottom:11px}
+.luca .comm-folder-tab{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;flex:none;color:#fff}
+.luca .comm-folder.others .comm-folder-tab{background:#0E5C57}
+.luca .comm-folder.yourself .comm-folder-tab{background:#C2761B}
+.luca .comm-folder-title{font-family:var(--font-display);font-weight:700;font-size:15px;color:var(--ink);line-height:1.15}
+.luca .comm-folder.others .comm-folder-title{color:#0E5C57}
+.luca .comm-folder.yourself .comm-folder-title{color:#8A5E22}
+.luca .comm-folder-sub{font-size:11.5px;color:var(--muted);margin-top:1px;line-height:1.3}
+.luca .comm-body{margin-top:2px}
+@media(max-width:760px){
+  .luca .comm-binder{grid-template-columns:1fr;gap:10px;margin-bottom:14px}
+}
 .search{flex:1;max-width:560px;display:flex;align-items:center;gap:10px;background:var(--surface);
   border:1px solid var(--line);border-radius:12px;padding:9px 13px;color:var(--muted-2);font-size:13px;min-width:0}
 .search input{border:none;outline:none;background:transparent;flex:1;color:var(--ink);font-size:13.5px;min-width:0;font-family:inherit}
@@ -460,10 +496,13 @@ textarea.input-line{resize:vertical;min-height:64px}
 .luca .m-title{display:none}
 .luca .m-botnav{display:none}
 @media(max-width:900px){
-  /* Compact sticky header: Home (left) · title (center) · notif+profile (right) */
-  .topbar{padding:10px 12px;gap:8px}
+  /* Compact sticky header: Home (left) · title (center) · notif+profile (right).
+     padding-top adds the iOS safe-area inset so the top row clears the status bar/notch. */
+  .topbar{padding:calc(10px + env(safe-area-inset-top,0px)) 12px 10px;gap:8px}
   .topbar .search{display:none}
   .topbar .menu-btn{display:none}
+  /* Touch targets ≥44×44 on phones (WCAG / iOS HIG). */
+  .topbar .icon-btn{width:44px;height:44px}
   .luca .home-btn{display:flex}
   .luca .m-title{display:block;flex:1;min-width:0;font-family:var(--font-display);font-weight:700;
     font-size:16px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left}
@@ -5540,15 +5579,29 @@ function InboxPage({ user, go, onUnread }) {
    A small, accessible pill bar used by the consolidated areas (LUCA Coach,
    Journal, Messages, Economic Passport, Settings). Reuses the existing visual
    language — mint-tinted active pill on a soft neutral track. */
-export function SubTabs({ items, active, onSelect, ariaLabel, scroll = false }) {
+// Semantic colour variants for the Communications binder (§6). "others" is a
+// cool teal/navy/cyan family; "yourself" is a warm gold/orange/coral family.
+// When no variant is passed, SubTabs keeps its original neutral appearance so
+// every other tab bar (Coach, Journal, Economic Passport, Account) is unchanged.
+const SUBTAB_VARIANTS = {
+  others:   { wrapBg: '#E6F2F0', selBg: '#0E5C57', selFg: '#EAFBF6', idleFg: '#356F69', ring: 'rgba(14,92,87,.28)' },
+  yourself: { wrapBg: '#FBEFDA', selBg: '#C2761B', selFg: '#FFF7EC', idleFg: '#8A5E22', ring: 'rgba(194,118,27,.30)' },
+};
+
+export function SubTabs({ items, active, onSelect, ariaLabel, scroll = false, variant = null }) {
   const listRef = useRef(null);
+  const btnRefs = useRef([]);
   const [overflowRight, setOverflowRight] = useState(false);
+  const theme = variant ? SUBTAB_VARIANTS[variant] : null;
   const onKeyDown = (e, idx) => {
     if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
     e.preventDefault();
     const dir = e.key === 'ArrowRight' ? 1 : -1;
     const next = (idx + dir + items.length) % items.length;
     onSelect(items[next].id);
+    // Move ACTUAL keyboard focus with the selection (roving tabindex, §6).
+    const el = btnRefs.current[next];
+    if (el && el.focus) el.focus();
   };
   const hasActive = items.some((x) => x.id === active);
   // Opt-in scroll variant (Economic Passport only): keep the COMPLETE active tab
@@ -5579,19 +5632,38 @@ export function SubTabs({ items, active, onSelect, ariaLabel, scroll = false }) 
       window.removeEventListener('resize', update);
     };
   }, [scroll, items.length, active]);
+  const trackBg = theme ? theme.wrapBg : '#F1F5F3';
+  // The themed (binder) variant stacks to a full-width, wrapping row so phones
+  // get a single column with no horizontal overflow.
   const wrapStyle = scroll
-    ? { gap: 4, background: '#F1F5F3', borderRadius: 999, padding: 4, marginBottom: 18, width: '100%', maxWidth: '100%',
+    ? { gap: 4, background: trackBg, borderRadius: 999, padding: 4, marginBottom: 18, width: '100%', maxWidth: '100%',
         flexWrap: 'nowrap', overflowX: 'auto', scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch' }
-    : { gap: 4, background: '#F1F5F3', borderRadius: 999, padding: 4, marginBottom: 18, width: 'fit-content', maxWidth: '100%' };
+    : theme
+      ? { gap: 5, background: trackBg, borderRadius: 16, padding: 5, marginBottom: 0, width: '100%', maxWidth: '100%', boxSizing: 'border-box' }
+      : { gap: 4, background: trackBg, borderRadius: 999, padding: 4, marginBottom: 18, width: 'fit-content', maxWidth: '100%' };
   const list = (
     <div ref={listRef} role="tablist" aria-label={ariaLabel || 'Sections'}
-      className={scroll ? 'row subtabs-scroll' : 'row wrap'} style={wrapStyle}>
+      className={scroll ? 'row subtabs-scroll' : (theme ? 'row wrap comm-tablist' : 'row wrap')} style={wrapStyle}>
       {items.map((it, idx) => {
         const Icon = it.icon;
         const on = active === it.id;
+        const themedStyle = theme
+          ? {
+              flex: '1 1 120px', justifyContent: 'center', minHeight: 44, padding: '10px 14px', borderRadius: 12,
+              background: on ? theme.selBg : 'transparent',
+              color: on ? theme.selFg : theme.idleFg,
+              boxShadow: on ? '0 2px 8px rgba(0,0,0,.14)' : 'none',
+            }
+          : {
+              minHeight: 44, padding: '8px 15px',
+              background: on ? '#fff' : 'transparent', color: on ? 'var(--ink)' : 'var(--muted,#8AA09C)',
+              boxShadow: on ? '0 1px 4px rgba(0,0,0,.08)' : 'none',
+              ...(scroll ? { flexShrink: 0, scrollSnapAlign: 'start' } : {}),
+            };
         return (
           <button
             key={it.id}
+            ref={(el) => { btnRefs.current[idx] = el; }}
             role="tab"
             aria-selected={on}
             tabIndex={on || (!hasActive && idx === 0) ? 0 : -1}
@@ -5599,10 +5671,7 @@ export function SubTabs({ items, active, onSelect, ariaLabel, scroll = false }) 
             onClick={() => onSelect(it.id)}
             onKeyDown={(e) => onKeyDown(e, idx)}
             className="row"
-            style={{ gap: 7, alignItems: 'center', border: 'none', cursor: 'pointer', borderRadius: 999, padding: '8px 15px', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap',
-              background: on ? '#fff' : 'transparent', color: on ? 'var(--ink)' : 'var(--muted,#8AA09C)',
-              boxShadow: on ? '0 1px 4px rgba(0,0,0,.08)' : 'none',
-              ...(scroll ? { flexShrink: 0, scrollSnapAlign: 'start' } : {}) }}
+            style={{ gap: 7, alignItems: 'center', border: 'none', cursor: 'pointer', borderRadius: 999, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', ...themedStyle }}
           >
             {Icon && <Icon size={15} strokeWidth={2} />} {it.label}
             {it.badge > 0 && <span className="badge" style={{ background: 'var(--gold)', color: '#3C2807', borderRadius: 999, fontSize: 10.5, fontWeight: 700, padding: '1px 7px', marginLeft: 2 }}>{it.badge}</span>}
@@ -5709,7 +5778,6 @@ function CommunicationsArea({ user, go, sub, onUnread, onInboxUnread }) {
     { id: 'growth', label: 'Growth', icon: Compass },
     { id: 'media', label: 'Media', icon: Headphones },
   ];
-  const groupLabel = { fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--muted,#8AA09C)', marginBottom: 6 };
   let body;
   if (active === 'inbox') body = <ErrorBoundary><InboxPage user={user} go={go} onUnread={onInboxUnread} /></ErrorBoundary>;
   else if (active === 'journal' || active === 'growth') body = <ErrorBoundary><JournalPage user={user} go={go} forcedView={active === 'growth' ? 'grow' : 'reflect'} hideToggle /></ErrorBoundary>;
@@ -5717,17 +5785,33 @@ function CommunicationsArea({ user, go, sub, onUnread, onInboxUnread }) {
   else body = <SecureChat user={user} onUnread={onUnread} />;
   return (
     <div>
-      <div className="comm-groups" style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 24px', alignItems: 'flex-start', marginBottom: 4 }}>
-        <div className="comm-group">
-          <div style={groupLabel}>With Others</div>
-          <SubTabs ariaLabel="With Others" active={active} onSelect={(id) => go('communications', id)} items={withOthers} />
-        </div>
-        <div className="comm-group">
-          <div style={groupLabel}>With Yourself</div>
-          <SubTabs ariaLabel="With Yourself" active={active} onSelect={(id) => go('communications', id)} items={withYourself} />
-        </div>
+      {/* Communications binder — two clearly framed semantic folders. "With
+          Others" carries a cool teal/navy family; "With Yourself" a warm
+          gold/orange/coral family. One column on phones (no horizontal overflow);
+          both tablists keep valid ARIA and roving keyboard focus. */}
+      <div className="comm-binder">
+        <section className="comm-folder others" aria-labelledby="comm-others-h">
+          <div className="comm-folder-h">
+            <span className="comm-folder-tab" aria-hidden="true"><Users size={14} /></span>
+            <div>
+              <div id="comm-others-h" className="comm-folder-title">With Others</div>
+              <div className="comm-folder-sub">Messages &amp; inbox shared with your practitioners</div>
+            </div>
+          </div>
+          <SubTabs ariaLabel="With Others" variant="others" active={active} onSelect={(id) => go('communications', id)} items={withOthers} />
+        </section>
+        <section className="comm-folder yourself" aria-labelledby="comm-self-h">
+          <div className="comm-folder-h">
+            <span className="comm-folder-tab" aria-hidden="true"><Sprout size={14} /></span>
+            <div>
+              <div id="comm-self-h" className="comm-folder-title">With Yourself</div>
+              <div className="comm-folder-sub">Your private journal, growth, and media</div>
+            </div>
+          </div>
+          <SubTabs ariaLabel="With Yourself" variant="yourself" active={active} onSelect={(id) => go('communications', id)} items={withYourself} />
+        </section>
       </div>
-      {body}
+      <div className="comm-body">{body}</div>
     </div>
   );
 }
@@ -6595,7 +6679,7 @@ export default function LucaPassport() {
         <div className="main">
           <header className="topbar">
             <button className="icon-btn menu-btn" onClick={() => setDrawer(true)} aria-label="Open menu"><Menu size={18} /></button>
-            <button className="icon-btn home-btn" onClick={() => go(defaultTabFor(effectiveRole))} aria-label="Home"><LayoutDashboard size={18} /></button>
+            <button className="icon-btn home-btn home-orb" onClick={() => go(defaultTabFor(effectiveRole))} aria-label="Home"><Home size={19} /></button>
             <div className="m-title" aria-hidden="true">{meta.title}</div>
             <div className="search">
               <Search size={16} />

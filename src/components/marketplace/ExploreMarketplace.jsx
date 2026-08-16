@@ -135,15 +135,17 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
       const nTodos = seeded.todos || 0;
       toast.success(
         nTodos
-          ? `Your plan is ready — ${nTodos} steps added to your Journal.`
-          : 'Your journey is ready in your Journal.',
+          ? `Your plan is waiting in Growth — ${nTodos} steps ready to begin.`
+          : 'Your plan is waiting for you in Growth.',
         { duration: 4000 }
       );
       setPreviewType(null);
-      // The Journal tab is the personal-growth hub where the seeded plan lives.
-      // The app shell's visible tab is local state, so broadcast a navigation event.
-      window.dispatchEvent(new CustomEvent('solaris:navigate', { detail: { tab: 'journal' } }));
-      setTab?.('journal');
+      // Route to Communications → Growth (the personal-growth hub where the
+      // seeded plan lives) ONLY after the journey succeeds. The app shell's
+      // visible tab is local state, so broadcast the navigation event and set
+      // the tab; the Growth subtab is selected via the event detail.
+      window.dispatchEvent(new CustomEvent('solaris:navigate', { detail: { tab: 'communications', sub: 'growth' } }));
+      setTab?.('communications');
     } catch (e) {
       toast.error(e?.message || 'Could not start that journey — try again shortly.');
     } finally {
@@ -205,7 +207,11 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
   const [openId, setOpenId] = useState(null);
   const [bookingProviderId, setBookingProviderId] = useState(null); // open BookingFlow directly for this provider
   const [journeysOpen, setJourneysOpen] = useState(false);          // mobile "Guided journeys" bottom sheet (closed by default)
-  const [mobileView, setMobileView] = useState('map'); // map | list (default map)
+  // Mobile Explore opens in List by default (§2). Intentional Map transitions are
+  // preserved elsewhere: the Map segment control, "Show on map" (showOnMap),
+  // selecting a provider from a LUCA recommendation (openRecommendedProvider),
+  // provider deep links, and marker workflows all call setMobileView('map').
+  const [mobileView, setMobileView] = useState('list'); // map | list (default list on mobile)
   const [showFilters, setShowFilters] = useState(false);
   const listRef = useRef(null);
   const journeysScrollRef = useRef(0); // remembers list scroll while the Guided journeys sheet is open

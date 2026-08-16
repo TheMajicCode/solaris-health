@@ -17,6 +17,7 @@ import { createPortal } from 'react-dom';
 import {
   X, MapPin, Phone, Globe, Mail, Clock, ChevronLeft, ChevronRight, Loader2,
   Award, ShieldCheck, BadgeCheck, Check, Star, ExternalLink, Tag, CalendarPlus,
+  MessageSquare,
 } from 'lucide-react';
 import { providerGallery, providerProfileSm, providerAlt, isSimulated } from '../../lib/providerMedia.js';
 import BookingFlow from '../booking/BookingFlow.jsx';
@@ -24,8 +25,14 @@ import { MapContainer, TileLayer, Marker } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { api } from '../../lib/api.js';
+import { useApp } from '../../state/AppContext.jsx';
 import RatingStars from './RatingStars.jsx';
 import ProviderBadges, { TypeBadge, typeMeta } from './ProviderBadges.jsx';
+
+// Secure practitioner messaging is gated behind a build flag. It stays OFF
+// (undefined) on the preview build because preview shares a single backend
+// with Demo/Stable, so the CTA must not render there.
+const SECURE_MESSAGING_ENABLED = import.meta.env.VITE_SECURE_MESSAGING_ENABLED === 'true';
 
 const DAYS = [
   ['mon', 'Mon'], ['tue', 'Tue'], ['wed', 'Wed'], ['thu', 'Thu'],
@@ -83,6 +90,9 @@ export default function ProviderDetailModal({ providerId, user, onClose, onUpdat
   const [submitted, setSubmitted] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [booking, setBooking] = useState(null); // { serviceId? } when booking flow open
+  const { setPendingConversation } = useApp() || {};
+  const [msgOpening, setMsgOpening] = useState(false);
+  const [msgErr, setMsgErr] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true); setErr('');
@@ -138,6 +148,47 @@ export default function ProviderDetailModal({ providerId, user, onClose, onUpdat
       setErr(e.message || 'Could not submit review');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Open (or resume) an encrypted conversation with this practitioner. Sends
+  // ONLY the marketplace provider-profile id to the backend, which resolves the
+  // real practitioner user and upserts the conversation. Single-flight; no
+  // failure path navigates away.
+  const openSecureMessage = async () => {
+    if (msgOpening) return;               // single-flight guard
+    setMsgOpening(true); setMsgErr('');
+    try {
+      const res = await api.startProviderConversation(providerId);
+      // Hand the exact server-returned conversation to the Messages surface,
+      // then route there. Do NOT start a generic conversation as well.
+      if (setPendingConversation) {
+        setPendingConversation({
+          conversationId: res.conversationId,
+          otherId: res.otherId,
+          otherName: res.otherName,
+          otherRole: res.otherRole || 'practitioner',
+          otherAvatar: res.otherAvatar || portrait || null,
+          recipientReady: res.recipientReady,
+        });
+      }
+      onClose();
+      window.dispatchEvent(new CustomEvent('solaris:navigate', {
+        detail: { tab: 'communications', sub: 'messages' },
+      }));
+    } catch (e) {
+      const status = e?.status;
+      if (status === 401) {
+        setMsgErr('Your session has expired. Please sign in again to send a message.');
+      } else if (status === 403) {
+        setMsgErr('Secure messaging isn’t available for your account.');
+      } else if (status === 404) {
+        setMsgErr((e?.body && e.body.error) || 'This profile is not available for secure messaging yet.');
+      } else {
+        setMsgErr('Couldn’t open secure messages. Please try again.');
+      }
+    } finally {
+      setMsgOpening(false);
     }
   };
 
@@ -218,6 +269,13 @@ export default function ProviderDetailModal({ providerId, user, onClose, onUpdat
                   <CalendarPlus size={15} /> Book Appointment
                 </button>
               )}
+              {SECURE_MESSAGING_ENABLED && !p.is_owner
+                && user && (user.role === 'patient' || user.role === 'member') && (
+                <button className="pdm-act pdm-act-msg" onClick={openSecureMessage}
+                  disabled={msgOpening} aria-label={`Message ${p.business_name}`}>
+                  {msgOpening ? <Loader2 className="pdm-spin" size={15} /> : <MessageSquare size={15} />} Message
+                </button>
+              )}
               {p.phone && <a className="pdm-act" href={`tel:${p.phone}`}><Phone size={15} /> Call</a>}
               {p.website && <a className="pdm-act" href={p.website} target="_blank" rel="noreferrer"><Globe size={15} /> Website <ExternalLink size={11} /></a>}
               {p.email && <a className="pdm-act" href={`mailto:${p.email}`}><Mail size={15} /> Email</a>}
@@ -227,6 +285,7 @@ export default function ProviderDetailModal({ providerId, user, onClose, onUpdat
                 </a>
               )}
             </div>
+            {msgErr && <div className="pdm-msg-err" role="alert">{msgErr}</div>}
 
             <div className="pdm-grid">
               <div className="pdm-main">
@@ -403,6 +462,11 @@ const CSS = `
 .luca .pdm-bookwrap{position:relative;z-index:5000}
 .luca .pdm-act-book{background:var(--teal-d);color:#fff;border:none;cursor:pointer;font-family:inherit}
 .luca .pdm-act-book:hover{background:var(--teal-d2)}
+.luca .pdm-act-msg{background:var(--mint-soft);color:var(--teal-d);border:1px solid var(--mint-line);cursor:pointer;font-family:inherit}
+.luca .pdm-act-msg:hover{background:var(--mint-line)}
+.luca .pdm-act-msg:disabled{opacity:.6;cursor:not-allowed}
+.luca .pdm-msg-err{margin:0 24px 4px;padding:9px 12px;border-radius:10px;background:var(--danger-soft,#fdecec);
+  color:var(--danger-ink,#a3261f);font-size:12.5px;font-weight:600;border:1px solid rgba(163,38,31,.2)}
 .luca .pdm-service-r{display:flex;align-items:center;gap:10px}
 .luca .pdm-service-book{display:inline-flex;align-items:center;gap:4px;background:var(--mint-soft);color:var(--teal-d);
   border:1px solid var(--mint-line);border-radius:8px;padding:5px 10px;font-weight:700;font-size:12px;cursor:pointer;font-family:inherit;white-space:nowrap}

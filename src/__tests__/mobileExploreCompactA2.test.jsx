@@ -115,7 +115,9 @@ const renderExplore = async () => {
       <ExploreMarketplace user={{ id: 1, role: 'patient' }} />
     </div>
   );
-  await waitFor(() => expect(screen.getByTestId('marker-1')).toBeTruthy());
+  // Mobile Explore now defaults to the List stage, so wait for a list card to
+  // mount (map markers only exist once the user switches to Map).
+  await waitFor(() => expect(document.querySelector('[data-pid="1"] .plc')).toBeTruthy());
   return utils;
 };
 
@@ -181,11 +183,12 @@ describe('§2 compact Map/List segmented control', () => {
     const map = within(group).getByRole('button', { name: 'Map' });
     const list = within(group).getByRole('button', { name: 'List' });
     // Names present (never icon-only) + active state exposed via aria-pressed.
-    expect(map).toHaveAttribute('aria-pressed', 'true');
-    expect(list).toHaveAttribute('aria-pressed', 'false');
-    fireEvent.click(list);
-    expect(within(group).getByRole('button', { name: 'List' })).toHaveAttribute('aria-pressed', 'true');
-    expect(within(group).getByRole('button', { name: 'Map' })).toHaveAttribute('aria-pressed', 'false');
+    // Mobile Explore defaults to List, so List starts pressed; toggling to Map flips it.
+    expect(list).toHaveAttribute('aria-pressed', 'true');
+    expect(map).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(map);
+    expect(within(group).getByRole('button', { name: 'Map' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(group).getByRole('button', { name: 'List' })).toHaveAttribute('aria-pressed', 'false');
   });
 });
 
