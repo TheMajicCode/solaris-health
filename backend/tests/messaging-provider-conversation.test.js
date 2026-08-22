@@ -136,3 +136,84 @@ describe('POST /api/messages/conversations/provider', () => {
     expect(res.body.recipientReady).toBe(false);
   });
 });
+
+/**
+ * NODE E5 — additional acceptance guards for the same route:
+ *   • ADMIN role must NOT open a member↔practitioner conversation (only patient/member).
+ *   • IDEMPOTENCY: the conversation write uses an atomic upsert (ON CONFLICT
+ *     DO UPDATE) on the canonical UNIQUE(patient_id, practitioner_id) pair, so a
+ *     repeat request returns the SAME conversation id and never duplicates.
+ *   • CONCURRENCY: the write is a single-statement upsert (no read-then-insert
+ *     race window). We assert the SQL shape guarantees that.
+ *   • AUDIT: only opaque identifiers are recorded — never message plaintext, and
+ *     the audited fields carry no free-text body/content keys.
+ */
+const { audit } = require('../src/lib/helpers');
+
+const eligibleRows = () => [
+  { rows: [{ provider_id: 'prof-9', user_id: 'prac-7', user_role: 'practitioner', full_name: 'Dr Mateo Reyes', avatar_url: null }] }, // eligibility
+  { rows: [{ id: 'conv-1', patient_id: 'patient-1', practitioner_id: 'prac-7' }] },                                                    // upsert
+  { rowCount: 1, rows: [{ '?column?': 1 }] },                                                                                          // key exists
+];
+
+describe('POST /api/messages/conversations/provider — E5 authz / idempotency / concurrency / audit', () => {
+  beforeEach(() => { mockQuery.mockReset(); audit.mockClear(); });
+
+  it('403 when the requester is an admin (admins never open member conversations)', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: 'admin-1', role: 'admin' }] }); // getUser
+    const res = await withUser(request(makeApp()).post('/api/messages/conversations/provider'), { userId: 'admin-1' })
+      .send({ providerId: 'prof-9' });
+    expect(res.status).toBe(403);
+  });
+
+  it('403 when the requester is a clinic_admin', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ id: 'ca-1', role: 'clinic_admin' }] });
+    const res = await withUser(request(makeApp()).post('/api/messages/conversations/provider'), { userId: 'ca-1' })
+      .send({ providerId: 'prof-9' });
+    expect(res.status).toBe(403);
+  });
+
+  it('idempotent: two sequential opens return the SAME conversation id', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ id: 'patient-1', role: 'patient' }] }).mockResolvedValueOnce(eligibleRows()[0]).mockResolvedValueOnce(eligibleRows()[1]).mockResolvedValueOnce(eligibleRows()[2])
+      .mockResolvedValueOnce({ rows: [{ id: 'patient-1', role: 'patient' }] }).mockResolvedValueOnce(eligibleRows()[0]).mockResolvedValueOnce(eligibleRows()[1]).mockResolvedValueOnce(eligibleRows()[2]);
+    const app = makeApp();
+    const r1 = await withUser(request(app).post('/api/messages/conversations/provider'), { userId: 'patient-1' }).send({ providerId: 'prof-9' });
+    const r2 = await withUser(request(app).post('/api/messages/conversations/provider'), { userId: 'patient-1' }).send({ providerId: 'prof-9' });
+    expect(r1.body.conversationId).toBe('conv-1');
+    expect(r2.body.conversationId).toBe(r1.body.conversationId);
+  });
+
+  it('concurrency-safe: the conversation write is a single-statement ON CONFLICT upsert', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ id: 'patient-1', role: 'patient' }] })
+      .mockResolvedValueOnce(eligibleRows()[0])
+      .mockResolvedValueOnce(eligibleRows()[1])
+      .mockResolvedValueOnce(eligibleRows()[2]);
+    await withUser(request(makeApp()).post('/api/messages/conversations/provider'), { userId: 'patient-1' }).send({ providerId: 'prof-9' });
+    const upsertCall = mockQuery.mock.calls.find((c) => /INSERT INTO conversations/i.test(c[0] || ''));
+    expect(upsertCall).toBeTruthy();
+    expect(upsertCall[0]).toMatch(/ON CONFLICT/i);
+    expect(upsertCall[0]).toMatch(/DO UPDATE/i);
+    // canonical pair, in order — no read-then-write window
+    expect(upsertCall[1]).toEqual(['patient-1', 'prac-7']);
+  });
+
+  it('audit records identifiers only — no message body / plaintext keys', async () => {
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ id: 'patient-1', role: 'patient' }] })
+      .mockResolvedValueOnce(eligibleRows()[0])
+      .mockResolvedValueOnce(eligibleRows()[1])
+      .mockResolvedValueOnce(eligibleRows()[2]);
+    await withUser(request(makeApp()).post('/api/messages/conversations/provider'), { userId: 'patient-1' }).send({ providerId: 'prof-9' });
+    expect(audit).toHaveBeenCalledTimes(1);
+    const arg = audit.mock.calls[0][0];
+    expect(arg.action).toBe('message.conversation.open_provider');
+    expect(arg.resourceType).toBe('conversation');
+    const serialized = JSON.stringify(arg);
+    // no free-text content leaked into the audit trail
+    expect(serialized).not.toMatch(/"(body|content|message|plaintext|text)"\s*:/i);
+    // only opaque identifiers in newValues
+    expect(Object.keys(arg.newValues).sort()).toEqual(['practitionerUserId', 'providerId', 'recipientReady']);
+  });
+});
