@@ -21,6 +21,7 @@ import ProviderCalendar from './ProviderCalendar.jsx';
 import GPSEarnings from '../gps/GPSEarnings.jsx';
 import JourneyPipeline from './JourneyPipeline.jsx';
 import ClinicOSFoundation from '../clinic/ClinicOSFoundation.jsx';
+import PractitionerLucaCopilot, { LUCA_COPILOT_SIMULATED } from '../luca/PractitionerLucaCopilot.jsx';
 
 // NODE H — Journey Pipeline + Clinic OS foundation ride behind the same Beta
 // flag; when off, the existing practice surface is unchanged.
@@ -316,7 +317,7 @@ const COPILOT_STARTERS = [
   'Which patients are most engaged right now?',
 ];
 
-function CopilotView() {
+function CopilotView({ user } = {}) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -359,6 +360,12 @@ function CopilotView() {
           <div className="mp-copilot-sub">Drafts &amp; suggests — you review and decide</div>
         </div>
       </div>
+
+      {LUCA_COPILOT_SIMULATED && (
+        <div style={{ padding: '0 12px' }}>
+          <PractitionerLucaCopilot user={user} />
+        </div>
+      )}
 
       <div className="mp-copilot-body">
         {!loaded ? (
