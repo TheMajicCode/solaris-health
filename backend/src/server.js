@@ -194,6 +194,11 @@ app.get('/api/health', async (req, res) => {
     service: 'luca-passport-backend',
     timestamp: new Date().toISOString(),
     uptimeSeconds: Math.floor((Date.now() - START_TIME) / 1000),
+    // Non-secret release identifiers so a deployed channel can be told apart
+    // from the shared backend without exposing any credential. Both are plain
+    // opaque labels sourced from env (never a secret) and default to 'shared'.
+    channel: process.env.SOLARIS_CHANNEL || 'shared',
+    build: process.env.SOLARIS_BUILD_ID || 'unversioned',
     checks: { database: 'unknown', migrations: 'unknown' },
   };
   try {

@@ -1,0 +1,56 @@
+{
+  "manifest": "solaris-beta-e4-j-release-candidate",
+  "generatedFor": "preview.solarishealth.app (frontend only)",
+  "baseBranch": "agent/abacus-iphone-mobile-flow-e2-1",
+  "baseSha": "e13597eb75e158c62ff08d3ae8fd03de05c9e4d0",
+  "releaseBranch": "agent/abacus-beta-e4-j-rc-v1",
+  "codeShaAtManifest": "e13597eb75e158c62ff08d3ae8fd03de05c9e4d0",
+  "frontend": {
+    "package": "luca-passport",
+    "bundler": "vite",
+    "buildCmd": "npm run build",
+    "test": "vitest run",
+    "deployMode": "immutable release + atomic symlink swap",
+    "apiUpstream": "shared backend 127.0.0.1:5055 (UNCHANGED)"
+  },
+  "backend": {
+    "package": "luca-passport-backend",
+    "runtime": "node/express",
+    "deployed": false,
+    "note": "Backend CODE updated (non-secret health channel/build id, messaging tests). NOT deployed. Shared backend PID unchanged; cutover deferred to Majd."
+  },
+  "schemaVersion": "038_binding_proof_and_challenges",
+  "migrationsAppliedThisSprint": "NONE (shared DB is read-only per Majd deferral)",
+  "featureFlags": {
+    "frontend": {
+      "VITE_SECURE_MESSAGING_ENABLED": "false (Message CTA hidden until backend cutover)",
+      "VITE_SPARK_WALLET_ENABLED": "unchanged",
+      "VITE_SPARK_DEMO_FIXTURE": "unchanged",
+      "VITE_SPARK_NETWORK": "unchanged",
+      "VITE_LOCALE_DEFAULT": "en (new; en/es locale system, Node F)",
+      "VITE_LUCA_RECS_SIMULATED": "true (Node I member recs use labeled simulated persistence)",
+      "VITE_LUCA_COPILOT_SIMULATED": "true (Node J practitioner drafts, simulated persistence)",
+      "VITE_CLINIC_OS_BETA": "true (Node H foundation, simulated future workspace)"
+    },
+    "backend": {
+      "SOLARIS_CHANNEL": "non-secret channel label (default 'shared')",
+      "SOLARIS_BUILD_ID": "non-secret build label (default 'unversioned')",
+      "READ_ONLY_MODE": "unchanged",
+      "ALLOW_BETA_DEMO_SEED": "NOT used this sprint (no seed run)"
+    }
+  },
+  "sharedRuntimeLimitations": [
+    "Preview database deferred by Majd (cost). No isolated data plane.",
+    "Shared DB is READ-ONLY: no migration, seed, reset, or row mutation applied.",
+    "Shared backend (PID 673945, :5055) NOT restarted/redeployed.",
+    "Persistence-requiring features use feature-flagged 'Beta preview / Simulated' fixtures + committed-but-UNAPPLIED future migration contracts.",
+    "Secure practitioner Message CTA hidden until POST /api/messages/conversations/provider is live on the shared backend (currently returns 404) and cutover is approved.",
+    "Demo + Stable NOT deployed / NOT fast-forwarded."
+  ],
+  "gates": {
+    "sharedBackendCutover": "WAITING FOR MAJD",
+    "adminBootstrap": "gated on SOLARIS_ADMIN_EMAIL",
+    "physicalIphone": "REQUIRES MAJD",
+    "stableBetaPromotion": "WAITING FOR MAJD"
+  }
+}
