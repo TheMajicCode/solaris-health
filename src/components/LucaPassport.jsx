@@ -39,6 +39,7 @@ import HealthNFT from './wallet/HealthNFT.jsx';
 import ExploreMarketplace from './marketplace/ExploreMarketplace.jsx';
 import ProviderApplication from './provider/ProviderApplication.jsx';
 import MyPractice from './provider/MyPractice.jsx';
+import MemberLucaRecommendations, { LUCA_RECS_SIMULATED } from './luca/MemberLucaRecommendations.jsx';
 import ProviderBookings from './provider/ProviderBookings.jsx';
 import ProviderApprovals from './admin/ProviderApprovals.jsx';
 import MyBookings from './booking/MyBookings.jsx';
@@ -1768,6 +1769,15 @@ function LucaRecommends({ recs, loading, go, user, vitality = 0, focus = [] }) {
           </button>
         </div>
       </div>
+      {LUCA_RECS_SIMULATED && (
+        <div style={{ marginTop: 14 }}>
+          <MemberLucaRecommendations
+            user={user}
+            onView={() => go('explore')}
+            onBook={() => go('explore')}
+          />
+        </div>
+      )}
     </Card>
   );
 }
