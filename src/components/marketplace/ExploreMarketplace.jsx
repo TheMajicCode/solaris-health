@@ -748,7 +748,7 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
         )}
         {onBecomeProvider && (
           <button className="exm-cta" onClick={onBecomeProvider}>
-            <Plus size={16} /> List your practice
+            <Plus size={16} /> Join Solaris
           </button>
         )}
       </div>

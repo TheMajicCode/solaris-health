@@ -200,7 +200,7 @@ function SettingsView({ user }) {
         <div className="pw-set-row"><span>Approved on</span><b>{user?.providerApprovedAt ? new Date(user.providerApprovedAt).toLocaleDateString() : '—'}</b></div>
         <div className="pw-set-row"><span>Commission</span><b>10% per booking</b></div>
       </div>
-      <div className="pw-note"><Clock size={15} /> To edit listing details, open a listing from <b>My Listings</b>. Need to add another practice? Switch to Patient mode and apply again from “Become a Provider”.</div>
+      <div className="pw-note"><Clock size={15} /> To edit listing details, open a listing from <b>My Listings</b>. Need to add another practice? Open <b>Join Solaris</b> and choose <b>Add or claim a practice</b> — no need to reapply.</div>
     </div>
   );
 }

@@ -203,7 +203,7 @@ export default function ProviderApplication({ user, onClose, onSubmitted }) {
         <button className="pap-close" onClick={onClose} aria-label="Close"><X size={20} /></button>
 
         <div className="pap-header">
-          <span className="pap-eyebrow"><Briefcase size={14} /> Become a provider</span>
+          <span className="pap-eyebrow"><Briefcase size={14} /> Join Solaris</span>
           <h2 className="pap-title">Join the Solaris Health network</h2>
           <div className="pap-steps">
             {STEPS.map((s, i) => (

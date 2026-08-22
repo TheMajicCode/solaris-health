@@ -212,7 +212,7 @@ function SettingsView({ user }) {
         <div className="mp-set-row"><span>Commission</span><b>10% per booking</b></div>
       </div>
       <IntakeSettings />
-      <div className="mp-note"><Clock size={15} /> To edit listing details, open a listing from <b>Listings</b>. Need to add another practice? Apply again from “Become a Provider”.</div>
+      <div className="mp-note"><Clock size={15} /> To edit listing details, open a listing from <b>Listings</b>. Need to add another practice? Open <b>Join Solaris</b> and choose <b>Add or claim a practice</b> — no need to reapply.</div>
     </div>
   );
 }

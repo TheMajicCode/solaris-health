@@ -152,7 +152,7 @@ export default function ProviderOnboarding({ user, onClose, onCreated }) {
         ) : (
           <>
             <div className="pon-header">
-              <span className="pon-eyebrow"><Store size={14} /> List your practice</span>
+              <span className="pon-eyebrow"><Store size={14} /> Join Solaris</span>
               <h2 className="pon-title">Join the LUCA provider network</h2>
               <div className="pon-steps">
                 {STEPS.map((s, i) => (
