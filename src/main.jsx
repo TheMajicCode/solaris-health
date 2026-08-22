@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { AppProvider, useApp } from './state/AppContext.jsx'
 import { SparkWalletProvider } from './state/SparkWalletContext.jsx'
+import { LocaleProvider } from './lib/i18n/LocaleContext.jsx'
 import { Spinner } from './components/ui.jsx'
 import Onboarding from './flows/Onboarding.jsx'
 import Auth from './flows/Auth.jsx'
@@ -100,6 +101,7 @@ function Root() {
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <RootErrorBoundary>
+    <LocaleProvider>
     <AppProvider>
     <SparkWalletProvider>
       <Root />
@@ -126,6 +128,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       />
     </SparkWalletProvider>
     </AppProvider>
+    </LocaleProvider>
     </RootErrorBoundary>
   </React.StrictMode>,
 )

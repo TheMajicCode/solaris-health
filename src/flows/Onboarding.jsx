@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../state/AppContext.jsx';
+import { useLocale } from '../lib/i18n/LocaleContext.jsx';
 import { SolarisMark, Wordmark, Button } from '../components/ui.jsx';
 import { Shield, ArrowRight, Sparkles, Heart, GraduationCap, Coins } from 'lucide-react';
 
@@ -63,18 +64,37 @@ function Splash() {
 }
 
 function Welcome({ onNext, onSkip }) {
+  const { t, setLocale, locale } = useLocale();
+  const choose = (loc) => { setLocale(loc); onNext(); };
   return (
     <div className="center col full text-center" style={{ flex: 1, gap: 22, position: 'relative' }}>
       <SkipBtn onSkip={onSkip} />
       <div className="fade-up"><Pill /></div>
       <h1 className="display fade-up delay-1" style={{ fontSize: '2.8rem' }}>
-        Heal <span className="gold">•</span> Learn <span className="gold">•</span> Earn
+        {t('welcome.headline')}
       </h1>
       <p className="muted fade-up delay-2" style={{ fontSize: '1.05rem', maxWidth: 320, lineHeight: 1.6 }}>
-        You are not broken. Your body is speaking. <span className="mint">Solaris helps you listen.</span>
+        {t('welcome.subhead')}
       </p>
-      <div className="fade-up delay-3" style={{ marginTop: 8 }}>
-        <Button onClick={onNext}>Start My Journey <ArrowRight size={18} /></Button>
+      {/* Node F — explicit language entry. Sets the app-wide locale, persists it
+          locally, then proceeds. Either button advances onboarding. */}
+      <div className="fade-up delay-3 col" style={{ marginTop: 8, gap: 10, width: '100%', maxWidth: 320 }}>
+        <Button onClick={() => choose('en')} aria-label="Begin in English">
+          {t('welcome.beginEn')} <ArrowRight size={18} />
+        </Button>
+        <button
+          onClick={() => choose('es')}
+          aria-label="Comenzar en español"
+          className="btn-secondary"
+          style={{
+            width: '100%', padding: '12px 18px', borderRadius: 12, cursor: 'pointer',
+            border: '1px solid rgba(159,231,214,.3)', background: 'transparent', color: '#EAFBF4',
+            fontFamily: "'IBM Plex Sans', system-ui, sans-serif", fontSize: 14, fontWeight: 600,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          }}
+        >
+          {t('welcome.beginEs')} <ArrowRight size={18} />
+        </button>
       </div>
     </div>
   );

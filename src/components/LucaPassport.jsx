@@ -26,6 +26,8 @@ import {
   ChevronDown, Smartphone, Home,
 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
+import { useLocale } from '../lib/i18n/LocaleContext.jsx';
+import { SUPPORTED_LOCALES } from '../lib/i18n/index.js';
 import { api } from '../lib/api.js';
 import { STATIC_GPS_POLICY } from '../lib/gps-policy.js';
 import HealthTimeline from './HealthTimeline.jsx';
@@ -6174,6 +6176,64 @@ export function SettingsPage({ user, go, sub }) {
    Reuses the existing avatar as an accessible dropdown trigger. Mouse, keyboard
    (Enter/Space to open, Escape to close, arrow keys to move), click-outside and
    touch all work. Items: My Profile, Settings, Identity & Data, Sign out. */
+// Language toggle — compact en/es switcher shown beside Notifications in the
+// sticky header. Persists locally (no shared-DB write); Node F locale system.
+const LOCALE_LABELS = { en: 'EN', es: 'ES' };
+const LOCALE_NAMES = { en: 'English', es: 'Español' };
+function LanguageToggle() {
+  const { locale, setLocale } = useLocale();
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDocClick = (e) => { if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('touchstart', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('touchstart', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+  const choose = (loc) => { setLocale(loc); setOpen(false); };
+  return (
+    <div ref={rootRef} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        className="icon-btn"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`Language: ${LOCALE_NAMES[locale] || locale}`}
+        title="Language"
+        onClick={() => setOpen((v) => !v)}
+        style={{ position: 'relative' }}
+      >
+        <Globe size={18} />
+        <span aria-hidden="true" style={{ position: 'absolute', bottom: 3, right: 3, fontSize: 8, fontWeight: 800, letterSpacing: 0.3, color: 'var(--ink)' }}>{LOCALE_LABELS[locale] || locale.toUpperCase()}</span>
+      </button>
+      {open && (
+        <div role="menu" aria-label="Language" style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', minWidth: 168, background: '#fff', border: '1px solid var(--line,#e3ece8)', borderRadius: 14, boxShadow: '0 12px 34px rgba(10,43,41,.18)', padding: 8, zIndex: 60 }}>
+          {SUPPORTED_LOCALES.map((loc) => (
+            <button
+              key={loc}
+              role="menuitemradio"
+              aria-checked={locale === loc}
+              type="button"
+              onClick={() => choose(loc)}
+              style={{ width: '100%', textAlign: 'left', padding: '9px 12px', borderRadius: 10, cursor: 'pointer', background: locale === loc ? 'var(--surface-2,#eafbf4)' : 'transparent', border: 'none', color: 'var(--ink)', fontSize: 13.5, fontWeight: locale === loc ? 700 : 500, display: 'flex', alignItems: 'center', gap: 8 }}
+            >
+              <Globe size={15} className="t-teal" /> {LOCALE_NAMES[loc] || loc}
+              {locale === loc && <BadgeCheck size={14} className="t-teal" style={{ marginLeft: 'auto' }} />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProfileMenu({ user, displayName, go, logout }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
@@ -6685,6 +6745,7 @@ export default function LucaPassport() {
               <Search size={16} />
               <input placeholder="Search your passport, care, and value…" />
             </div>
+            <LanguageToggle />
             <NotificationCenter onNavigate={handleNotificationNavigate} />
             <ProfileMenu user={user} displayName={displayName} go={go} logout={logout} />
           </header>
