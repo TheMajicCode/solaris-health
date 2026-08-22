@@ -4,7 +4,22 @@
   "baseBranch": "agent/abacus-iphone-mobile-flow-e2-1",
   "baseSha": "e13597eb75e158c62ff08d3ae8fd03de05c9e4d0",
   "releaseBranch": "agent/abacus-beta-e4-j-rc-v1",
-  "codeShaAtManifest": "e13597eb75e158c62ff08d3ae8fd03de05c9e4d0",
+  "codeShaAtManifest": "945985435f7134e83c3bf4ae66b14f19fea4eca5",
+  "commitsByNode": {
+    "E4": "21b1af3",
+    "F": "4af85d5",
+    "E5": "2df9cac",
+    "G": "2b598d4",
+    "H": "5442319",
+    "I": "1a58145",
+    "J": "9459854"
+  },
+  "migrationsCommittedNotApplied": [
+    "039_admin_bootstrap.sql (must_change_password + admin_bootstrap ledger)",
+    "040_journey_pipeline.sql (journey pipeline enum/entries/events + clinic_os_orgs)",
+    "041_luca_recommendations.sql (member recommendation sets/actions + journey drafts)",
+    "042_practitioner_copilot.sql (practitioner briefs + drafts)"
+  ],
   "frontend": {
     "package": "luca-passport",
     "bundler": "vite",
