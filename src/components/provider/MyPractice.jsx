@@ -13,16 +13,23 @@ import {
   Loader2, Store, Star, Calendar, BarChart3, Eye, EyeOff, MapPin, Settings as SettingsIcon,
   CheckCircle2, Clock, TrendingUp, MessageSquare, CalendarClock, Coins,
   Bot, Users, Music, Upload, Send, ShieldCheck, ArrowLeft, X, User as UserIcon,
-  ClipboardList, FileText,
+  ClipboardList, FileText, Building2,
 } from 'lucide-react';
 import { api } from '../../lib/api.js';
 import ProviderBookings from './ProviderBookings.jsx';
 import ProviderCalendar from './ProviderCalendar.jsx';
 import GPSEarnings from '../gps/GPSEarnings.jsx';
+import JourneyPipeline from './JourneyPipeline.jsx';
+import ClinicOSFoundation from '../clinic/ClinicOSFoundation.jsx';
+
+// NODE H — Journey Pipeline + Clinic OS foundation ride behind the same Beta
+// flag; when off, the existing practice surface is unchanged.
+const CLINIC_OS_BETA = import.meta.env.VITE_CLINIC_OS_BETA === 'true';
 
 const SUBTABS = [
   { id: 'copilot', label: 'LUCA Copilot', icon: Bot },
   { id: 'patients', label: 'My Patients', icon: Users },
+  ...(CLINIC_OS_BETA ? [{ id: 'pipeline', label: 'Journey Pipeline', icon: ClipboardList }] : []),
   { id: 'listings', label: 'Listings', icon: Store },
   { id: 'bookings', label: 'Bookings', icon: Calendar },
   { id: 'availability', label: 'Availability', icon: CalendarClock },
@@ -30,6 +37,7 @@ const SUBTABS = [
   { id: 'earnings', label: 'GPS Earnings', icon: Coins },
   { id: 'reviews', label: 'Reviews', icon: Star },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+  ...(CLINIC_OS_BETA ? [{ id: 'clinicos', label: 'Clinic OS', icon: Building2 }] : []),
   { id: 'settings', label: 'Settings', icon: SettingsIcon },
 ];
 
@@ -74,6 +82,8 @@ export default function MyPractice({ user, onBookings }) {
         <div className="mp-content">
           {view === 'copilot' && <CopilotView user={user} />}
           {view === 'patients' && <PatientsView user={user} />}
+          {view === 'pipeline' && <JourneyPipeline />}
+          {view === 'clinicos' && <ClinicOSFoundation user={user} />}
           {view === 'audio' && <AudioView />}
           {view === 'listings' && <ListingsView providers={list} onRefresh={load} />}
           {view === 'bookings' && <ProviderBookings onBookings={onBookings} />}
