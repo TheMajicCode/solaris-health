@@ -6429,7 +6429,7 @@ function TabPage({ tab, sub, user, go, effectiveRole, onUnread, onInboxUnread, o
     case 'systimeline': return <SystemTimelinePage />;
     case 'users': return <UserManagementPage />;
     case 'settings': return <SystemSettingsPage />;
-    case 'my-practice': return <MyPractice user={user} onBookings={onBookings} />;
+    case 'my-practice': return <MyPractice user={user} onBookings={onBookings} go={go} />;
     // ---- Practitioner Portal (Sprint F) ----
     case 'prac-clients': return <ErrorBoundary><PatientsPage /></ErrorBoundary>;
     case 'prac-bookings': return <ErrorBoundary><ProviderBookings onBookings={onBookings} /></ErrorBoundary>;

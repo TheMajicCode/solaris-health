@@ -42,7 +42,7 @@ const SUBTABS = [
   { id: 'settings', label: 'Settings', icon: SettingsIcon },
 ];
 
-export default function MyPractice({ user, onBookings }) {
+export default function MyPractice({ user, onBookings, go }) {
   const [view, setView] = useState('copilot');
   const [providers, setProviders] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -81,7 +81,7 @@ export default function MyPractice({ user, onBookings }) {
         <div className="mp-loading"><Loader2 className="mp-spin" size={24} /> Loading your practice…</div>
       ) : (
         <div className="mp-content">
-          {view === 'copilot' && <CopilotView user={user} />}
+          {view === 'copilot' && <CopilotView user={user} go={go} setView={setView} />}
           {view === 'patients' && <PatientsView user={user} />}
           {view === 'pipeline' && <JourneyPipeline />}
           {view === 'clinicos' && <ClinicOSFoundation user={user} />}
@@ -317,7 +317,22 @@ const COPILOT_STARTERS = [
   'Which patients are most engaged right now?',
 ];
 
-function CopilotView({ user } = {}) {
+// RC1 item6 — the set of MyPractice internal sub-tab ids. If a Copilot destination
+// happens to be one of these we switch the workspace sub-tab in place; anything
+// else is a top-level practitioner route resolved by the shell's `go`.
+const MP_SUBTAB_IDS = new Set(SUBTABS.map((t) => t.id));
+
+function CopilotView({ user, go, setView } = {}) {
+  // Real navigation callback threaded into the Copilot. Nothing auto-executes —
+  // this only moves the practitioner to the exact place named by the brief item.
+  const navigate = useCallback((dest) => {
+    const target = dest?.tab;
+    if (!target) return;
+    if (MP_SUBTAB_IDS.has(target) && setView) { setView(target); return; }
+    if (go) go(target, dest?.sub);
+    else window.dispatchEvent(new CustomEvent('solaris:navigate', { detail: dest }));
+  }, [go, setView]);
+
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -363,7 +378,7 @@ function CopilotView({ user } = {}) {
 
       {LUCA_COPILOT_SIMULATED && (
         <div style={{ padding: '0 12px' }}>
-          <PractitionerLucaCopilot user={user} />
+          <PractitionerLucaCopilot user={user} onNavigate={navigate} />
         </div>
       )}
 

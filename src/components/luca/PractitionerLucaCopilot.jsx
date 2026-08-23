@@ -36,16 +36,20 @@ export const COPILOT_ALGO_VERSION = 'luca-copilot-v1-brief';
 
 // Deterministic non-PHI brief fixture. Each item names a source + an exact destination
 // (tab/sub the shell can navigate to). No PHI beyond a first name is included.
+// RC1 item6 — every destination is a REAL practitioner-portal route id that the
+// shell can resolve (my-practice / prac-clients / prac-bookings / prac-availability
+// / prac-messages). The former non-existent "practice" tab shape silently
+// no-op'd. Opening a row only navigates — nothing is executed.
 const BRIEF_ITEMS = [
-  { id: 'today', source: 'Bookings', label: "Today: 2 sessions (next at 2:00 PM)", dest: { tab: 'practice', sub: 'bookings' } },
-  { id: 'upcoming', source: 'Bookings', label: '5 upcoming this week', dest: { tab: 'practice', sub: 'bookings' } },
-  { id: 'intake', source: 'Intake', label: '1 intake pending review (Maria)', dest: { tab: 'practice', sub: 'pipeline' } },
-  { id: 'pipeline', source: 'Journey Pipeline', label: '2 clients moved to Discovery booked', dest: { tab: 'practice', sub: 'pipeline' } },
-  { id: 'review', source: 'Pipeline', label: '1 review due', dest: { tab: 'practice', sub: 'pipeline' } },
-  { id: 'messages', source: 'Messages', label: '3 unanswered messages', dest: { tab: 'practice', sub: 'copilot' } },
-  { id: 'followups', source: 'Follow-ups', label: '2 follow-ups scheduled', dest: { tab: 'practice', sub: 'bookings' } },
-  { id: 'listing', source: 'Listing', label: 'Listing 80% complete — add availability', dest: { tab: 'practice', sub: 'availability' } },
-  { id: 'admin', source: 'Admin', label: 'Next: confirm 1 booking request', dest: { tab: 'practice', sub: 'bookings' } },
+  { id: 'today', source: 'Bookings', label: "Today: 2 sessions (next at 2:00 PM)", dest: { tab: 'prac-bookings' } },
+  { id: 'upcoming', source: 'Bookings', label: '5 upcoming this week', dest: { tab: 'prac-bookings' } },
+  { id: 'intake', source: 'Intake', label: '1 intake pending review (Maria)', dest: { tab: 'prac-clients' } },
+  { id: 'pipeline', source: 'Journey Pipeline', label: '2 clients moved to Discovery booked', dest: { tab: 'prac-clients' } },
+  { id: 'review', source: 'Pipeline', label: '1 review due', dest: { tab: 'prac-clients' } },
+  { id: 'messages', source: 'Messages', label: '3 unanswered messages', dest: { tab: 'prac-messages' } },
+  { id: 'followups', source: 'Follow-ups', label: '2 follow-ups scheduled', dest: { tab: 'prac-bookings' } },
+  { id: 'listing', source: 'Listing', label: 'Listing 80% complete — add availability', dest: { tab: 'prac-availability' } },
+  { id: 'admin', source: 'Admin', label: 'Next: confirm 1 booking request', dest: { tab: 'prac-bookings' } },
 ];
 
 // Draft templates. Bodies contain only [placeholders] — LUCA fabricates no facts.
