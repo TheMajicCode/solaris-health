@@ -1707,6 +1707,7 @@ function pickJourney(focus) {
 }
 
 function LucaRecommends({ recs, loading, go, user, vitality = 0, focus = [] }) {
+  const { setPendingProviderId, setPendingBookProviderId } = useApp() || {};
   if (loading) {
     return (
       <Card>
@@ -1807,8 +1808,16 @@ function LucaRecommends({ recs, loading, go, user, vitality = 0, focus = [] }) {
         <div style={{ marginTop: 14 }}>
           <MemberLucaRecommendations
             user={user}
-            onView={() => go('explore')}
-            onBook={() => go('explore')}
+            onView={(c) => {
+              const pid = c?.providerId ?? c?.id;
+              if (pid != null) setPendingProviderId?.(String(pid)); // open the EXACT provider profile
+              go('explore');
+            }}
+            onBook={(c) => {
+              const pid = c?.providerId ?? c?.id;
+              if (pid != null) setPendingBookProviderId?.(String(pid)); // open the REAL shared BookingFlow
+              go('explore');
+            }}
           />
         </div>
       )}

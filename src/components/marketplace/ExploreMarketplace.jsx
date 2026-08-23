@@ -115,7 +115,7 @@ const STEP_KIND = {
 const DIM_COLOR = { mind: '#5B77C9', body: '#2DB584', heart: '#E07A9B', spirit: '#C79A3A' };
 
 export default function ExploreMarketplace({ user, onBecomeProvider }) {
-  const { exploreFilter, setExploreFilter, setTab, pendingProviderId, setPendingProviderId, pendingCurate, setPendingCurate } = useApp() || {};
+  const { exploreFilter, setExploreFilter, setTab, pendingProviderId, setPendingProviderId, pendingBookProviderId, setPendingBookProviderId, pendingCurate, setPendingCurate } = useApp() || {};
 
   // ── Guided journeys ──
   const [blueprints, setBlueprints] = useState([]);
@@ -172,6 +172,15 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
     setPendingProviderId?.(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingProviderId]);
+
+  // Deep-link: a surface (LUCA recommendation "Book") asked us to open the SAME
+  // shared BookingFlow directly for a specific provider.
+  useEffect(() => {
+    if (!pendingBookProviderId) return;
+    setBookingProviderId(pendingBookProviderId);
+    setPendingBookProviderId?.(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingBookProviderId]);
 
   // ── LUCA "Curate for me" recommendations rail ──
   const [curated, setCurated] = useState(null);   // { nextStep, curatedJourney }

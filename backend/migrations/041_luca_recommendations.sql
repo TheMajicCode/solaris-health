@@ -27,12 +27,13 @@ CREATE TABLE IF NOT EXISTS luca_recommendation_actions (
   acted_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Member-approved personalized Journey drafts (assembled from clinician-reviewed blocks).
+-- Member-approved personalized Journey drafts (assembled from standard, non-clinical self-care templates; no clinical review board is claimed or implied).
 CREATE TABLE IF NOT EXISTS luca_journey_drafts (
   id            BIGSERIAL PRIMARY KEY,
   user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   cadence       TEXT NOT NULL CHECK (cadence IN ('weekly','monthly')),
-  reviewed_by   TEXT NOT NULL,               -- clinical review attribution
+  reviewed_by   TEXT,                          -- optional source/template attribution (NOT a clinical review claim); nullable, RC1
+  source_template TEXT,                        -- RC1: standard self-care template name
   status        TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','approved','enrolled')),
   approved_at   TIMESTAMPTZ,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()

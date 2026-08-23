@@ -16,6 +16,7 @@ export function AppProvider({ children }) {
   const [retaking, setRetaking] = useState(false); // re-launch Solaris Method intake (local state only)
   const [exploreFilter, setExploreFilter] = useState(null); // pre-select a listing type in Explore (e.g. 'diagnostic')
   const [pendingProviderId, setPendingProviderId] = useState(null); // deep-link: open this practitioner profile in Explore
+  const [pendingBookProviderId, setPendingBookProviderId] = useState(null); // deep-link: open the shared BookingFlow for this provider in Explore
   const [pendingCurate, setPendingCurate] = useState(false); // deep-link: run "Curate for me" on Explore mount
   // §4 — a secure conversation the server just authorized, handed to the
   // Communications → Messages surface to open EXACTLY once. Kept in memory only
@@ -151,6 +152,7 @@ export function AppProvider({ children }) {
       retaking, startRetake, stopRetake,
       exploreFilter, setExploreFilter,
       pendingProviderId, setPendingProviderId,
+      pendingBookProviderId, setPendingBookProviderId,
       pendingCurate, setPendingCurate,
       pendingConversation, setPendingConversation,
     }}>

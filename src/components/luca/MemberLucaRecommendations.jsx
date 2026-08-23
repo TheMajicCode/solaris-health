@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { api } from '../../lib/api.js';
 
 /**
  * MemberLucaRecommendations.jsx  — Node I
@@ -13,10 +14,14 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
  *   • Recompute is triggered by: booking, dismissal, preference change, or expiry.
  *   • A booked provider is NOT re-recommended unless a NEW reason applies.
  *   • Only APPROVED providers are eligible.
- *   • Personalized Journey drafts (weekly + monthly) are assembled from
- *     clinician-reviewed building blocks; the member must APPROVE, and only then
- *     does "Begin" enroll into Growth. Labs appear only after an explicit request /
- *     order / reviewed pathway — never surfaced autonomously here.
+ *   • Personalized Journey drafts (weekly + monthly) are assembled from standard,
+ *     non-clinical self-care building blocks; the member must APPROVE, and only
+ *     then does "Begin" enroll into Growth. Labs appear only after an explicit
+ *     request / order / reviewed pathway — never surfaced autonomously here.
+ *   • View opens the EXACT provider profile and Book opens the SAME shared
+ *     BookingFlow used across the app (deep-link by provider id). When live
+ *     approved-provider data is available the candidates are bound to real
+ *     provider ids; otherwise a clearly-labeled simulated fallback is shown.
  *
  * Persistence: shared beta DB is read-only for this sprint, so state is held in a
  * deterministic feature-flagged fixture labeled "Beta preview · Simulated".
@@ -82,17 +87,21 @@ const SIMULATED_POOL = [
   },
 ];
 
-// Clinician-reviewed building blocks for personalized Journey drafts.
+// Standard, non-clinical self-care building blocks for personalized Journey
+// drafts. These are generic wellness templates — NOT reviewed or endorsed by any
+// named clinical body (no such review board exists in this build). The member
+// reviews and approves every draft before anything begins; nothing is clinical
+// advice, diagnosis, or a prescription.
 const JOURNEY_BLOCKS = {
   weekly: {
     cadence: 'weekly',
     title: 'Weekly rhythm draft',
     steps: [
-      'One grounding check-in (5 min) — reviewed self-care block',
+      'One grounding check-in (5 min) — standard self-care block',
       'One movement session aligned to your energy goal',
       'One reflection note you choose to share (or keep private)',
     ],
-    reviewedBy: 'Solaris clinical review board',
+    source: 'Standard self-care template',
   },
   monthly: {
     cadence: 'monthly',
@@ -102,9 +111,29 @@ const JOURNEY_BLOCKS = {
       'One optional session with a saved provider (your choice)',
       'A gentle progress reflection — no scores, no diagnosis',
     ],
-    reviewedBy: 'Solaris clinical review board',
+    source: 'Standard self-care template',
   },
 };
+
+// Generic, honest transparency copy bound onto a REAL approved provider when live
+// data is available. Keeps the "why / assumptions / unknowns" disclosure without
+// asserting any clinical claim LUCA cannot support.
+function liveCandidateFrom(p) {
+  const type = p.provider_type || 'provider';
+  return {
+    id: `live-${p.id}`,
+    providerId: p.id,           // real provider id — View/Book deep-link this
+    live: true,
+    title: p.business_name || 'Approved provider',
+    modality: type,
+    city: p.city || 'See profile',
+    language: p.language || 'en',
+    approved: true,
+    why: `Surfaced because this approved ${type} matches a goal or saved interest on your profile and is currently listed.`,
+    assumptions: 'Assumes your most recently saved preferences still apply — update them to change what surfaces.',
+    unknowns: 'LUCA cannot see your insurance network, diagnosis, or clinical suitability — confirm fit before booking.',
+  };
+}
 
 function useSimulatedRecommendations(user) {
   const bookedProviderId = user?.bookedProviderId || null;
@@ -112,6 +141,33 @@ function useSimulatedRecommendations(user) {
   const [saved, setSaved] = useState(() => new Set());
   const [version, setVersion] = useState(0); // bump = recompute
   const [prefsToken, setPrefsToken] = useState('base');
+  // Live-bound pool of REAL approved providers (null until a successful read).
+  // Reads are allowed against the read-only shared DB; on any failure we keep the
+  // deterministic simulated fallback so the surface never dead-ends.
+  const [livePool, setLivePool] = useState(null);
+
+  useEffect(() => {
+    let cancel = false;
+    api.getProviders({ limit: 50 })
+      .then((d) => {
+        const list = (d && Array.isArray(d.providers)) ? d.providers : [];
+        const seen = new Set();
+        const bound = [];
+        for (const p of list) {
+          if (!p || p.id == null) continue;
+          const t = p.provider_type || 'provider';
+          if (seen.has(t)) continue; // diversify by real modality
+          seen.add(t);
+          bound.push(liveCandidateFrom(p));
+          if (bound.length >= MAX_CANDIDATES) break;
+        }
+        if (!cancel && bound.length) setLivePool(bound);
+      })
+      .catch(() => { /* keep simulated fallback */ });
+    return () => { cancel = true; };
+  }, []);
+
+  const basePool = livePool || SIMULATED_POOL;
 
   // Recompute selection: exclude dismissed + the already-booked provider (unless a
   // new reason applies — simulated here as "none"), keep only approved, diversify by
@@ -119,10 +175,11 @@ function useSimulatedRecommendations(user) {
   const candidates = useMemo(() => {
     const seenModality = new Set();
     const out = [];
-    for (const p of SIMULATED_POOL) {
+    for (const p of basePool) {
       if (!p.approved) continue;
       if (dismissed.has(p.id)) continue;
-      if (p.id === bookedProviderId) continue; // never re-recommend booked provider w/o new reason
+      // never re-recommend the booked provider w/o a new reason (match sim id or real id)
+      if (p.id === bookedProviderId || p.providerId === bookedProviderId) continue;
       if (seenModality.has(p.modality)) continue; // diversify
       seenModality.add(p.modality);
       out.push(p);
@@ -130,7 +187,7 @@ function useSimulatedRecommendations(user) {
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dismissed, bookedProviderId, version, prefsToken]);
+  }, [dismissed, bookedProviderId, version, prefsToken, basePool]);
 
   const recompute = useCallback(() => setVersion((v) => v + 1), []);
   const dismiss = useCallback((id) => {
@@ -204,7 +261,7 @@ function JourneyDraftCard({ block, onApprove, approved }) {
       <ul className="f7" style={{ margin: '8px 0', paddingLeft: 18, color: 'var(--ink)' }}>
         {block.steps.map((s, i) => <li key={i}>{s}</li>)}
       </ul>
-      <div className="f7" style={{ color: 'var(--muted)' }}>Assembled from clinician-reviewed blocks · reviewed by {block.reviewedBy}</div>
+      <div className="f7" style={{ color: 'var(--muted)' }}>{block.source} · you review and approve before anything begins</div>
       <button type="button" style={{ marginTop: 10 }} disabled={approved}
         onClick={() => onApprove(block.cadence)} aria-label={`Approve and begin ${block.title}`}>
         {approved ? 'Approved — enrolled in Growth' : 'Approve & Begin'}
