@@ -4,6 +4,26 @@
   "baseBranch": "agent/abacus-iphone-mobile-flow-e2-1",
   "baseSha": "e13597eb75e158c62ff08d3ae8fd03de05c9e4d0",
   "releaseBranch": "agent/abacus-beta-e4-j-rc-v1",
+  "provenance": {
+    "note": "RC1 item9 — record BOTH the release-branch tip the RC1 integration branch was created from AND the runtime source sha that is/was live on Preview. These are distinct and must not be conflated.",
+    "releaseBranchTip": "be7f7378a3f1375f5ce19354261a996944140a06",
+    "releaseBranchTipMeaning": "HEAD of agent/abacus-beta-e4-j-rc-v1 at the time agent/abacus-beta-e4-j-rc1-integration was cut.",
+    "runtimeSourceSha": "945985435f7134e83c3bf4ae66b14f19fea4eca5",
+    "runtimeSourceShaMeaning": "The E4-J runtime source that was previously built and live on Preview (asset index-Doxuk5J5.js). It is the ROLLBACK TARGET for the RC1 deploy.",
+    "rc1IntegrationBranch": "agent/abacus-beta-e4-j-rc1-integration",
+    "rc1PreviewReleaseSha": "b0b002fb8cd1ee3f443025ce9ad7a0964bf1aa56",
+    "rc1PreviewReleaseShaMeaning": "RC1 integration branch tip (items 1-8 applied) built with preview flags and deployed to Preview (asset index-BiYYxRFi.js).",
+    "rc1CommitsByItem": {
+      "item1_migration_fk_types": "80addf8",
+      "item2_admin_activation": "aba025f",
+      "item3_mobile_practitioner_portal": "31be076",
+      "item4_member_luca_real_providers": "c4faa47",
+      "item5_journey_approve_begin": "2ac36b7",
+      "item6_practitioner_copilot_nav": "876fd6d",
+      "item7_spanish_honesty": "ec4077a",
+      "item8_clinic_os_informational": "b0b002f"
+    }
+  },
   "codeShaAtManifest": "945985435f7134e83c3bf4ae66b14f19fea4eca5",
   "commitsByNode": {
     "E4": "21b1af3",
@@ -17,55 +37,100 @@
   "migrationsCommittedNotApplied": [
     "039_admin_bootstrap.sql (must_change_password + admin_bootstrap ledger)",
     "040_journey_pipeline.sql (journey pipeline enum/entries/events + clinic_os_orgs)",
-    "041_luca_recommendations.sql (member recommendation sets/actions + journey drafts)",
-    "042_practitioner_copilot.sql (practitioner briefs + drafts)"
+    "041_luca_recommendations.sql (member recommendation sets/actions + journey drafts; user FKs UUID per RC1 item1)",
+    "042_practitioner_copilot.sql (practitioner briefs + drafts; user FKs UUID per RC1 item1)"
   ],
   "frontend": {
     "package": "luca-passport",
     "bundler": "vite",
     "buildCmd": "npm run build",
+    "buildFlagsPreview": "VITE_LUCA_RECS_SIMULATED=true VITE_LUCA_COPILOT_SIMULATED=true VITE_CLINIC_OS_BETA=true VITE_SPANISH_PREVIEW=true VITE_LOCALE_DEFAULT=en (VITE_SECURE_MESSAGING_ENABLED left UNSET)",
     "test": "vitest run",
     "deployMode": "immutable release + atomic symlink swap",
-    "apiUpstream": "shared backend 127.0.0.1:5055 (UNCHANGED)"
+    "apiUpstream": "shared backend 127.0.0.1:5055 (UNCHANGED, PID 673945 not restarted)"
+  },
+  "deployTopology": {
+    "preview": {
+      "url": "https://preview.solarishealth.app",
+      "vhost": "/etc/nginx/conf.d/preview-solarishealth-app.conf",
+      "docRoot": "/opt/solaris-beta-preview/current/dist",
+      "currentReleaseDir": "/opt/solaris-beta-preview/releases/b0b002fb8cd1ee3f443025ce9ad7a0964bf1aa56/dist",
+      "servedAsset": "index-BiYYxRFi.js"
+    },
+    "demo": {
+      "url": "https://demo.solarishealth.app",
+      "docRoot": "/opt/solaris-beta-demo/current/dist",
+      "currentReleaseDir": "/opt/solaris-beta-demo/releases/a4dbf6d49f3bd458dc3f03bbe74193ceebc15d33/dist",
+      "servedAsset": "index-BTjThGYr.js",
+      "changedThisSprint": false
+    },
+    "stable": {
+      "url": "https://solarishealth.app",
+      "docRoot": "/opt/solaris-beta/current/dist",
+      "currentReleaseDir": "/opt/solaris-beta/releases/f7768043262c534fc974192fece56890560bc6e4/dist",
+      "servedAsset": "index-BirNTkSl.js",
+      "changedThisSprint": false
+    }
+  },
+  "rollback": {
+    "scope": "PREVIEW ONLY. Rollback/forward rehearsed on preview.solarishealth.app. NOT rehearsed and NOT to be performed against Demo or Stable.",
+    "mechanism": "Atomic symlink swap of /opt/solaris-beta-preview/current between immutable release directories. nginx follows the symlink per request; no service restart required.",
+    "forwardTarget": "/opt/solaris-beta-preview/releases/b0b002fb8cd1ee3f443025ce9ad7a0964bf1aa56/dist (RC1, asset index-BiYYxRFi.js)",
+    "rollbackTarget": "/opt/solaris-beta-preview/releases/945985435f7134e83c3bf4ae66b14f19fea4eca5/dist (prior runtime source, asset index-Doxuk5J5.js)",
+    "rollbackCommand": "sudo ln -sfn /opt/solaris-beta-preview/releases/945985435f7134e83c3bf4ae66b14f19fea4eca5 /opt/solaris-beta-preview/current",
+    "forwardRecoveryCommand": "sudo ln -sfn /opt/solaris-beta-preview/releases/b0b002fb8cd1ee3f443025ce9ad7a0964bf1aa56 /opt/solaris-beta-preview/current",
+    "verifyCommand": "curl -s -H 'Host: preview.solarishealth.app' http://127.0.0.1/ | grep -oE 'index-[A-Za-z0-9_-]+\\.js'",
+    "rehearsal": {
+      "performed": true,
+      "step1_rollback": "current -> 945985435...; served asset index-Doxuk5J5.js (VERIFIED)",
+      "step2_forwardRecovery": "current -> b0b002f...; served asset index-BiYYxRFi.js (VERIFIED)",
+      "endState": "current -> b0b002f... (RC1)",
+      "sharedBackendPidDuringRehearsal": "673945 unchanged (frontend-only swap; backend not touched)"
+    },
+    "backendRedeployDoesNotRollbackDb": "CRITICAL: rolling the frontend symlink back does NOT revert any database state. Migrations 039-042 are committed-but-UNAPPLIED; no DB migration was applied this sprint, so there is nothing to roll back on the DB. If the shared backend is ever redeployed, that redeploy likewise does NOT undo applied migrations — DB rollback is a separate, manual, forward-fix operation and is OUT OF SCOPE for this Preview rollback."
   },
   "backend": {
     "package": "luca-passport-backend",
     "runtime": "node/express",
     "deployed": false,
-    "note": "Backend CODE updated (non-secret health channel/build id, messaging tests). NOT deployed. Shared backend PID unchanged; cutover deferred to Majd."
+    "note": "Backend CODE updated (non-secret health channel/build id, messaging tests, RC1 item2 admin-activation lib + dry-run). NOT deployed. Shared backend PID 673945 unchanged; cutover deferred to Majd."
   },
   "schemaVersion": "038_binding_proof_and_challenges",
   "migrationsAppliedThisSprint": "NONE (shared DB is read-only per Majd deferral)",
   "featureFlags": {
     "frontend": {
-      "VITE_SECURE_MESSAGING_ENABLED": "false (Message CTA hidden until backend cutover)",
+      "VITE_SECURE_MESSAGING_ENABLED": "UNSET (Message CTA hidden until backend cutover)",
       "VITE_SPARK_WALLET_ENABLED": "unchanged",
       "VITE_SPARK_DEMO_FIXTURE": "unchanged",
       "VITE_SPARK_NETWORK": "unchanged",
-      "VITE_LOCALE_DEFAULT": "en (new; en/es locale system, Node F)",
+      "VITE_LOCALE_DEFAULT": "en (en/es locale system, Node F)",
+      "VITE_SPANISH_PREVIEW": "true on Preview only (RC1 item7). UNSET on Stable => Spanish disabled, English only.",
       "VITE_LUCA_RECS_SIMULATED": "true (Node I member recs use labeled simulated persistence)",
       "VITE_LUCA_COPILOT_SIMULATED": "true (Node J practitioner drafts, simulated persistence)",
-      "VITE_CLINIC_OS_BETA": "true (Node H foundation, simulated future workspace)"
+      "VITE_CLINIC_OS_BETA": "true (Node H informational simulated preview; RC1 item8 removed all metadata staging)"
     },
     "backend": {
       "SOLARIS_CHANNEL": "non-secret channel label (default 'shared')",
       "SOLARIS_BUILD_ID": "non-secret build label (default 'unversioned')",
       "READ_ONLY_MODE": "unchanged",
-      "ALLOW_BETA_DEMO_SEED": "NOT used this sprint (no seed run)"
+      "ALLOW_BETA_DEMO_SEED": "NOT used this sprint (no seed run)",
+      "SOLARIS_ADMIN_EMAIL": "UNSET (admin bootstrap gated; no admin created — RC1 item2)"
     }
   },
   "sharedRuntimeLimitations": [
     "Preview database deferred by Majd (cost). No isolated data plane.",
     "Shared DB is READ-ONLY: no migration, seed, reset, or row mutation applied.",
     "Shared backend (PID 673945, :5055) NOT restarted/redeployed.",
-    "Persistence-requiring features use feature-flagged 'Beta preview / Simulated' fixtures + committed-but-UNAPPLIED future migration contracts.",
+    "Persistence-requiring features use feature-flagged 'Simulated Preview' fixtures + committed-but-UNAPPLIED future migration contracts.",
     "Secure practitioner Message CTA hidden until POST /api/messages/conversations/provider is live on the shared backend (currently returns 404) and cutover is approved.",
-    "Demo + Stable NOT deployed / NOT fast-forwarded."
+    "Demo + Stable NOT deployed / NOT fast-forwarded (verified byte-identical assets + unchanged release symlinks this sprint)."
   ],
   "gates": {
     "sharedBackendCutover": "WAITING FOR MAJD",
-    "adminBootstrap": "gated on SOLARIS_ADMIN_EMAIL",
-    "physicalIphone": "REQUIRES MAJD",
-    "stableBetaPromotion": "WAITING FOR MAJD"
+    "adminBootstrap": "gated on SOLARIS_ADMIN_EMAIL (no admin provisioned)",
+    "physicalIphone": "REQUIRES MAJD (all mobile checks were Chromium SIMULATION, never a physical iPhone)",
+    "stableBetaPromotion": "WAITING FOR MAJD",
+    "migrations039to042": "COMMITTED, NOT APPLIED — WAITING FOR MAJD",
+    "spanishGA": "WAITING FOR qualified human translation of 4 safety keys (see nodeE4J-RC1-spanish-missing-inventory.md)"
   }
 }
