@@ -28,3 +28,27 @@ CREATE TABLE IF NOT EXISTS admin_bootstrap (
 -- At most one bootstrap row ever.
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_admin_bootstrap_singleton
   ON admin_bootstrap ((true));
+
+-- RC1 (item 2): secure single-use, time-limited admin ACTIVATION tokens.
+-- The bootstrap never sets a usable password; it mints an activation token,
+-- delivers the RAW token OUT OF BAND, and stores ONLY its sha256 hash here.
+-- Single-use (used_at), time-limited (expires_at), revocable (revoked_at).
+CREATE TABLE IF NOT EXISTS admin_activation_tokens (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  admin_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash    VARCHAR(64) NOT NULL,   -- sha256(token); raw token NEVER stored
+  purpose       VARCHAR(32) NOT NULL DEFAULT 'admin_activation',
+  expires_at    TIMESTAMP NOT NULL,     -- time-limited
+  used_at       TIMESTAMP,              -- single-use: set exactly once on consume
+  revoked_at    TIMESTAMP,             -- recovery / revocation path
+  created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_admin_activation_token_hash
+  ON admin_activation_tokens (token_hash);
+CREATE INDEX IF NOT EXISTS idx_admin_activation_user
+  ON admin_activation_tokens (admin_user_id);
+
+-- Track MFA / passkey enrollment so a bootstrapped admin cannot be promoted to
+-- Stable with password-only auth (enforced by app policy, not this migration).
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS admin_mfa_enrolled_at TIMESTAMP;
