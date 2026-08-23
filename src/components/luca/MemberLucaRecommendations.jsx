@@ -270,7 +270,7 @@ function JourneyDraftCard({ block, onApprove, approved }) {
   );
 }
 
-export default function MemberLucaRecommendations({ user = {}, onView, onBook }) {
+export default function MemberLucaRecommendations({ user = {}, onView, onBook, onApprove }) {
   const {
     candidates, saved, dismiss, save, recompute, changePrefs,
   } = useSimulatedRecommendations(user);
@@ -294,7 +294,14 @@ export default function MemberLucaRecommendations({ user = {}, onView, onBook })
   const handleDismiss = (c) => { dismiss(c.id); };            // dismissal triggers recompute
   const handleSave = (c) => { save(c.id); };
   const handleView = (c) => { onView?.(c); };
-  const handleApprove = (cadence) => { setApprovedCadence(cadence); }; // member approval → enroll
+  // Member approval → record locally AND hand the exact approved draft to the
+  // caller so it can surface it in Communications → Growth. This is a local,
+  // simulated enrollment: nothing is written to any server here.
+  const handleApprove = (cadence) => {
+    setApprovedCadence(cadence);
+    const block = JOURNEY_BLOCKS[cadence];
+    if (block) onApprove?.({ ...block, approvedAt: Date.now() });
+  };
 
   return (
     <div className="luca-recs" data-testid="luca-recs" style={{ display: 'grid', gap: 12 }}>

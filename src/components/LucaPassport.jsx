@@ -1707,7 +1707,7 @@ function pickJourney(focus) {
 }
 
 function LucaRecommends({ recs, loading, go, user, vitality = 0, focus = [] }) {
-  const { setPendingProviderId, setPendingBookProviderId } = useApp() || {};
+  const { setPendingProviderId, setPendingBookProviderId, setApprovedJourney } = useApp() || {};
   if (loading) {
     return (
       <Card>
@@ -1817,6 +1817,12 @@ function LucaRecommends({ recs, loading, go, user, vitality = 0, focus = [] }) {
               const pid = c?.providerId ?? c?.id;
               if (pid != null) setPendingBookProviderId?.(String(pid)); // open the REAL shared BookingFlow
               go('explore');
+            }}
+            onApprove={(block) => {
+              // Local/simulated enrollment: stash the exact approved draft, then
+              // land the member on Communications → Growth where it is shown.
+              setApprovedJourney?.(block);
+              go('growth');
             }}
           />
         </div>
@@ -3224,8 +3230,40 @@ function HabitTracker({ habits, ticked, onToggle, onAdd, onDelete }) {
   );
 }
 
+/* RC1 item5 — the exact Journey draft a member approved from LUCA suggestions,
+   surfaced here in Communications → Growth. This is a LOCAL, simulated enrollment:
+   it lives only in memory for this session and is NOT saved to any server. The
+   card states that plainly and preserves the record of the member's own approval. */
+function ApprovedJourneyCard({ journey, onDismiss }) {
+  if (!journey) return null;
+  const when = journey.approvedAt ? new Date(journey.approvedAt).toLocaleString() : null;
+  return (
+    <Card className="lg" data-testid="approved-journey-card"
+      style={{ border: '1px solid var(--brand,#06403B)', background: 'rgba(6,64,59,.04)' }}>
+      <div className="between" style={{ alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <SectionHead eyebrow="You approved this journey" title={journey.title} />
+          <div className="tiny muted" style={{ marginTop: -6 }}>
+            Local preview · Simulated — not saved to any server. You approved it{when ? ` on ${when}` : ''}.
+          </div>
+        </div>
+        <button type="button" onClick={onDismiss} aria-label="Dismiss approved journey"
+          className="tiny" style={{ border: '1px solid var(--line)', background: '#fff', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', flex: 'none' }}>
+          Dismiss
+        </button>
+      </div>
+      <ul className="f7" style={{ margin: '10px 0 6px', paddingLeft: 18 }}>
+        {(journey.steps || []).map((s, i) => <li key={i} style={{ marginBottom: 4 }}>{s}</li>)}
+      </ul>
+      <div className="tiny muted2">
+        {journey.source ? `${journey.source} · ` : ''}Nothing runs automatically — each step is yours to start.
+      </div>
+    </Card>
+  );
+}
+
 function JournalPage({ user, go, forcedView, hideToggle }) {
-  const { setPendingProviderId } = useApp();
+  const { setPendingProviderId, approvedJourney, setApprovedJourney } = useApp();
   const { playById } = useAudio();
   // `view` is normally internal (Grow / Reflect toggle). When the Journal area
   // wrapper drives it (Journal = reflect, Growth = grow), it passes `forcedView`
@@ -3387,6 +3425,8 @@ function JournalPage({ user, go, forcedView, hideToggle }) {
             <CardSkeleton rows={4} /><CardSkeleton rows={3} />
           </div>
         ) : (
+          <>
+          <ApprovedJourneyCard journey={approvedJourney} onDismiss={() => setApprovedJourney?.(null)} />
           <div className="grid-2-1" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.3fr) minmax(0,1fr)', gap: 20, alignItems: 'start' }}>
             <GrowthTodos
               todos={todos}
@@ -3405,6 +3445,7 @@ function JournalPage({ user, go, forcedView, hideToggle }) {
               onDelete={removeHabit}
             />
           </div>
+          </>
         )
       ) : (
         <div className="grid-2-1" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1.3fr)', gap: 20, alignItems: 'start' }}>

@@ -22,6 +22,11 @@ export function AppProvider({ children }) {
   // Communications → Messages surface to open EXACTLY once. Kept in memory only
   // (never localStorage/sessionStorage); cleared after it is consumed and on logout.
   const [pendingConversation, setPendingConversation] = useState(null);
+  // RC1 item5 — a Journey draft the member explicitly approved from LUCA suggestions.
+  // Local/simulated only: kept in memory (never localStorage/server); surfaced in
+  // Communications → Growth so the member sees the exact draft they approved.
+  // No server-persistence is claimed or performed here.
+  const [approvedJourney, setApprovedJourney] = useState(null);
 
   // ── Shared LUCA conversation (used by the LUCA Coach surface) ──
   const [lucaMessages, setLucaMessages] = useState(() => {
@@ -128,6 +133,7 @@ export function AppProvider({ children }) {
     setUser(null); setProfile(null); setTab('home'); setAuthView('intro'); setDemoRole(null);
     setNostrBanner({ show: false, npub: '' });
     setPendingConversation(null); // §4 — never persist a pending secure conversation across logout
+    setApprovedJourney(null); // RC1 item5 — approved Journey draft is local/session only
     setLucaMessages([]); setLucaLoaded(false);
     setCurrentTrack(null); setIsPlaying(false); setAudioQueue([]);
     try { sessionStorage.removeItem('luca_messages'); } catch {}
@@ -155,6 +161,7 @@ export function AppProvider({ children }) {
       pendingBookProviderId, setPendingBookProviderId,
       pendingCurate, setPendingCurate,
       pendingConversation, setPendingConversation,
+      approvedJourney, setApprovedJourney,
     }}>
       {children}
     </AppContext.Provider>
