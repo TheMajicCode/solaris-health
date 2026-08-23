@@ -5,11 +5,12 @@
 -- member-approved personalized Journey drafts. All additive; no existing column
 -- is dropped or renamed. Provenance columns are NON-PHI only (algorithm version,
 -- candidate provider ids, member action). LUCA never stores diagnosis/suitability/outcome.
+-- RC1 FIX: user FKs are UUID (canonical users.id is UUID); prior BIGINT was a defect.
 
 -- Up to MAX_CANDIDATES diversified approved candidates surfaced per generation.
 CREATE TABLE IF NOT EXISTS luca_recommendation_sets (
   id             BIGSERIAL PRIMARY KEY,
-  user_id        BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   algo_version   TEXT NOT NULL,              -- e.g. 'luca-recs-v2-diversified'
   candidate_ids  TEXT[] NOT NULL DEFAULT '{}', -- provider ids only (non-PHI)
   reason         TEXT,                        -- recompute trigger: booking|dismissal|prefs|expiry
@@ -29,7 +30,7 @@ CREATE TABLE IF NOT EXISTS luca_recommendation_actions (
 -- Member-approved personalized Journey drafts (assembled from clinician-reviewed blocks).
 CREATE TABLE IF NOT EXISTS luca_journey_drafts (
   id            BIGSERIAL PRIMARY KEY,
-  user_id       BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   cadence       TEXT NOT NULL CHECK (cadence IN ('weekly','monthly')),
   reviewed_by   TEXT NOT NULL,               -- clinical review attribution
   status        TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','approved','enrolled')),
