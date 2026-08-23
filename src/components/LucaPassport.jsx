@@ -27,7 +27,8 @@ import {
 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { useLocale } from '../lib/i18n/LocaleContext.jsx';
-import { SUPPORTED_LOCALES } from '../lib/i18n/index.js';
+import { SUPPORTED_LOCALES, enabledLocales } from '../lib/i18n/index.js';
+import { SpanishPreviewDisclosure } from '../lib/i18n/LocaleContext.jsx';
 import { api } from '../lib/api.js';
 import { STATIC_GPS_POLICY } from '../lib/gps-policy.js';
 import HealthTimeline from './HealthTimeline.jsx';
@@ -6273,7 +6274,8 @@ export function SettingsPage({ user, go, sub }) {
 // Language toggle — compact en/es switcher shown beside Notifications in the
 // sticky header. Persists locally (no shared-DB write); Node F locale system.
 const LOCALE_LABELS = { en: 'EN', es: 'ES' };
-const LOCALE_NAMES = { en: 'English', es: 'Español' };
+// RC1 item7 — Spanish is labeled a PREVIEW everywhere it is offered.
+const LOCALE_NAMES = { en: 'English', es: 'Español (vista previa)' };
 function LanguageToggle() {
   const { locale, setLocale } = useLocale();
   const [open, setOpen] = useState(false);
@@ -6309,7 +6311,7 @@ function LanguageToggle() {
       </button>
       {open && (
         <div role="menu" aria-label="Language" style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', minWidth: 168, background: '#fff', border: '1px solid var(--line,#e3ece8)', borderRadius: 14, boxShadow: '0 12px 34px rgba(10,43,41,.18)', padding: 8, zIndex: 60 }}>
-          {SUPPORTED_LOCALES.map((loc) => (
+          {enabledLocales().map((loc) => (
             <button
               key={loc}
               role="menuitemradio"
@@ -6322,6 +6324,8 @@ function LanguageToggle() {
               {locale === loc && <BadgeCheck size={14} className="t-teal" style={{ marginLeft: 'auto' }} />}
             </button>
           ))}
+          {/* RC1 item7 — Spanish preview disclosure, shown only while ES is active. */}
+          <div style={{ marginTop: 6 }}><SpanishPreviewDisclosure /></div>
         </div>
       )}
     </div>

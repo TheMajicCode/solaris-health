@@ -74,6 +74,11 @@ export default {
   'error.generic': 'Algo salió mal. Inténtalo de nuevo.',
   'error.offline': 'Parece que no tienes conexión.',
 
+  // ── Spanish preview meta-notices (reviewed — NOT clinical content) ──
+  'preview.spanishBadge': 'Vista previa en español',
+  'preview.spanishDisclosure': 'El español es una vista previa temprana. Los avisos de seguridad, consentimiento, privacidad, clínicos, legales y de crisis se muestran en inglés revisado hasta que se apruebe una traducción al español calificada.',
+  'preview.safetyReviewPending': 'La traducción al español de este aviso importante está en revisión. Se muestra en inglés revisado para mantener su exactitud.',
+
   // ── SAFETY / LEGAL / CLINICAL / CRISIS — REVIEWED TRANSLATION REQUIRED ──
   // Do NOT machine-translate. Left as REVIEW_PENDING until a qualified human review.
   'safety.consentToShare': REVIEW_PENDING,

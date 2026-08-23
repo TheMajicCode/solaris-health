@@ -70,6 +70,11 @@ export default {
   'error.generic': 'Something went wrong. Please try again.',
   'error.offline': 'You appear to be offline.',
 
+  // ── Spanish preview meta-notices (translatable — NOT clinical content) ──
+  'preview.spanishBadge': 'Spanish preview',
+  'preview.spanishDisclosure': 'Spanish is an early preview. Safety, consent, privacy, clinical, legal, and crisis notices are shown in reviewed English until a qualified Spanish translation is approved.',
+  'preview.safetyReviewPending': 'Spanish translation of this important notice is under review. It is shown in reviewed English to keep it accurate.',
+
   // ── SAFETY / LEGAL / CLINICAL / CRISIS (reviewed translation required) ──
   'safety.consentToShare': 'By continuing you consent to share this information with your selected practitioner.',
   'safety.notMedicalAdvice': 'Solaris and LUCA provide organizational support only and do not provide medical, legal, or financial advice.',

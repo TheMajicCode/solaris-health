@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../state/AppContext.jsx';
 import { useLocale } from '../lib/i18n/LocaleContext.jsx';
+import { enabledLocales } from '../lib/i18n/index.js';
 import { SolarisMark, Wordmark, Button } from '../components/ui.jsx';
 import { Shield, ArrowRight, Sparkles, Heart, GraduationCap, Coins } from 'lucide-react';
 
@@ -66,6 +67,11 @@ function Splash() {
 function Welcome({ onNext, onSkip }) {
   const { t, setLocale, locale } = useLocale();
   const choose = (loc) => { setLocale(loc); onNext(); };
+  // Node F honesty gate: Spanish is a preview locale with safety strings still
+  // under clinical review. Only surface the Spanish entry when the preview flag
+  // enables it (see enabledLocales()); on Stable the button is hidden and
+  // setLocale('es') is a no-op regardless.
+  const spanishEnabled = enabledLocales().includes('es');
   return (
     <div className="center col full text-center" style={{ flex: 1, gap: 22, position: 'relative' }}>
       <SkipBtn onSkip={onSkip} />
@@ -82,19 +88,22 @@ function Welcome({ onNext, onSkip }) {
         <Button onClick={() => choose('en')} aria-label="Begin in English">
           {t('welcome.beginEn')} <ArrowRight size={18} />
         </Button>
-        <button
-          onClick={() => choose('es')}
-          aria-label="Comenzar en español"
-          className="btn-secondary"
-          style={{
-            width: '100%', padding: '12px 18px', borderRadius: 12, cursor: 'pointer',
-            border: '1px solid rgba(159,231,214,.3)', background: 'transparent', color: '#EAFBF4',
-            fontFamily: "'IBM Plex Sans', system-ui, sans-serif", fontSize: 14, fontWeight: 600,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-          }}
-        >
-          {t('welcome.beginEs')} <ArrowRight size={18} />
-        </button>
+        {spanishEnabled && (
+          <button
+            onClick={() => choose('es')}
+            aria-label="Comenzar en español (vista previa)"
+            data-testid="welcome-begin-es"
+            className="btn-secondary"
+            style={{
+              width: '100%', padding: '12px 18px', borderRadius: 12, cursor: 'pointer',
+              border: '1px solid rgba(159,231,214,.3)', background: 'transparent', color: '#EAFBF4',
+              fontFamily: "'IBM Plex Sans', system-ui, sans-serif", fontSize: 14, fontWeight: 600,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            }}
+          >
+            {t('welcome.beginEs')} · {t('preview.spanishBadge')} <ArrowRight size={18} />
+          </button>
+        )}
       </div>
     </div>
   );
