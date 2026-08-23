@@ -1,36 +1,42 @@
 /**
- * ClinicOSFoundation — NODE H "Clinic OS — Beta foundation".
+ * ClinicOSFoundation — NODE H "Clinic OS" (informational preview).
  *
- * SCOPE GUARD: this is the My Practice / Clinic OS FOUNDATION only — NOT a full
- * ERP/EHR/billing system. It collects NON-SENSITIVE organisation metadata
- * (practice name, type, city, short description) tied to an approved
- * practitioner, shows a "Pending review" state, and renders a clearly-labelled
- * SIMULATED preview of the future clinic workspace. It performs NO activation,
- * grants NO entitlements, and creates NO tenants.
+ * SCOPE GUARD (RC1 item8): this surface is INFORMATIONAL ONLY. It is NOT an
+ * ERP/EHR/billing system, and — unlike an earlier draft — it no longer collects
+ * or stages ANY organisation metadata. It creates NO orgs, NO tenants, NO
+ * memberships, NO entitlements, and NO approval records (not even locally), and
+ * performs NO shared-DB write. It simply explains that Clinic OS is coming later
+ * and that a SEPARATE verification will be required, and shows a clearly-labelled
+ * SIMULATED preview of the future clinic workspace.
  *
- * Tenancy / RBAC are incomplete, so there is no shared-DB write here. The future
- * additive persistence contract lives in migrations/040_journey_pipeline.sql
- * (clinic_os_orgs table) — COMMITTED, NOT APPLIED. This surface stages the org
- * metadata locally only, behind VITE_CLINIC_OS_BETA.
+ * The future additive persistence contract lives in
+ * migrations/040_journey_pipeline.sql (clinic_os_orgs table) — COMMITTED, NOT
+ * APPLIED. Nothing on this surface depends on it. Gated behind VITE_CLINIC_OS_BETA.
  */
-import React, { useState } from 'react';
-import { Building2, ShieldCheck, Clock, Info, Layers, Lock } from 'lucide-react';
+import React from 'react';
+import { Building2, Clock, Info, Layers, Lock, ShieldCheck } from 'lucide-react';
 
 const FLAG = import.meta.env.VITE_CLINIC_OS_BETA === 'true';
-const ORG_TYPES = ['Solo practice', 'Group practice', 'Wellness studio', 'Clinic', 'Other'];
 
-// NON-SENSITIVE metadata only. No licence numbers, no PHI, no financial data.
+// What a real Clinic OS activation will require BEFORE any org/tenant exists.
+// Documented here so the boundary is explicit; none of this is implemented yet.
+const REAL_REQUIREMENTS = [
+  'Multi-tenant data model with row-level isolation per organisation',
+  'Role-based access control (owner / admin / clinician / staff) and audited memberships',
+  'Separate practitioner + organisation verification (identity, licensure, ownership)',
+  'Entitlement / billing model governing which features an org may use',
+  'Applied database migration (clinic_os_orgs and related tables — 040 is committed, NOT applied)',
+  'Security, privacy, and compliance review before any real patient/clinic data is stored',
+];
+
 export default function ClinicOSFoundation({ user }) {
-  const [org, setOrg] = useState({ name: '', type: ORG_TYPES[0], city: '', about: '' });
-  const [staged, setStaged] = useState(false);
-
   const approved = user?.role === 'practitioner' || user?.isProvider === true;
 
   if (!FLAG) {
     return (
       <div style={{ padding: 18, border: '1px dashed var(--line,#e3ece8)', borderRadius: 12, textAlign: 'center' }}>
         <Building2 size={18} className="muted" />
-        <div className="tiny muted" style={{ marginTop: 6 }}>Clinic OS is a Beta foundation. It becomes available once the Clinic OS Beta preview is enabled.</div>
+        <div className="tiny muted" style={{ marginTop: 6 }}>Clinic OS is coming later. It becomes visible once the Clinic OS preview is enabled.</div>
       </div>
     );
   }
@@ -38,7 +44,7 @@ export default function ClinicOSFoundation({ user }) {
   if (!approved) {
     return (
       <div style={{ padding: 18, border: '1px solid var(--line,#e3ece8)', borderRadius: 12 }}>
-        <div className="tiny muted"><Lock size={14} /> Clinic OS is available to approved practitioners. Complete Join Solaris to unlock the Beta foundation.</div>
+        <div className="tiny muted"><Lock size={14} /> Clinic OS information is shown to approved practitioners. Complete Join Solaris to view it.</div>
       </div>
     );
   }
@@ -47,51 +53,44 @@ export default function ClinicOSFoundation({ user }) {
     <div data-testid="clinic-os-foundation">
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
         <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 7 }}>
-          <Building2 size={17} /> Clinic OS — Beta foundation
+          <Building2 size={17} /> Clinic OS
         </h3>
-        <span style={{ fontSize: 11, fontWeight: 700, color: '#8a6d3b', background: '#fbf3df', border: '1px solid #ecd9a6', borderRadius: 999, padding: '2px 9px' }}>Beta preview · Simulated</span>
+        <span data-testid="clinic-os-preview-badge" style={{ fontSize: 11, fontWeight: 700, color: '#8a6d3b', background: '#fbf3df', border: '1px solid #ecd9a6', borderRadius: 999, padding: '2px 9px' }}>Simulated Preview · Informational</span>
       </div>
-      <p className="tiny muted" style={{ marginTop: 0 }}>
-        Foundation only — organisation basics linked to your approved practitioner profile. No activation, tenants, or entitlements yet.
+
+      {/* RC1 item8 — required boundary copy. */}
+      <p data-testid="clinic-os-coming-later" style={{ marginTop: 0, fontSize: 13.5, fontWeight: 600 }}>
+        Clinic OS — coming later; separate verification required.
+      </p>
+      <p className="tiny muted" style={{ marginTop: 2 }}>
+        This is an informational preview only. It does not create an organisation, tenant,
+        membership, entitlement, or approval record, and nothing here is saved to any server.
       </p>
 
-      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: '#8a6d3b', background: '#fbf3df', border: '1px solid #ecd9a6', borderRadius: 999, padding: '4px 11px', margin: '4px 0 12px' }}>
-        <Clock size={13} /> Pending review
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: '#8a6d3b', background: '#fbf3df', border: '1px solid #ecd9a6', borderRadius: 999, padding: '4px 11px', margin: '8px 0 4px' }}>
+        <Clock size={13} /> Not yet available
       </div>
 
-      {/* NON-SENSITIVE metadata form */}
-      <div style={{ display: 'grid', gap: 10, maxWidth: 460 }}>
-        <label style={{ display: 'grid', gap: 4 }}>
-          <span className="tiny" style={{ fontWeight: 700 }}>Practice name</span>
-          <input value={org.name} onChange={(e) => setOrg({ ...org, name: e.target.value })} placeholder="e.g. Sunrise Wellness" style={inputStyle} />
-        </label>
-        <label style={{ display: 'grid', gap: 4 }}>
-          <span className="tiny" style={{ fontWeight: 700 }}>Practice type</span>
-          <select value={org.type} onChange={(e) => setOrg({ ...org, type: e.target.value })} style={inputStyle}>
-            {ORG_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </label>
-        <label style={{ display: 'grid', gap: 4 }}>
-          <span className="tiny" style={{ fontWeight: 700 }}>City</span>
-          <input value={org.city} onChange={(e) => setOrg({ ...org, city: e.target.value })} placeholder="City" style={inputStyle} />
-        </label>
-        <label style={{ display: 'grid', gap: 4 }}>
-          <span className="tiny" style={{ fontWeight: 700 }}>About (non-sensitive)</span>
-          <textarea value={org.about} onChange={(e) => setOrg({ ...org, about: e.target.value })} rows={3} placeholder="A short, public description of your practice." style={{ ...inputStyle, resize: 'vertical' }} />
-        </label>
-        <div className="tiny muted"><Info size={13} /> Do not enter licence numbers, patient data, or financial details here.</div>
-        <div>
-          <button type="button" onClick={() => setStaged(true)} style={{ cursor: 'pointer', border: 'none', background: '#2DB584', color: '#04231d', fontWeight: 700, borderRadius: 10, padding: '9px 14px' }}>
-            Save to Beta preview
-          </button>
-          {staged && <span className="tiny" style={{ marginLeft: 10, color: '#3B8C6E' }}><ShieldCheck size={13} /> Saved to this preview only — not published.</span>}
+      {/* What a real Clinic OS will require — documented, not implemented. */}
+      <div style={{ marginTop: 12 }}>
+        <div className="tiny" style={{ fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <ShieldCheck size={14} /> What real Clinic OS will require
+        </div>
+        <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
+          {REAL_REQUIREMENTS.map((r) => (
+            <li key={r} className="tiny muted" style={{ marginBottom: 4 }}>{r}</li>
+          ))}
+        </ul>
+        <div className="tiny muted" style={{ marginTop: 8 }}>
+          <Info size={13} /> When Clinic OS is built, setting up an organisation will be a
+          distinct, separately-verified step — not an automatic result of practitioner approval.
         </div>
       </div>
 
       {/* Simulated future workspace preview — clearly labelled, non-interactive. */}
       <div style={{ marginTop: 18 }}>
-        <div className="tiny" style={{ fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Layers size={14} /> Future workspace (preview)</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 8, marginTop: 8, opacity: .7 }}>
+        <div className="tiny" style={{ fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 6 }}><Layers size={14} /> Future workspace (simulated preview)</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 8, marginTop: 8, opacity: .6 }}>
           {['Team & roles', 'Rooms & resources', 'Shared templates', 'Org analytics'].map((f) => (
             <div key={f} style={{ border: '1px dashed var(--line,#e3ece8)', borderRadius: 12, padding: '12px', textAlign: 'center' }}>
               <div className="tiny" style={{ fontWeight: 700 }}>{f}</div>
@@ -103,5 +102,3 @@ export default function ClinicOSFoundation({ user }) {
     </div>
   );
 }
-
-const inputStyle = { border: '1px solid var(--line,#e3ece8)', borderRadius: 10, padding: '9px 11px', fontSize: 13.5, outline: 'none', width: '100%', background: '#fff' };
