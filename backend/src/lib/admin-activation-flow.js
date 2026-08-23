@@ -132,8 +132,8 @@ async function activateAdmin({ db, presentedToken, newPassword, actor = null, no
     return { ok: false, reason: `password_${policy.reason}`, sessionGranted: false };
   }
 
-  // 2. Rate-limit by token hash (an attacker guessing tokens hits this).
-  const rl = await checkActivationRateLimit(db, hashToken(presentedToken).slice(0, 32), now);
+  // 2. Layered rate limit: per-actor + per-token + global ceiling (item 4).
+  const rl = await checkLayeredActivationRateLimit(db, { actor, tokenHash: hashToken(presentedToken), now });
   if (rl.limited) {
     await recordAudit(db, { event: 'activate_attempt', outcome: 'rate_limited', actor });
     return { ok: false, reason: 'rate_limited', sessionGranted: false };
@@ -167,6 +167,25 @@ async function activateAdmin({ db, presentedToken, newPassword, actor = null, no
       await recordAudit(db, { adminUserId: row.admin_user_id, event: 'activate_attempt', outcome: 'wrong_purpose', actor });
       await db.query('COMMIT');
       return { ok: false, reason: 'wrong_purpose', sessionGranted: false };
+    }
+
+    // The account MUST be role=admin AND have a canonical verified email before
+    // a password may be set. This binds activation to a real, verified admin
+    // record server-side (item 2) — there is no public admin signup.
+    const uRes = await db.query(
+      `SELECT role, email_verified_at, deleted_at FROM users WHERE id = $1`,
+      [row.admin_user_id]
+    );
+    const u = uRes.rows[0];
+    if (!u || u.deleted_at || u.role !== 'admin') {
+      await recordAudit(db, { adminUserId: row.admin_user_id, event: 'activate_attempt', outcome: 'not_admin', actor });
+      await db.query('COMMIT');
+      return { ok: false, reason: 'not_admin', sessionGranted: false };
+    }
+    if (!u.email_verified_at) {
+      await recordAudit(db, { adminUserId: row.admin_user_id, event: 'activate_attempt', outcome: 'email_unverified', actor });
+      await db.query('COMMIT');
+      return { ok: false, reason: 'email_unverified', sessionGranted: false };
     }
 
     const passwordHash = await bcrypt.hash(newPassword, BCRYPT_COST);
@@ -246,31 +265,70 @@ function adminSessionAllowed(user) {
   return { allowed: true, reason: 'ok' };
 }
 
+// Conservative global ceiling across ALL activation attempts (defence in depth
+// against a distributed guessing campaign). Deliberately generous so it never
+// trips a single legitimate operator, but caps a botnet.
+const ACTIVATION_GLOBAL_MAX = 100;
+const ACTIVATION_GLOBAL_WINDOW_MS = 15 * 60 * 1000;
+
 /**
- * Mark a second factor confirmed (TOTP MFA or WebAuthn passkey). This is what
- * flips the account from "password-set, pending 2FA" to "session-eligible".
- * `kind` is 'mfa' or 'passkey'. Returns { ok }.
+ * Layered activation rate limit (item 4). Checks THREE independent buckets and
+ * returns limited=true if ANY trips, with a NEUTRAL reason ('rate_limited') so
+ * a caller cannot learn which layer fired (no token/account enumeration):
+ *   1. per actor/IP fingerprint  — throttles one source hammering many tokens,
+ *   2. per activation record/token hash — throttles guesses at one token,
+ *   3. a conservative GLOBAL ceiling — caps a distributed campaign.
+ *
+ * NOTE: the previous single limiter keyed only on the token-hash slice, so an
+ * attacker guessing DIFFERENT tokens got a fresh bucket every time (defect).
+ * The actor + global layers close that hole.
  */
-async function confirmSecondFactor({ db, adminUserId, kind, now = new Date(), actor = null }) {
-  const col = kind === 'passkey' ? 'admin_passkey_enrolled_at'
-            : kind === 'mfa'     ? 'admin_mfa_enrolled_at'
-            : null;
-  if (!col) return { ok: false, reason: 'bad_kind' };
-  await db.query(`UPDATE users SET ${col} = $1 WHERE id = $2 AND role = 'admin'`, [now, adminUserId]);
-  await recordAudit(db, { adminUserId, event: 'second_factor_enrolled', outcome: 'ok', actor, detail: kind });
-  return { ok: true, reason: 'ok' };
+async function checkLayeredActivationRateLimit(db, { actor = null, tokenHash = null, now = new Date() }) {
+  // 1. per actor/IP
+  if (actor) {
+    const rl = await checkActivationRateLimit(db, `actor:${actorFingerprint(actor)}`, now);
+    if (rl.limited) return { limited: true, reason: 'rate_limited' };
+  }
+  // 2. per token/record
+  if (tokenHash) {
+    const rl = await checkActivationRateLimit(db, `token:${String(tokenHash).slice(0, 32)}`, now);
+    if (rl.limited) return { limited: true, reason: 'rate_limited' };
+  }
+  // 3. global ceiling
+  const k = 'admin_activation|global';
+  const { rows } = await db.query(
+    `INSERT INTO rate_limit_hits (key, hits, reset_at)
+       VALUES ($1, 1, $2::timestamptz + ($3::bigint * interval '1 millisecond'))
+     ON CONFLICT (key) DO UPDATE SET
+       hits = CASE WHEN rate_limit_hits.reset_at <= $2::timestamptz THEN 1
+                   ELSE rate_limit_hits.hits + 1 END,
+       reset_at = CASE WHEN rate_limit_hits.reset_at <= $2::timestamptz
+                       THEN $2::timestamptz + ($3::bigint * interval '1 millisecond')
+                       ELSE rate_limit_hits.reset_at END
+     RETURNING hits`,
+    [k, now.toISOString(), ACTIVATION_GLOBAL_WINDOW_MS]
+  );
+  if (rows[0].hits > ACTIVATION_GLOBAL_MAX) return { limited: true, reason: 'rate_limited' };
+  return { limited: false, reason: 'ok' };
 }
+
+// NOTE: the RC1.1 `confirmSecondFactor()` placeholder (which set an enrollment
+// timestamp WITHOUT verifying a code) has been REMOVED. Real second-factor
+// enrollment/verification now lives in ./admin-mfa.js and only marks enrollment
+// after a cryptographic TOTP check.
 
 module.exports = {
   ACTIVATION_MAX_ATTEMPTS,
   ACTIVATION_WINDOW_MS,
+  ACTIVATION_GLOBAL_MAX,
+  ACTIVATION_GLOBAL_WINDOW_MS,
   BCRYPT_COST,
   adminPasswordPolicy,
   actorFingerprint,
   recordAudit,
   checkActivationRateLimit,
+  checkLayeredActivationRateLimit,
   activateAdmin,
   revokeOutstandingTokens,
   adminSessionAllowed,
-  confirmSecondFactor,
 };

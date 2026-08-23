@@ -9,6 +9,7 @@ import Auth from './flows/Auth.jsx'
 import Assessment from './flows/Assessment.jsx'
 import LucaPassport from './components/LucaPassport.jsx'
 import FindPractitioner from './pages/FindPractitioner.jsx'
+import AdminActivate from './pages/AdminActivate.jsx'
 import IntakeForm from './components/IntakeForm.jsx'
 import PWAInstallInvitation from './components/PWAInstallInvitation.jsx'
 import { Toaster } from 'react-hot-toast'
@@ -58,6 +59,13 @@ function Root() {
   // Public practitioner directory — fully public, no login required
   if (typeof window !== 'undefined' && window.location.pathname === '/find') {
     return <FindPractitioner />;
+  }
+
+  // Admin activation — reachable ONLY via an operator-delivered link
+  // (/admin/activate?token=...). Rendered before auth so it needs no session,
+  // and deliberately NOT linked from any nav (no admin self-discovery).
+  if (typeof window !== 'undefined' && window.location.pathname === '/admin/activate') {
+    return <AdminActivate />;
   }
 
   const onIntake = typeof window !== 'undefined' && window.location.pathname === '/intake';

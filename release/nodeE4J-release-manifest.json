@@ -193,5 +193,53 @@
       "spanishPreview": "Preview-only; OFF in Stable candidate",
       "physicalIphone": "REQUIRES MAJD (all mobile checks Chromium SIMULATION)"
     }
+  },
+  "rc1_2": {
+    "node": "E4J-RC1.2 — ADMIN AUTH INTEGRATION + SCOPED SESSION CONTAINMENT (code+test only)",
+    "branch": "agent/abacus-beta-e4-j-rc1-2-admin-auth-containment",
+    "baseBranch": "agent/abacus-beta-e4-j-rc1-1-security-gates",
+    "baseSha": "4933f07",
+    "scope": "Reversible code+test only. NO credential rotation, admin creation, shared-DB migration, shared-backend cutover, Demo deploy, or Stable promotion.",
+    "codeDeliverables": {
+      "migration": "backend/migrations/044_admin_auth_containment.sql (additive/idempotent; committed-NOT-applied; adds users.tokens_valid_after, users.email_verified_at, admin_mfa_secrets.last_totp_step — verified on disposable isolated cluster + on a restore of the live shared SCHEMA)",
+      "totpLib": "backend/src/lib/totp.js (native RFC 6238 HMAC-SHA1; base32; replay-guard verifyCode returns {valid,step}; no new deps)",
+      "totpCrypto": "backend/src/lib/totp-crypto.js (AES-256-GCM AEAD wrap/unwrap of TOTP secrets; fail-closed when ADMIN_MFA_WRAP_KEY unset)",
+      "adminMfa": "backend/src/lib/admin-mfa.js (begin/confirm enrolment with verify-before-enroll; verifyTotpLogin replay-protected via last_totp_step)",
+      "authMiddleware": "backend/src/middleware/auth.js (canonical user load; rejects deleted/revoked/role-mismatch/iat<tokens_valid_after/preauth; fail-closed 503; generatePreAuthToken/verifyPreAuthToken; amr claim)",
+      "adminOnly": "backend/src/middleware/admin-only.js (requires canonical + adminSessionAllowed + amr includes 'totp')",
+      "activationFlow": "backend/src/lib/admin-activation-flow.js (removed fake confirmSecondFactor; layered rate limit actor/token/global; activateAdmin rejects non-admin/email-unverified before setting password)",
+      "adminAuthRoutes": "backend/src/routes/admin/auth.js (NEW /api/admin/auth: activate->preAuth, totp/setup, totp/confirm, login pwd+TOTP => amr:['pwd','totp'], recovery/revoke; neutral errors)",
+      "normalLoginContainment": "backend/src/routes/auth.js (/login + nostr login return 403 USE_ADMIN_LOGIN for role=admin)",
+      "serverMount": "backend/src/server.js (mount /api/admin/auth before /api/admin/invite and /api/admin)",
+      "activationUI": "src/pages/AdminActivate.jsx + route in src/main.jsx (link-only /admin/activate?token=...; NOT in nav; no public signup/discovery)",
+      "operatorRotationScript": "backend/scripts/rotate-exposed-synthetic-accounts.js (GATED, UNEXECUTED: requires exact phrase 'AUTHORIZE RC1.2 ADMIN CREDENTIAL ROTATION AND SESSION REVOCATION' + --confirm + explicit targets; per-account tokens_valid_after revocation, NO global JWT_SECRET rotation; secrets written 0600, never logged)",
+      "tests": "backend/tests/totp.test.js, admin-mfa.test.js, admin-auth-containment.test.js (route integration vs disposable DB), updated admin-activation-flow.test.js; src/pages/AdminActivate.test.jsx; test helper global.makeAdminSession in backend/tests/setup.js; admin-finance + gps-allocations updated to new admin-session model"
+    },
+    "verification": {
+      "frontendVitest": "56 files / 343 tests PASS (adds AdminActivate.test.jsx, 4 tests)",
+      "backendJestDisposable": "318/318 pass, 35 suites (migrations 001->044, runtime-seeded intake templates + 37 providers, disposable socket-only PG16 cluster)",
+      "routeIntegration": "4/4 PASS (admin-auth-containment.test.js vs real disposable DB)",
+      "newUnitTests": "totp 22 + admin-mfa + updated flow => 41 pass across totp/admin-mfa/admin-activation-flow suites",
+      "disposableSchemaDrift": "shared-DB RO schema-only dump (96 tables, sha256 671cf68a172601d4) restored to disposable cluster; migrations 039-044 applied on top => ALL apply OK, idempotent on re-run, additive (no drops/renames); users.id uuid + admin_activation_tokens.admin_user_id FK->users(uuid) confirmed",
+      "normalLoginBypassProven": "PROVEN: role=admin -> 403 USE_ADMIN_LOGIN on /api/auth/login (route integration); admin JWT requires amr:['pwd','totp'] or adminOnly rejects",
+      "perAccountInvalidationProven": "PROVEN: advancing ONE account's tokens_valid_after kills its old JWT (401) while another user's session stays valid (200)",
+      "secretScan": "CLEAN (only match is the test placeholder string 'not-a-real-token'; no real secrets in new/changed files)",
+      "gitDiffCheck": "clean (no whitespace errors / conflict markers)",
+      "localFrontendBuild": "npm run build succeeded (3173 modules); dist/ is gitignored and was removed — NOT deployed",
+      "previewUnchanged": "index-BiYYxRFi.js (release b0b002f)",
+      "demoUnchanged": "index-BTjThGYr.js (release a4dbf6d)",
+      "stableUnchanged": "index-BirNTkSl.js (release f7768043)",
+      "sharedBackendUnchanged": "PID 673945 :5055 uptime unbroken; not restarted/replaced",
+      "sharedDbWrites": "NONE — only a READ-ONLY schema-only pg_dump of the shared DB; all mutation on disposable isolated clusters"
+    },
+    "gates": {
+      "credentialRotation": "NOT PERFORMED — script committed UNEXECUTED; requires exact phrase 'AUTHORIZE RC1.2 ADMIN CREDENTIAL ROTATION AND SESSION REVOCATION'",
+      "adminCreation": "NOT PERFORMED (code + tests only; creation stays gated/out-of-band)",
+      "migration044": "COMMITTED, NOT APPLIED to shared DB — WAITING FOR MAJD",
+      "sharedBackendCutover": "WAITING FOR MAJD",
+      "demoDeploy": "NOT PERFORMED",
+      "stablePromotion": "WAITING FOR MAJD",
+      "physicalIphone": "REQUIRES MAJD (all mobile checks Chromium SIMULATION)"
+    }
   }
 }

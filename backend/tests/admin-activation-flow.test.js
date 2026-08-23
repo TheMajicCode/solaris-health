@@ -13,7 +13,6 @@ const {
   activateAdmin,
   revokeOutstandingTokens,
   adminSessionAllowed,
-  confirmSecondFactor,
   ACTIVATION_MAX_ATTEMPTS,
 } = require('../src/lib/admin-activation-flow');
 const { generateActivationToken, hashToken } = require('../src/lib/admin-activation');
@@ -63,6 +62,12 @@ function makeFakeDb() {
       const [tokenHash] = params;
       const row = state.tokens.find((t) => t.token_hash === tokenHash) || undefined;
       return { rows: row ? [{ ...row }] : [], rowCount: row ? 1 : 0 };
+    }
+
+    if (s.startsWith('SELECT') && s.includes('email_verified_at') && s.includes('FROM users')) {
+      const [id] = params;
+      const u = state.users.get(id);
+      return { rows: u ? [{ role: u.role, email_verified_at: u.email_verified_at, deleted_at: u.deleted_at || null }] : [], rowCount: u ? 1 : 0 };
     }
 
     if (s.startsWith('UPDATE users') && s.includes('password_hash')) {
@@ -119,6 +124,7 @@ function seedAdminWithToken(db, { ttlMinutes = 30, now = new Date(), used = fals
   db.state.users.set(adminId, {
     id: adminId, role: 'admin', password_hash: null, must_change_password: true,
     admin_activated_at: null, admin_mfa_enrolled_at: null, admin_passkey_enrolled_at: null,
+    email_verified_at: now, deleted_at: null,
   });
   const { token, tokenHash, expiresAt } = generateActivationToken(now, ttlMinutes);
   db.state.tokens.push({
@@ -271,7 +277,7 @@ describe('recovery / revocation', () => {
   });
 });
 
-describe('second-factor gating (adminSessionAllowed / confirmSecondFactor)', () => {
+describe('second-factor gating (adminSessionAllowed)', () => {
   test('activated but no 2FA -> session denied', async () => {
     const db = makeFakeDb();
     const now = new Date();
@@ -280,12 +286,15 @@ describe('second-factor gating (adminSessionAllowed / confirmSecondFactor)', () 
     const u = db.state.users.get(adminId);
     expect(adminSessionAllowed(u)).toMatchObject({ allowed: false, reason: 'second_factor_required' });
   });
-  test('after MFA enrollment -> session allowed', async () => {
+  test('after MFA enrollment (real TOTP confirm sets the column) -> session allowed', async () => {
     const db = makeFakeDb();
     const now = new Date();
     const { adminId, token } = seedAdminWithToken(db, { now });
     await activateAdmin({ db, presentedToken: token, newPassword: GOOD_PW, now });
-    await confirmSecondFactor({ db, adminUserId: adminId, kind: 'mfa', now });
+    // The real flow flips this via admin-mfa.confirmTotpEnrollment after a
+    // cryptographic code check (covered by the route-integration suite). Here we
+    // assert only the gating predicate on canonical state.
+    db.state.users.get(adminId).admin_mfa_enrolled_at = now;
     expect(adminSessionAllowed(db.state.users.get(adminId)).allowed).toBe(true);
   });
   test('after passkey enrollment -> session allowed', async () => {
@@ -293,7 +302,7 @@ describe('second-factor gating (adminSessionAllowed / confirmSecondFactor)', () 
     const now = new Date();
     const { adminId, token } = seedAdminWithToken(db, { now });
     await activateAdmin({ db, presentedToken: token, newPassword: GOOD_PW, now });
-    await confirmSecondFactor({ db, adminUserId: adminId, kind: 'passkey', now });
+    db.state.users.get(adminId).admin_passkey_enrolled_at = now;
     expect(adminSessionAllowed(db.state.users.get(adminId)).allowed).toBe(true);
   });
   test('non-admin never allowed; must_change_password blocks; not-activated blocks', () => {
@@ -303,7 +312,18 @@ describe('second-factor gating (adminSessionAllowed / confirmSecondFactor)', () 
   });
 });
 
-describe('authorization — adminOnly middleware', () => {
+describe('authorization — adminOnly middleware (RC1.2: canonical + amr required)', () => {
+  // A fully-provisioned admin session: canonical DB state says session-eligible
+  // AND the JWT was raised with a second factor (amr includes 'totp').
+  const fullAdmin = () => ({
+    role: 'admin',
+    amr: ['pwd', 'totp'],
+    canonical: {
+      role: 'admin', deleted_at: null, must_change_password: false,
+      admin_activated_at: new Date(), admin_mfa_enrolled_at: new Date(),
+      admin_passkey_enrolled_at: null,
+    },
+  });
   function runMw(user) {
     const req = { user };
     let status = null, body = null, nexted = false;
@@ -312,7 +332,26 @@ describe('authorization — adminOnly middleware', () => {
     return { status, body, nexted };
   }
   test('no user -> 403', () => { const r = runMw(undefined); expect(r.status).toBe(403); expect(r.nexted).toBe(false); });
-  test('patient -> 403', () => { const r = runMw({ role: 'patient' }); expect(r.status).toBe(403); });
-  test('practitioner -> 403', () => { const r = runMw({ role: 'practitioner' }); expect(r.status).toBe(403); });
-  test('admin -> passes', () => { const r = runMw({ role: 'admin' }); expect(r.nexted).toBe(true); expect(r.status).toBeNull(); });
+  test('patient -> 403', () => { const r = runMw({ role: 'patient', canonical: { role: 'patient' } }); expect(r.status).toBe(403); });
+  test('practitioner -> 403', () => { const r = runMw({ role: 'practitioner', canonical: { role: 'practitioner' } }); expect(r.status).toBe(403); });
+  test('role=admin JWT WITHOUT canonical -> 403 (JWT claim alone insufficient)', () => {
+    const r = runMw({ role: 'admin', amr: ['pwd', 'totp'] });
+    expect(r.status).toBe(403);
+  });
+  test('admin activated but NO second factor -> 403', () => {
+    const u = fullAdmin();
+    u.canonical.admin_mfa_enrolled_at = null;
+    const r = runMw(u);
+    expect(r.status).toBe(403);
+  });
+  test('admin session WITHOUT amr totp -> 403 (password-only cannot reach admin route)', () => {
+    const u = fullAdmin();
+    u.amr = ['pwd'];
+    const r = runMw(u);
+    expect(r.status).toBe(403);
+  });
+  test('fully-provisioned admin with amr totp -> passes', () => {
+    const r = runMw(fullAdmin());
+    expect(r.nexted).toBe(true); expect(r.status).toBeNull();
+  });
 });

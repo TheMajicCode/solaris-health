@@ -28,14 +28,12 @@ beforeAll(async () => {
   const s = await request(app).post('/api/auth/register').send(global.makeUserPayload());
   strangerToken = s.body.token; strangerId = s.body.user.id;
 
-  // Admin (human resolver). Promote then re-login so the JWT carries the role.
+  // Admin (human resolver). RC1.2: the old promote + /api/auth/login path is
+  // closed, so mint a fully-provisioned admin session (amr:['pwd','totp']) the
+  // way the real activation + TOTP login flow does.
   const a = await request(app).post('/api/auth/register').send(global.makeUserPayload());
   adminId = a.body.user.id;
-  await db.query(`UPDATE users SET role='admin' WHERE id=$1`, [adminId]);
-  const emailRow = await db.query('SELECT email FROM users WHERE id=$1', [adminId]);
-  const login = await request(app).post('/api/auth/login')
-    .send({ email: emailRow.rows[0].email, password: 'Test1234!' });
-  adminToken = login.body.token;
+  adminToken = await global.makeAdminSession(adminId, a.body.user.email);
 
   // A simulated GPS allocation (no booking needed — evidence is structural).
   const tx = await db.query(

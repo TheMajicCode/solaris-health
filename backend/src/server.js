@@ -26,6 +26,7 @@ const marketplaceRoutes = require('./routes/marketplace');
 const providerApplicationRoutes = require('./routes/provider-application');
 const adminProvidersRoutes = require('./routes/admin/providers');
 const adminInviteRoutes = require('./routes/admin/invite');
+const adminAuthRoutes = require('./routes/admin/auth');
 const notificationsRoutes = require('./routes/notifications');
 const bookingsRoutes = require('./routes/bookings');
 const providersRoutes = require('./routes/providers');
@@ -300,6 +301,7 @@ app.use('/api/luca', lucaRoutes);
 app.use('/api/luca', lucaPractitionerRoutes); // GET/POST /api/luca/practitioner/messages
 app.use('/api/consent', consentRoutes);
 app.use('/api/practitioner', practitionerRoutes);
+app.use('/api/admin/auth', adminAuthRoutes);
 app.use('/api/admin/invite', adminInviteRoutes);
 app.use('/api/admin/providers', adminProvidersRoutes);
 app.use('/api/admin/bookings', adminBookingsRoutes);

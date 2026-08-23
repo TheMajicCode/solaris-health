@@ -19,14 +19,11 @@ describe('admin finance + GPS settlement endpoints', () => {
 
   beforeAll(async () => {
     const admin = await request(app).post('/api/auth/register').send(global.makeUserPayload());
-    adminToken = admin.body.token;
     adminId = admin.body.user && admin.body.user.id;
-    await db.query("UPDATE users SET role='admin' WHERE id=$1", [adminId]);
-    // Re-login so the JWT carries the elevated role.
-    const relogin = await request(app)
-      .post('/api/auth/login')
-      .send({ email: admin.body.user.email, password: 'Test1234!' });
-    adminToken = relogin.body.token || adminToken;
+    // RC1.2: the old "promote + re-login via /api/auth/login" path is closed;
+    // mint a fully-provisioned admin session (amr:['pwd','totp']) the way the
+    // real activation + TOTP login flow does.
+    adminToken = await global.makeAdminSession(adminId, admin.body.user.email);
 
     const member = await request(app).post('/api/auth/register').send(global.makeUserPayload());
     memberToken = member.body.token;

@@ -144,6 +144,15 @@ router.post('/login', async (req, res) => {
     const match = await bcrypt.compare(password, user.password_hash);
     if (!match) return res.status(401).json({ error: 'Invalid email or password.' });
 
+    // Admins MUST use the dedicated TOTP-gated admin login (/api/admin/auth/login).
+    // The normal password path can never mint an admin JWT — that closes the
+    // RC1.1 defect where a role=admin account could log in here with no second
+    // factor. The message is checked AFTER password verification so it does not
+    // reveal which accounts are admins.
+    if (user.role === 'admin') {
+      return res.status(403).json({ error: 'USE_ADMIN_LOGIN' });
+    }
+
     const token = generateToken(user.id, user.email, user.role, await subjectRef(user.id));
     res.json({ user: shapeUser(user), token });
   } catch (err) {
@@ -223,6 +232,12 @@ router.post('/nostr/login', async (req, res) => {
         error: 'No Solaris account is linked to this identity key. Please create a Solaris account first, then add this key from your identity setup.',
         mustCreateAccount: true,
       });
+    }
+
+    // Same containment as the password path: an admin cannot raise a normal
+    // session via the identity-key path either. Admin sessions require TOTP.
+    if (user.role === 'admin') {
+      return res.status(403).json({ error: 'USE_ADMIN_LOGIN' });
     }
 
     const token = generateToken(user.id, user.email, user.role, await subjectRef(user.id));
