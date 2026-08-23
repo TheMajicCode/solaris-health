@@ -132,5 +132,66 @@
     "stableBetaPromotion": "WAITING FOR MAJD",
     "migrations039to042": "COMMITTED, NOT APPLIED — WAITING FOR MAJD",
     "spanishGA": "WAITING FOR qualified human translation of 4 safety keys (see nodeE4J-RC1-spanish-missing-inventory.md)"
+  },
+  "rc1_1": {
+    "node": "E4J-RC1.1 — SECURITY CONTAINMENT AND RELEASE-GATE VERIFICATION (PREVIEW ONLY)",
+    "branch": "agent/abacus-beta-e4-j-rc1-1-security-gates",
+    "baseBranch": "agent/abacus-beta-e4-j-rc1-integration",
+    "baseSha": "8057d2c014328e8876b94cedaba295cc484fc981",
+    "scope": "Read-only security audit + reversible Preview-only verification. NO credential rotation, admin creation, shared-backend cutover, migration to shared DB, Demo deploy, or Stable promotion.",
+    "codeDeliverables": {
+      "migration": "backend/migrations/043_admin_activation_security.sql (additive; committed-NOT-applied; idempotent — verified on disposable isolated cluster)",
+      "flowModule": "backend/src/lib/admin-activation-flow.js (admin activation flow; sessionGranted always false; fail-closed adminSessionAllowed)",
+      "flowTests": "backend/tests/admin-activation-flow.test.js (21 pure unit tests; in-memory fake db; no admin created)"
+    },
+    "stableCandidate": {
+      "built": true,
+      "deployed": false,
+      "buildSha": "8057d2c014328e8876b94cedaba295cc484fc981",
+      "outDir": "/home/ubuntu/stable-candidate-dist (ISOLATED, NOT deployed to any host)",
+      "buildCmd": "env -u <all VITE_* preview flags> npx vite build --outDir /home/ubuntu/stable-candidate-dist --emptyOutDir",
+      "englishOnly": true,
+      "previewFlagsCompiledOff": [
+        "VITE_SPANISH_PREVIEW (Spanish disabled — English only)",
+        "VITE_SECURE_MESSAGING_ENABLED (literal count 0 in bundle)",
+        "VITE_CLINIC_OS_BETA",
+        "VITE_LUCA_RECS_SIMULATED",
+        "VITE_LUCA_COPILOT_SIMULATED",
+        "VITE_SPARK_WALLET_ENABLED/NETWORK/DEMO_FIXTURE"
+      ],
+      "apiUrl": "unset => relative /api",
+      "assetFingerprints": {
+        "assets/index-DXZy_pKs.js": "sha256:753def07a5884ecf",
+        "assets/index-DD5H5oQo.css": "sha256:cb109f8535fec39a",
+        "assets/lib-CrbYlAX-.js": "sha256:a5480f14e87f8d0a",
+        "assets/browser-D7leiDEt.js": "sha256:24cf8745dd528ede",
+        "assets/index.browser-1w4HSGzS.js": "sha256:71f0576b96bbdda9",
+        "assets/__vite-browser-external-BJ3u3RcD.js": "sha256:3418d35c38dd6340",
+        "index.html": "sha256:f6944bd4e4cd082c"
+      }
+    },
+    "verification": {
+      "frontendVitest": "55 files / 339 tests PASS",
+      "backendJestDisposable": "294/294 pass, 32 suites (migrations 001->043, runtime-seeded, isolated cluster, destroyed)",
+      "adminActivationTests": "33 pass, 2 suites (21 flow + 12 helper; no real DB, no admin created)",
+      "secretScanStableCandidate": "CLEAN (0 DB URLs, 0 valid JWTs, 0 real AWS/OpenAI keys, 0 nsec/xprv; matches are minified crypto-lib string constants + React form-field code)",
+      "mobileGeometrySimulation": "5 widths (360x800, 390x844, 393x852, 412x915, 430x932): horizontalOverflow=0, consoleErrors=0 on all (Chromium headless SIMULATION; see solaris-e4j-screens/rc11-geometry.json). PHYSICAL IPHONE: REQUIRES MAJD",
+      "previewRuntimeSmoke": "served asset index-BiYYxRFi.js (RC1, restored after rehearsal)",
+      "demoUnchanged": "index-BTjThGYr.js (release a4dbf6d)",
+      "stableUnchanged": "index-BirNTkSl.js (release f7768043)",
+      "sharedBackendUnchanged": "PID 673945 :5055 uptime unbroken; not restarted/replaced",
+      "sharedDbWrites": "NONE — all schema/migration work on disposable isolated clusters (destroyed); no live shared-DB write path exercised"
+    },
+    "gates": {
+      "credentialRotation": "NOT PERFORMED — awaiting Majd exact phrase 'AUTHORIZE RC1 DEMO CREDENTIAL ROTATION AND SESSION REVOCATION'",
+      "adminCreation": "NOT PERFORMED (code + tests only; creation stays disabled)",
+      "migration043": "COMMITTED, NOT APPLIED to shared DB — WAITING FOR MAJD",
+      "sharedBackendCutover": "WAITING FOR MAJD",
+      "demoDeploy": "NOT PERFORMED",
+      "stablePromotion": "WAITING FOR MAJD",
+      "secureMessaging": "OFF",
+      "spanishPreview": "Preview-only; OFF in Stable candidate",
+      "physicalIphone": "REQUIRES MAJD (all mobile checks Chromium SIMULATION)"
+    }
   }
 }
