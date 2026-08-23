@@ -506,6 +506,11 @@ textarea.input-line{resize:vertical;min-height:64px}
   .topbar .menu-btn{display:none}
   /* Touch targets ≥44×44 on phones (WCAG / iOS HIG). */
   .topbar .icon-btn{width:44px;height:44px}
+  /* Approved practitioners keep drawer access on mobile so they can reach the
+     Member/Practitioner portal switcher and the My Practice tab from the Member
+     portal (where the bottom nav has neither). Gated by canSwitchPortal, which
+     is server-derived — regular members never get this button. */
+  .topbar .menu-btn.menu-btn-switch{display:flex}
   .luca .home-btn{display:flex}
   .luca .m-title{display:block;flex:1;min-width:0;font-family:var(--font-display);font-weight:700;
     font-size:16px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left}
@@ -907,6 +912,35 @@ export function navForPersona(effectiveRole, legacyRole, isProvider) {
   if (effectiveRole === 'practitioner') return practitionerNav();
   if (effectiveRole === 'clinic_admin') return adminNav();
   return [...navForRole(legacyRole, isProvider), ...solarisNav(effectiveRole)];
+}
+
+/* ---- Portal-switch authorization (RC1 item 3) ----
+   The right to switch between the Member and Practitioner portals is derived
+   ONLY from the authenticated SERVER user (role === 'practitioner' or an
+   approved provider). Never from localStorage, a URL query, or any client-only
+   flag. clinic_admin never gets the switcher. Members can never obtain the
+   practitioner persona. These are pure so both the shell and the tests use the
+   exact same rules (fail-closed by construction). */
+export function canSwitchPortalFor(user) {
+  const baseEffectiveRole = normalizeSolarisRole(user?.role || 'patient');
+  const isApprovedPractitioner = user?.role === 'practitioner' || user?.isProvider === true;
+  return isApprovedPractitioner && baseEffectiveRole !== 'clinic_admin';
+}
+
+// The portal view to render given the user and any (untrusted) requested view.
+// A tampered ?portal=practitioner for a member resolves back to 'member'.
+export function resolvePortalView(user, requestedPortal) {
+  const baseEffectiveRole = normalizeSolarisRole(user?.role || 'patient');
+  if (!canSwitchPortalFor(user)) return baseEffectiveRole === 'clinic_admin' ? 'admin' : 'member';
+  if (requestedPortal === 'practitioner' || requestedPortal === 'member') return requestedPortal;
+  return baseEffectiveRole === 'practitioner' ? 'practitioner' : 'member';
+}
+
+// The persona actually rendered for a given user + current portal view.
+export function effectiveRoleForPortal(user, portalView) {
+  const baseEffectiveRole = normalizeSolarisRole(user?.role || 'patient');
+  if (baseEffectiveRole === 'clinic_admin') return 'clinic_admin';
+  return (canSwitchPortalFor(user) && portalView === 'practitioner') ? 'practitioner' : 'patient';
 }
 // Warm, human labels for each member journey type (mirrors backend JOURNEY_LABELS).
 const JOURNEY_LABELS = {
@@ -6389,23 +6423,16 @@ export default function LucaPassport() {
   // never gets the switcher. A non-approved member can never obtain the
   // practitioner persona here, and the backend independently gates every
   // practitioner endpoint on role, so URL/state tampering cannot leak data.
-  const isApprovedPractitioner = user?.role === 'practitioner' || user?.isProvider === true;
-  const canSwitchPortal = isApprovedPractitioner && baseEffectiveRole !== 'clinic_admin';
+  const canSwitchPortal = canSwitchPortalFor(user);
 
   const initialUrl = readUrlNav();
-  const [portalView, setPortalView] = useState(() => {
-    if (!canSwitchPortal) return baseEffectiveRole === 'clinic_admin' ? 'admin' : 'member';
-    if (initialUrl.portal === 'practitioner' || initialUrl.portal === 'member') return initialUrl.portal;
-    return baseEffectiveRole === 'practitioner' ? 'practitioner' : 'member';
-  });
+  const [portalView, setPortalView] = useState(() => resolvePortalView(user, initialUrl.portal));
   const portalViewRef = useRef(portalView);
   useEffect(() => { portalViewRef.current = portalView; }, [portalView]);
 
   // The persona actually rendered. clinic_admin is unchanged; a switcher-enabled
   // account renders the practitioner portal only when the switch is set there.
-  const effectiveRole = baseEffectiveRole === 'clinic_admin'
-    ? 'clinic_admin'
-    : (canSwitchPortal && portalView === 'practitioner') ? 'practitioner' : 'patient';
+  const effectiveRole = effectiveRoleForPortal(user, portalView);
   const role = legacyRoleFor(effectiveRole); // legacy role the base nav understands
   const nav = navForPersona(effectiveRole, role, isProvider);
   const portal = PORTAL[effectiveRole] || PORTAL.patient;
@@ -6682,7 +6709,7 @@ export default function LucaPassport() {
                     aria-selected={on}
                     type="button"
                     onClick={() => switchPortal(pv.id)}
-                    style={{ flex: 1, padding: '7px 8px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                    style={{ flex: 1, minHeight: 44, padding: '7px 8px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700,
                       background: on ? pv.accent : 'transparent', color: on ? '#04231d' : '#D9EEE8', transition: 'background .15s' }}
                   >
                     {pv.label}
@@ -6748,7 +6775,7 @@ export default function LucaPassport() {
         {/* ---------------- MAIN ---------------- */}
         <div className="main">
           <header className="topbar">
-            <button className="icon-btn menu-btn" onClick={() => setDrawer(true)} aria-label="Open menu"><Menu size={18} /></button>
+            <button className={`icon-btn menu-btn${canSwitchPortal ? ' menu-btn-switch' : ''}`} onClick={() => setDrawer(true)} aria-label="Open menu"><Menu size={18} /></button>
             <button className="icon-btn home-btn home-orb" onClick={() => go(defaultTabFor(effectiveRole))} aria-label="Home"><Home size={19} /></button>
             <div className="m-title" aria-hidden="true">{meta.title}</div>
             <div className="search">
