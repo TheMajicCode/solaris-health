@@ -91,7 +91,7 @@ describe('§6(c) runAction shows the model reply on success, honest fallback on 
     // modelReply is set from res.reply guarded by !res.degraded ...
     expect(body).toMatch(/res\?\.reply\s*&&\s*!res\?\.degraded\s*\?\s*res\.reply\s*:\s*null/);
     // ... and the assistant message prefers the model reply, else the local text.
-    expect(body).toMatch(/content:\s*modelReply\s*\|\|\s*local\.text/);
+    expect(body).toMatch(/content:\s*modelReply\s*\|\|\s*local\.reply/);
   });
 
   it('marks the message degraded whenever there is no model reply', () => {
@@ -101,11 +101,13 @@ describe('§6(c) runAction shows the model reply on success, honest fallback on 
   it('on a thrown error falls back to the deterministic local reply, labeled degraded', () => {
     expect(body).toMatch(/catch\s*\(e\)/);
     expect(body).toMatch(/setDegraded\(true\)/);
-    expect(body).toMatch(/content:\s*local\.text,\s*degraded:\s*true/);
+    expect(body).toMatch(/content:\s*local\.reply,\s*degraded:\s*true/);
   });
 
   it('computes the deterministic fallback from the member context before calling out', () => {
-    expect(body).toMatch(/const local = deterministicResponse\(actionId, actionContext\(\)\)/);
+    // Phase 5: the deterministic fallback is now produced through the bounded
+    // response contract (buildLucaResponse) which wraps deterministicResponse.
+    expect(body).toMatch(/const local = buildLucaResponse\(actionId, actionContext\(\)\)/);
   });
 
   it('workflow action build_journey OPENS the planner and never auto-completes', () => {

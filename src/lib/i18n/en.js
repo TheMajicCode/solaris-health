@@ -72,21 +72,67 @@ export default {
   'action.close': 'Close',
   'action.expand': 'Expand',
   'action.collapse': 'Collapse',
+  'action.maximize': 'Full screen',
+  'action.minimize': 'Minimize',
+  'luca.online': 'Online',
+  'luca.offlineMode': 'Offline mode',
+  'luca.paused': 'Paused',
+  'luca.tagline': 'Heart-Centered Intelligence',
+  'luca.voiceOn': 'Voice on',
+  'luca.voiceOff': 'Voice off',
+  'luca.message': 'message',
+  'luca.messages': 'messages',
 
   // ── Messages filters (Communications) ──
   'msg.filterAll': 'All',
   'msg.filterBookings': 'Bookings',
   'msg.filterUnread': 'Unread',
 
+  // ── Communications binder (folders) ──
+  'comm.withOthers': 'With Others',
+  'comm.withOthersSub': 'Secure messages with your practitioners',
+  'comm.withYourself': 'With Yourself',
+  'comm.withYourselfSub': 'Your private journal, growth, and media',
+
+  // ── Privacy & Sharing (Beta, device-local) ──
+  'share.sectionTitle': 'Privacy & Sharing',
+  'share.sectionHint': 'Choose what you’re willing to share with your practitioners by default. Sharing is opt-in and you can change it any time.',
+  'share.savedOnDevice': 'Saved on this device',
+  'share.whatIShare': 'What I share',
+  'share.messagePractitioner': 'Message practitioner',
+  'share.opening': 'Opening…',
+  'share.bookingOverrideTitle': 'What I share for this booking',
+  'share.bookingOverrideHint': 'These choices apply to this appointment only and override your defaults.',
+  'share.usingDefaults': 'Using your account defaults',
+  'share.useDefaults': 'Use my defaults',
+  'share.saveDefaults': 'Save sharing defaults',
+  'share.cat.checkins': 'Daily check-ins',
+  'share.cat.checkins.hint': 'Mood, energy and symptom check-ins you log in Solaris.',
+  'share.cat.journalSummaries': 'Journal reflections',
+  'share.cat.journalSummaries.hint': 'Summaries of the private reflections you choose to surface.',
+  'share.cat.assessments': 'Assessment results',
+  'share.cat.assessments.hint': 'Results of assessments you have completed.',
+  'share.cat.passport': 'Health Passport basics',
+  'share.cat.passport.hint': 'Non-clinical passport basics you decide to share.',
+  'share.cat.contact': 'Contact details',
+  'share.cat.contact.hint': 'A phone number or email for appointment coordination.',
+
   // ── Dashboard · LUCA recommendation cards ──
   'dash.lucaRecommends': 'LUCA Recommends',
   'dash.personalizedForYou': 'Personalized for you',
   'dash.curatedJourney': 'Curated Journey for You',
+  'dash.viewProvider': 'View provider',
+  'dash.explore': 'Explore',
 
   // ── Language switcher ──
   'lang.label': 'Language',
   'lang.english': 'English',
   'lang.spanish': 'Español',
+
+  // ── Account / profile menu ──
+  'menu.myProfile': 'My Profile',
+  'menu.settings': 'Settings',
+  'menu.identityData': 'Identity & Data',
 
   // ── Portal switching (Node E5) ──
   'portal.switchToPractitioner': 'Switch to Practitioner portal',

@@ -11,6 +11,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Loader2, CalendarX2, Compass, X, Calendar, Clock, Tag, MapPin, Phone,
   FileText, ShieldCheck, ChevronLeft, Check, CalendarPlus, CalendarClock,
+  MessageSquare, ShieldQuestion,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '../../lib/api.js';
@@ -19,6 +20,14 @@ import TimeSlotPicker from './TimeSlotPicker.jsx';
 import {
   fmtDateLong, fmtTime, downloadICS, tzLabel, countdown,
 } from '../../lib/calendar-utils.js';
+import { useLocale } from '../../lib/i18n/LocaleContext.jsx';
+import { useApp } from '../../state/AppContext.jsx';
+import { BookingSharingSheet } from '../SharingControls.jsx';
+
+function useTl() {
+  const { t } = useLocale() || {};
+  return (k, fallback) => { const v = t ? t(k) : null; return v && v !== k ? v : fallback; };
+}
 
 const TABS = [
   { key: 'upcoming', label: 'Upcoming' },
@@ -44,7 +53,44 @@ export default function MyBookings({ user, onExplore }) {
   const [busy, setBusy] = useState(null);
   const [detail, setDetail] = useState(null);     // booking being viewed
   const [reschedule, setReschedule] = useState(null); // booking being rescheduled
+  const [messaging, setMessaging] = useState(null); // booking id whose thread is being opened
   const tz = tzLabel();
+  const tl = useTl();
+  const { setPendingConversation } = useApp() || {};
+  const subjectId = user?.userId || user?.id || null;
+
+  // §F — open (or resume) the canonical member↔practitioner conversation for THIS
+  // booking. Sends only the provider-profile id; the backend resolves the real
+  // practitioner owner and upserts the conversation. No failure path navigates away.
+  const doMessage = useCallback(async (b) => {
+    if (!b || messaging) return;
+    setMessaging(b.id);
+    try {
+      const res = await api.startProviderConversation(b.provider_id);
+      if (setPendingConversation) {
+        setPendingConversation({
+          conversationId: res.conversationId,
+          otherId: res.otherId,
+          otherName: res.otherName || b.business_name,
+          otherRole: res.otherRole || 'practitioner',
+          otherAvatar: res.otherAvatar || b.profile_photo_url || null,
+          recipientReady: res.recipientReady,
+        });
+      }
+      setDetail(null);
+      window.dispatchEvent(new CustomEvent('solaris:navigate', {
+        detail: { tab: 'communications', sub: 'messages' },
+      }));
+    } catch (e) {
+      const status = e?.status;
+      if (status === 401) toast.error('Your session has expired. Please sign in again to send a message.');
+      else if (status === 403) toast.error('Secure messaging isn’t available for your account.');
+      else if (status === 404) toast.error('This provider is not available for secure messaging yet.');
+      else toast.error('Couldn’t open secure messages. Please try again.');
+    } finally {
+      setMessaging(null);
+    }
+  }, [messaging, setPendingConversation]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -59,6 +105,30 @@ export default function MyBookings({ user, onExplore }) {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // §F — deep-link to an EXACT booking: when another surface (LUCA, a message
+  // thread's "View booking") dispatches solaris:focus-booking, open that exact
+  // booking's detail modal, switching to the tab that contains it. The request
+  // is remembered so it still resolves if bookings finish loading afterwards.
+  const [pendingFocus, setPendingFocus] = useState(null);
+  useEffect(() => {
+    const onFocus = (ev) => {
+      const id = ev?.detail?.bookingId;
+      if (id) setPendingFocus(String(id));
+    };
+    window.addEventListener('solaris:focus-booking', onFocus);
+    return () => window.removeEventListener('solaris:focus-booking', onFocus);
+  }, []);
+  useEffect(() => {
+    if (!pendingFocus) return;
+    const b = all.find((x) => String(x.id) === pendingFocus);
+    if (!b) return;
+    if (isUpcoming(b)) setTab('upcoming');
+    else if (isPending(b)) setTab('pending');
+    else if (isPast(b)) setTab('past');
+    setDetail(b);
+    setPendingFocus(null);
+  }, [pendingFocus, all]);
 
   const groups = useMemo(() => ({
     upcoming: all.filter(isUpcoming),
@@ -76,6 +146,7 @@ export default function MyBookings({ user, onExplore }) {
       toast.success('Appointment cancelled');
       setDetail(null);
       await load();
+      window.dispatchEvent(new CustomEvent('solaris:progress', { detail: { source: 'booking' } }));
     } catch (e) {
       toast.error(e?.message || 'Could not cancel');
     } finally {
@@ -90,6 +161,7 @@ export default function MyBookings({ user, onExplore }) {
       toast.success('Time confirmed — your session is scheduled');
       setDetail(null);
       await load();
+      window.dispatchEvent(new CustomEvent('solaris:progress', { detail: { source: 'booking' } }));
     } catch (e) {
       toast.error(e?.message || 'Could not confirm the time');
     } finally {
@@ -159,6 +231,10 @@ export default function MyBookings({ user, onExplore }) {
           booking={detail}
           tz={tz}
           busy={busy}
+          subjectId={subjectId}
+          tl={tl}
+          messaging={messaging === detail.id}
+          onMessage={() => doMessage(detail)}
           onClose={() => setDetail(null)}
           onCancel={() => doCancel(detail)}
           onReschedule={() => { setReschedule(detail); setDetail(null); }}
@@ -179,9 +255,12 @@ export default function MyBookings({ user, onExplore }) {
 }
 
 /* --------------------------- Detail modal --------------------------- */
-function DetailModal({ booking: b, tz, busy, onClose, onCancel, onReschedule }) {
+function DetailModal({ booking: b, tz, busy, subjectId, tl, messaging, onMessage, onClose, onCancel, onReschedule }) {
   const future = countdown(b.booking_date, b.start_time) !== 'Past';
   const canModify = (b.status === 'pending' || b.status === 'confirmed') && future;
+  const canMessage = b.status !== 'cancelled' && b.status !== 'no_show';
+  const [showSharing, setShowSharing] = useState(false);
+  const T = tl || ((k, f) => f);
   return (
     <div className="myb-scrim" onClick={onClose}>
       <div className="myb-modal" onClick={(e) => e.stopPropagation()}>
@@ -212,6 +291,14 @@ function DetailModal({ booking: b, tz, busy, onClose, onCancel, onReschedule }) 
         <p className="myb-m-policy"><ShieldCheck size={13} /> Cancellations within 24 hours may be subject to provider policy.</p>
 
         <div className="myb-m-actions">
+          {canMessage && (
+            <button className="myb-btn primary" disabled={!!messaging} onClick={onMessage}>
+              <MessageSquare size={15} /> {messaging ? T('share.opening', 'Opening…') : T('share.messagePractitioner', 'Message practitioner')}
+            </button>
+          )}
+          <button className="myb-btn ghost" onClick={() => setShowSharing(true)}>
+            <ShieldQuestion size={15} /> {T('share.whatIShare', 'What I share')}
+          </button>
           {(b.status === 'confirmed' || b.status === 'completed') && (
             <button className="myb-btn ghost" onClick={() => downloadICS(b)}>
               <CalendarPlus size={15} /> Add to Calendar
@@ -225,6 +312,9 @@ function DetailModal({ booking: b, tz, busy, onClose, onCancel, onReschedule }) 
           )}
         </div>
       </div>
+      {showSharing && (
+        <BookingSharingSheet subjectId={subjectId} bookingId={b.id} onClose={() => setShowSharing(false)} />
+      )}
     </div>
   );
 }
@@ -268,6 +358,7 @@ function RescheduleModal({ booking: b, tz, onClose, onDone }) {
       await api.rescheduleBooking(b.id, { date: slot.date, startTime: slot.start, endTime: slot.end });
       toast.success('Appointment rescheduled — pending provider confirmation');
       await onDone();
+      window.dispatchEvent(new CustomEvent('solaris:progress', { detail: { source: 'booking' } }));
     } catch (e) {
       toast.error(e?.message || 'Could not reschedule');
     } finally {

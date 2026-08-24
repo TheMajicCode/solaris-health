@@ -257,7 +257,7 @@ export default function SecureChat({ user, onUnread, go }) {
               try {
                 new Notification('New secure message', {
                   body: `${c.otherName} sent you ${lm.hasAttachment ? 'an attachment' : 'a message'}`,
-                  icon: '/favicon.ico', tag: 'luca-msg-' + c.id,
+                  icon: '/icons/icon-maskable-192.png', tag: 'luca-msg-' + c.id,
                 });
               } catch { /* ignore */ }
             }
@@ -466,7 +466,14 @@ export default function SecureChat({ user, onUnread, go }) {
                 ctx={activeContext}
                 pastOpen={pastOpen}
                 onTogglePast={() => setPastOpen((v) => !v)}
-                onViewBooking={go ? () => go('health', 'bookings') : null}
+                onViewBooking={() => {
+                  const id = activeContext.current && activeContext.current.id;
+                  // Deep-link the EXACT booking this thread is about, not a generic tab.
+                  window.dispatchEvent(new CustomEvent('solaris:navigate', {
+                    detail: { tab: 'health', sub: 'bookings', bookingId: id ? String(id) : undefined },
+                  }));
+                  if (!id && go) go('health', 'bookings');
+                }}
               />
             )}
             <MessageThread

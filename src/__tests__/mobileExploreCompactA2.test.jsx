@@ -175,8 +175,10 @@ describe('§2 compact Map/List segmented control', () => {
   it('is a labelled group of icon+name buttons that share the result-count row', async () => {
     await renderExplore();
     const tools = document.querySelector('.exm-mtools');
-    // Result count lives on the same row (aria-live for updates).
-    const count = tools.querySelector('.exm-mcount');
+    // K1.3 §9 — the Join Solaris CTA now shares the tools row, so the provider
+    // count moved to its own compact aria-live line directly below (no overlap
+    // at 360px). It still updates politely for screen readers.
+    const count = document.querySelector('.exm-mcountline') || tools.querySelector('.exm-mcount');
     expect(count).toBeTruthy();
     expect(count.getAttribute('aria-live')).toBe('polite');
     const group = within(tools).getByRole('group', { name: 'Choose map or list view' });

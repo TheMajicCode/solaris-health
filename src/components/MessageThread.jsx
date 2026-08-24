@@ -438,19 +438,20 @@ export default function MessageThread({ user, identity, conversation, recipientP
         {err && <div className="mt-warn"><AlertTriangle size={15} /> {err}</div>}
         {!recipientPubJwk && !err && (
           <div className="mt-warn">
-            <AlertTriangle size={15} /> {conversation.otherName} hasn’t opened Messages yet, so they can’t receive encrypted messages. You can still write — delivery completes once they set up their key.
+            <AlertTriangle size={15} /> {conversation.otherName} hasn’t set up secure messaging yet, so encrypted sending and file sharing are unavailable. Your booking details are still visible here — you’ll be able to send once they open Messages and initialize their encryption key.
           </div>
         )}
         <div className="mt-compose">
           <input type="file" ref={fileRef} style={{ display: 'none' }} onChange={onPickFile} />
-          <button className="mt-icbtn" onClick={() => fileRef.current?.click()} disabled={sending} title="Attach encrypted file"><Paperclip size={18} /></button>
+          <button className="mt-icbtn" onClick={() => fileRef.current?.click()} disabled={sending || !recipientPubJwk} title={recipientPubJwk ? 'Attach encrypted file' : 'Secure file sharing unavailable until the practitioner sets up encryption'}><Paperclip size={18} /></button>
           <textarea
-            rows={1} placeholder="Write an encrypted message…" value={draft}
+            rows={1} placeholder={recipientPubJwk ? 'Write an encrypted message…' : 'Secure messaging unavailable until the practitioner sets up encryption'} value={draft}
+            disabled={!recipientPubJwk}
             onChange={(e) => handleTyping(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
             style={{ height: Math.min(120, 42 + (draft.split('\n').length - 1) * 18) }}
           />
-          <button className="mt-send" onClick={send} disabled={sending || !draft.trim()} title="Send">
+          <button className="mt-send" onClick={send} disabled={sending || !draft.trim() || !recipientPubJwk} title="Send">
             {sending ? <Loader2 className="spin" size={18} /> : <Send size={18} />}
           </button>
         </div>

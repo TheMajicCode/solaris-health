@@ -12,12 +12,39 @@
 // hashed bundle) on activate. Only obsolete caches are dropped; the SW never
 // touches localStorage/sessionStorage, so identity keys, active locale, journeys
 // and user data all survive an update untouched.
-const CACHE_NAME = 'solaris-v16';
+// K1.3 (Phase 7): bumped v16→v17 to purge the previous static cache after the
+// branding refresh (transparent `any` + branded `maskable` icons, Solaris-mark
+// favicon replacing the purple lightning, notification/Media Session artwork).
+// New branding assets are precached on install. Same rule: only obsolete Solaris
+// caches are deleted on activate — never auth/local data.
+const CACHE_NAME = 'solaris-v17';
 const SHELL_URL = '/index.html';
 
-self.addEventListener('install', () => {
-  // Take over as soon as installed — don't wait for old tabs to close.
-  self.skipWaiting();
+// Branding assets to precache so the installed icon, splash, favicon and
+// notification/media artwork are available immediately and offline.
+const PRECACHE_URLS = [
+  '/manifest.json',
+  '/favicon.svg',
+  '/favicon.png',
+  '/favicon-32.png',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/icon-maskable-192.png',
+  '/icons/icon-maskable-512.png',
+  '/icons/apple-touch-icon.png',
+  '/icons/media-artwork-512.png',
+  '/icons/splash-logo-512.png',
+];
+
+self.addEventListener('install', (event) => {
+  // Precache branding assets (best-effort; never block install on a miss).
+  event.waitUntil(
+    caches
+      .open(CACHE_NAME)
+      .then((c) => c.addAll(PRECACHE_URLS))
+      .catch(() => {})
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', (event) => {
@@ -105,7 +132,7 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(title, {
       body,
-      icon: '/icons/icon-192.png',
+      icon: '/icons/icon-maskable-192.png',
       badge: '/icons/icon-192.png',
       data: { url },
     })

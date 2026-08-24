@@ -23,7 +23,7 @@ import {
   BookOpen, Headphones, Play, Pause, Lock, Trash2, Music,
   Repeat, Shuffle, Rewind, FastForward, Upload, ListMusic,
   CalendarClock, Volume2, VolumeX, Inbox, Mail, Copy, Fingerprint, Grid,
-  ChevronDown, Smartphone, Home,
+  ChevronDown, Smartphone, Home, Maximize2, Minimize2,
 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { useLocale } from '../lib/i18n/LocaleContext.jsx';
@@ -43,7 +43,11 @@ import MyPractice from './provider/MyPractice.jsx';
 import PersonalizedJourneySheet from './luca/PersonalizedJourneySheet.jsx';
 import resolveNextAction from '../lib/nextAction.js';
 import { pickAlternate, eligibleProviders } from '../lib/alternateProvider.js';
-import { LUCA_ACTIONS, deterministicResponse } from '../lib/lucaActions.js';
+import { curatedNavIntent } from '../lib/curatedDeepLink.js';
+import { TODO_CADENCE, cadenceForTodo, todoActionMeta } from '../lib/todoGrouping.js';
+import { LUCA_ACTIONS, buildLucaResponse, safeMessageResponse, isValidLucaAction } from '../lib/lucaActions.js';
+import { SharingDefaultsCard } from './SharingControls.jsx';
+import { personalizedSeedSteps, PERSONALIZED_JOURNEY_TYPE } from '../lib/personalizedSeed.js';
 import ProviderBookings from './provider/ProviderBookings.jsx';
 import ProviderApprovals from './admin/ProviderApprovals.jsx';
 import MyBookings from './booking/MyBookings.jsx';
@@ -71,6 +75,23 @@ import SparkWalletScreen from './wallet/SparkWalletScreen.jsx';
 import AuraAdmin from './clinic/AuraAdmin.jsx';
 import AdaptiveOverlay from './ui/AdaptiveOverlay.jsx';
 import toast from 'react-hot-toast';
+
+/* NODE K1.3 §4 — When a personalized journey is approved it is saved on this
+   device (AppContext) AND seeded server-side into the shared member_todos
+   pipeline, idempotently, so guided and personalized journeys render the same.
+   Pre-cutover the shared backend has no seed endpoint (404) — that (and any
+   offline/transient failure) falls back silently to the device-local copy that
+   was just saved, so we never fake or block on server persistence. */
+async function seedApprovedPersonalizedPlan(block) {
+  try {
+    const steps = personalizedSeedSteps(block);
+    if (!steps.length) return;
+    await api.seedJourneyPlan({ journeyType: PERSONALIZED_JOURNEY_TYPE, steps });
+    window.dispatchEvent(new CustomEvent('solaris:progress'));
+  } catch (_e) {
+    /* device-local copy already saved — no server seed available yet */
+  }
+}
 
 /* ============================== DESIGN SYSTEM ============================== */
 const CSS = `
@@ -409,6 +430,20 @@ textarea.input-line{resize:vertical;min-height:64px}
 .luca .coach-input-row input{flex:1;border:none;outline:none;background:transparent;font-size:13.5px;color:var(--ink);font-family:inherit;min-width:0}
 .luca .coach-disclaimer{font-size:11px;color:var(--muted-2);text-align:center;margin-top:9px}
 @media(max-width:1080px){.luca .coach-layout{grid-template-columns:1fr}.luca .coach-shell{height:calc(100dvh - 210px);min-height:420px;max-height:calc(100dvh - 120px)}.luca .coach-footer{padding-bottom:calc(14px + env(safe-area-inset-bottom,0px))}}
+/* Phase 6 — three coach panel states */
+.luca .coach-shell.coach-collapsed{height:auto!important;min-height:0!important;max-height:none!important}
+.luca .coach-collapsed-row{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:0 14px;background:var(--surface);border:none;font-family:inherit;cursor:pointer;text-align:left}
+.luca .coach-collapsed-row:hover{background:var(--surface-2)}
+.luca .coach-collapsed-row .ccr-dot{width:8px;height:8px;border-radius:50%;flex:none}
+.luca .coach-collapsed-row .ccr-dot.on{background:#2DB584;box-shadow:0 0 0 3px rgba(45,181,132,.18)}
+.luca .coach-collapsed-row .ccr-dot.off{background:#C9A84C;box-shadow:0 0 0 3px rgba(201,168,76,.18)}
+.luca .coach-collapsed-row .ccr-meta{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.25}
+.luca .coach-collapsed-row .ccr-name{font-weight:700;font-size:15px;color:var(--gold-ink,#0A2B29)}
+.luca .coach-collapsed-row .ccr-sub{font-size:11.5px;color:var(--muted)}
+.luca .coach-collapsed-row .ccr-expand{flex:none;display:inline-flex;align-items:center;gap:4px;min-height:40px;padding:0 12px;border-radius:999px;background:var(--mint-soft);color:var(--teal-d,#0E5C57);font-size:12.5px;font-weight:700}
+.luca .coach-shell.coach-full{position:fixed;inset:0;z-index:80;height:100dvh!important;max-height:100dvh!important;min-height:0!important;border-radius:0;border:none;padding-top:env(safe-area-inset-top,0px)}
+.luca .coach-shell.coach-full .coach-footer{padding-bottom:calc(14px + env(safe-area-inset-bottom,0px))}
+@media(max-width:1080px){.luca .coach-shell.coach-standard{height:62dvh!important;min-height:0!important;max-height:65dvh!important}}
 /* Follow-up suggestion chips */
 .luca .luca-chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
 .luca .luca-chip{display:inline-flex;align-items:center;gap:5px;border:1px solid transparent;border-radius:999px;padding:6px 11px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;line-height:1.2;transition:filter .15s,transform .1s}
@@ -1037,6 +1072,9 @@ export const LEGACY_TAB_MAP = {
   // §E — the standalone Appointments tab is removed (it duplicated My Bookings).
   // Legacy appointments deep links redirect into Health Passport → My Bookings.
   appointments: { tab: 'health', sub: 'bookings' },
+  // §F — "bookings" is a first-class deep-link target (LUCA, message threads,
+  // notifications) that canonicalizes to Health Passport → My Bookings.
+  bookings: { tab: 'health', sub: 'bookings' },
   contributions: { tab: 'wallet', sub: 'contributions' },
   'gps-map': { tab: 'wallet', sub: 'network' },
   network: { tab: 'wallet', sub: 'network' },
@@ -1394,14 +1432,27 @@ function DashboardPage({ user, go }) {
     } finally { setConsentBusy(''); }
   };
 
-  const reloadDaily = async () => {
-    const [r, ci] = await Promise.all([
+  // Phase 2 — one consolidated refresh of every input the "Your Next Step"
+  // resolver reads (check-ins, journeys, bookings, completeness) plus rewards.
+  // Called after a check-in and whenever a journey/todo/booking completion event
+  // fires, so the Next Step card rotates immediately without a reload or
+  // next-day rollover. getCheckins() is normalized in exactly one place here.
+  const reloadDashboardState = useCallback(async () => {
+    const [r, ci, jr, bk, comp] = await Promise.all([
       api.getRewards().catch(() => ({ events: [], total: 0 })),
       api.getCheckins().catch(() => ({ checkins: [] })),
+      api.getMyJourneys().catch(() => ({ journeys: [] })),
+      api.getMyBookings().catch(() => ({ bookings: [] })),
+      api.getPassportCompleteness().catch(() => null),
     ]);
     setRewards(r || { events: [], total: 0 });
     setCheckins(ci?.checkins || []);
-  };
+    setJourneys(jr?.journeys || []);
+    setMyBookings(bk?.bookings || []);
+    setCompleteness(comp || null);
+  }, []);
+  // Preserve the old name for the check-in modal callback.
+  const reloadDaily = reloadDashboardState;
 
   useEffect(() => {
     let alive = true;
@@ -1457,6 +1508,19 @@ function DashboardPage({ user, go }) {
     });
     return () => { alive = false; };
   }, []);
+
+  // Phase 2 — recompute "Your Next Step" the instant work is completed anywhere:
+  // a check-in (solaris:checkin, dispatched from every check-in surface) or a
+  // journey step / todo / booking action (solaris:progress).
+  useEffect(() => {
+    const refresh = () => { reloadDashboardState(); };
+    window.addEventListener('solaris:checkin', refresh);
+    window.addEventListener('solaris:progress', refresh);
+    return () => {
+      window.removeEventListener('solaris:checkin', refresh);
+      window.removeEventListener('solaris:progress', refresh);
+    };
+  }, [reloadDashboardState]);
 
   if (loading) {
     return <div className="lay-dash"><div className="col gap-4"><CardSkeleton rows={4} /><div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}><CardSkeleton /><CardSkeleton /></div></div><div className="col gap-4"><CardSkeleton rows={5} /></div></div>;
@@ -1707,10 +1771,11 @@ function DashboardPage({ user, go }) {
         profile={appProfile || {}}
         locale={locale || 'en'}
         onApprove={(block) => {
-          // Local/session enrollment only — hand the exact approved draft to
-          // AppContext and surface it under Communications → Growth.
+          // Save on this device (AppContext) AND seed the shared Growth pipeline
+          // idempotently; the seed falls back silently pre-cutover / offline.
           setApprovedJourney?.(block);
           setJourneyOpen(false);
+          seedApprovedPersonalizedPlan(block);
           go('growth');
         }}
       />
@@ -1910,10 +1975,24 @@ function LucaRecommends({
           <div style={{ fontSize: 13, lineHeight: 1.55, color: 'rgba(251,243,223,.92)', marginTop: 8, flex: 1 }}>{displayProvider ? displayProvider.reason : fallbackJourney.tagline}</div>
           <div className="rec-actions" style={{ marginTop: 13, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             <button
-              onClick={() => go('explore')}
+              onClick={() => {
+                // Phase 3: deep-link the EXACT recommended provider profile rather
+                // than the generic Explore list. Route through the shared
+                // solaris:navigate contract so ExploreMarketplace opens
+                // ProviderDetailModal for this stable id in List mode; if the
+                // provider is unavailable the modal shows a neutral error and the
+                // dashboard's Find alternate remains available. Fall back to the
+                // generic list only when we have no concrete provider.
+                const intent = curatedNavIntent(displayProvider);
+                if (intent.providerId != null) {
+                  window.dispatchEvent(new CustomEvent('solaris:navigate', { detail: intent }));
+                } else {
+                  go('explore');
+                }
+              }}
               style={{ padding: '8px 14px', borderRadius: 10, cursor: 'pointer', border: '1px solid rgba(240,210,140,.35)', background: 'rgba(240,210,140,.14)', color: '#FBF3DF', fontSize: 13, fontWeight: 600, display: 'inline-flex', gap: 6, alignItems: 'center', minHeight: 40 }}
             >
-              Explore <ArrowRight size={14} />
+              {displayProvider ? tl('dash.viewProvider', 'View provider') : tl('dash.explore', 'Explore')} <ArrowRight size={14} />
             </button>
             <button
               type="button"
@@ -2562,6 +2641,12 @@ function LucaChips({ suggestions, onAction, disabled }) {
   );
 }
 
+/* Map the Phase 5 {id,label,action_type,action_target} contract actions back to
+   the chip shape executeChipAction/LucaChips render. */
+function actionsToChips(actions = []) {
+  return (actions || []).map((a) => ({ label: a.label, action: a.action_type, target: a.action_target }));
+}
+
 /* Map a typed LUCA suggestion to an in-app effect. */
 function executeChipAction(suggestion, { go, setInput, send, playAudio, startRetake, setPendingProviderId, setPendingCurate }) {
   const s = typeof suggestion === 'string' ? { label: suggestion, action: 'prefill_chat', target: null } : (suggestion || {});
@@ -2875,15 +2960,35 @@ function CoachPage({ user, go }) {
   const tl = (k, fallback) => { const v = t ? t(k) : null; return v && v !== k ? v : fallback; };
   const { playFromLibrary } = useAudio();
   const [input, setInput] = useState('');
-  // §D — remember the collapsed state for the current browser session only.
+  // §D / Phase 6 — three accessible panel states for the current device/session:
+  //   'collapsed' — one clean 56px row (avatar/name/online/count/Expand);
+  //   'standard'  — ~55-65dvh message list + sticky composer;
+  //   'full'      — safe-area-aware full-screen conversation.
   // Collapsing never erases the conversation (it lives in AppContext).
-  const [collapsed, setCollapsed] = useState(() => {
-    try { return sessionStorage.getItem('solaris:luca-collapsed') === 'true'; } catch { return false; }
+  const [coachState, setCoachState] = useState(() => {
+    try {
+      const v = sessionStorage.getItem('solaris:luca-panel-state');
+      if (['collapsed', 'standard', 'full'].includes(v)) return v;
+      // migrate the old boolean flag
+      return sessionStorage.getItem('solaris:luca-collapsed') === 'true' ? 'collapsed' : 'standard';
+    } catch { return 'standard'; }
   });
+  const setCoach = useCallback((next) => {
+    setCoachState(next);
+    try { sessionStorage.setItem('solaris:luca-panel-state', next); } catch { /* noop */ }
+  }, []);
+  const collapsed = coachState === 'collapsed';
   const toggleCollapsed = useCallback(() => {
-    setCollapsed((c) => {
-      const next = !c;
-      try { sessionStorage.setItem('solaris:luca-collapsed', String(next)); } catch { /* noop */ }
+    setCoachState((s) => {
+      const next = s === 'collapsed' ? 'standard' : 'collapsed';
+      try { sessionStorage.setItem('solaris:luca-panel-state', next); } catch { /* noop */ }
+      return next;
+    });
+  }, []);
+  const toggleFull = useCallback(() => {
+    setCoachState((s) => {
+      const next = s === 'full' ? 'standard' : 'full';
+      try { sessionStorage.setItem('solaris:luca-panel-state', next); } catch { /* noop */ }
       return next;
     });
   }, []);
@@ -2968,6 +3073,12 @@ function CoachPage({ user, go }) {
     return () => { alive = false; stopAudio(); };
   }, [loadLucaHistory, stopAudio, appProfile]);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, sending]);
+  // Phase 6 — opening (standard/full) scrolls straight to the latest message.
+  useEffect(() => {
+    if (coachState === 'collapsed') return;
+    const id = setTimeout(() => endRef.current?.scrollIntoView({ block: 'end' }), 60);
+    return () => clearTimeout(id);
+  }, [coachState]);
 
   // Auto-play the newest assistant message when voice is enabled.
   useEffect(() => {
@@ -3002,6 +3113,17 @@ function CoachPage({ user, go }) {
     if (!content || sending) return;
     setInput('');
     setMessages((m) => [...m, { role: 'user', content, created_at: new Date().toISOString() }]);
+    // Safety guardrail (Phase 5): screen diagnostic/prescriptive requests locally
+    // and answer non-diagnostically — do not forward an unsafe ask to the model.
+    const safe = safeMessageResponse(content, actionContext());
+    if (safe) {
+      setDegraded(true);
+      setMessages((m) => [...m, {
+        role: 'assistant', content: safe.reply, degraded: true,
+        suggestions: actionsToChips(safe.actions), created_at: new Date().toISOString(),
+      }]);
+      return;
+    }
     setSending(true);
     try {
       const res = await api.sendLucaMessage(content);
@@ -3044,19 +3166,27 @@ function CoachPage({ user, go }) {
     if (action.id === 'build_journey') { setJourneyOpen(true); return; }
 
     const now = new Date().toISOString();
-    const local = deterministicResponse(actionId, actionContext());
+    // Phase 5 bounded contract: deterministically ranked + validated actions from
+    // real, de-identified state. The model may only rephrase `reply`.
+    const local = buildLucaResponse(actionId, actionContext());
+    const localChips = actionsToChips(local.actions);
     setMessages((m) => [...m, { role: 'user', content: action.label, created_at: now }]);
     setSending(true);
     try {
       const res = await api.sendLucaMessage(action.label);   // existing model boundary
       const modelReply = res?.reply && !res?.degraded ? res.reply : null;
       setDegraded(!!res?.degraded);
+      // Validate any model-supplied object suggestions before rendering; strings
+      // (free-text prefill) are always safe. Fall back to our validated chips.
+      const modelChips = Array.isArray(res?.suggestions)
+        ? res.suggestions.filter((s) => typeof s === 'string' || isValidLucaAction(s))
+        : [];
       setMessages((m) => [...m, {
         role: 'assistant',
-        content: modelReply || local.text,
+        content: modelReply || local.reply,
         model: modelReply ? res.model : undefined,
         degraded: !modelReply,
-        suggestions: (res?.suggestions && res.suggestions.length) ? res.suggestions : local.chips,
+        suggestions: modelChips.length ? modelChips : localChips,
         created_at: new Date().toISOString(),
       }]);
     } catch (e) {
@@ -3066,7 +3196,7 @@ function CoachPage({ user, go }) {
       } else {
         // Offline / error / expired-session: fall back to the deterministic reply.
         setDegraded(true);
-        setMessages((m) => [...m, { role: 'assistant', content: local.text, degraded: true, suggestions: local.chips, created_at: new Date().toISOString() }]);
+        setMessages((m) => [...m, { role: 'assistant', content: local.reply, degraded: true, suggestions: localChips, created_at: new Date().toISOString() }]);
       }
     } finally { setSending(false); }
   };
@@ -3078,19 +3208,42 @@ function CoachPage({ user, go }) {
   return (
     <div className="coach-layout">
       {/* Chat area */}
-      <div className="coach-shell">
+      <div className={`coach-shell coach-${coachState}`}>
+        {collapsed ? (
+          /* Phase 6 — Collapsed: one clean 56px row, no empty white card. */
+          <button
+            type="button"
+            className="coach-collapsed-row"
+            onClick={() => setCoach('standard')}
+            aria-expanded={false}
+            aria-controls="luca-panel-body"
+            aria-label={`${tl('action.expand', 'Expand')} LUCA`}
+          >
+            <LucaAvatar size="sm" />
+            <span className={`ccr-dot ${paused || degraded ? 'off' : 'on'}`} aria-hidden="true" />
+            <div className="ccr-meta">
+              <span className="ccr-name">LUCA</span>
+              <span className="ccr-sub">
+                {paused ? tl('luca.paused', 'Paused') : degraded ? tl('luca.offlineMode', 'Offline mode') : tl('luca.online', 'Online')}
+                {messages.length ? ` · ${messages.length} ${messages.length === 1 ? tl('luca.message', 'message') : tl('luca.messages', 'messages')}` : ''}
+              </span>
+            </div>
+            <span className="ccr-expand"><ChevronDown size={16} strokeWidth={2.6} style={{ transform: 'rotate(180deg)' }} />{tl('action.expand', 'Expand')}</span>
+          </button>
+        ) : (
+        <>
         <div className="coach-head">
           <LucaAvatar />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="row gap-2" style={{ alignItems: 'center' }}>
               <span className="dp" style={{ fontSize: 17, fontWeight: 700, color: 'var(--gold-ink)' }}>LUCA</span>
               {paused
-                ? <Pill tone="gold" icon={Bot}>Paused</Pill>
+                ? <Pill tone="gold" icon={Bot}>{tl('luca.paused', 'Paused')}</Pill>
                 : degraded
-                  ? <Pill tone="gold" icon={Clock}>Offline mode</Pill>
-                  : <Pill tone="mint" icon={Bot}>Online</Pill>}
+                  ? <Pill tone="gold" icon={Clock}>{tl('luca.offlineMode', 'Offline mode')}</Pill>
+                  : <Pill tone="mint" icon={Bot}>{tl('luca.online', 'Online')}</Pill>}
             </div>
-            <div className="tiny muted" style={{ marginTop: 1 }}>Heart-Centered Intelligence</div>
+            <div className="tiny muted" style={{ marginTop: 1 }}>{tl('luca.tagline', 'Heart-Centered Intelligence')}</div>
           </div>
           <button
             className={`coach-voice ${voiceOn ? 'on' : ''}`}
@@ -3099,36 +3252,41 @@ function CoachPage({ user, go }) {
             aria-pressed={voiceOn}
           >
             {voiceOn ? <Volume2 size={16} strokeWidth={2.2} /> : <VolumeX size={16} strokeWidth={2.2} />}
-            <span>{voiceOn ? 'Voice on' : 'Voice off'}</span>
+            <span>{voiceOn ? tl('luca.voiceOn', 'Voice on') : tl('luca.voiceOff', 'Voice off')}</span>
           </button>
-          {/* §D — accessible 44×44 expand/collapse. Collapsing hides the panel
-              body but never erases the conversation (it lives in AppContext). */}
+          {/* Phase 6 — accessible full-screen (Maximize) / Minimize toggle. */}
           <button
             type="button"
-            onClick={toggleCollapsed}
-            aria-expanded={!collapsed}
-            aria-controls="luca-panel-body"
-            title={collapsed ? `${tl('action.expand', 'Expand')} LUCA` : `${tl('action.collapse', 'Collapse')} LUCA`}
-            aria-label={collapsed ? `${tl('action.expand', 'Expand')} LUCA` : `${tl('action.collapse', 'Collapse')} LUCA`}
+            onClick={toggleFull}
+            aria-pressed={coachState === 'full'}
+            title={coachState === 'full' ? tl('action.minimize', 'Minimize') : tl('action.maximize', 'Full screen')}
+            aria-label={coachState === 'full' ? tl('action.minimize', 'Minimize') : tl('action.maximize', 'Full screen')}
             style={{
               flex: 'none', width: 44, height: 44, display: 'grid', placeItems: 'center',
               background: 'transparent', border: '1px solid var(--line,#e3ece8)', borderRadius: 12,
               cursor: 'pointer', color: 'var(--ink,#0A2B29)', marginLeft: 4,
             }}
           >
-            <ChevronDown size={18} strokeWidth={2.4} style={{ transform: collapsed ? 'rotate(180deg)' : 'none', transition: 'transform .18s ease' }} />
+            {coachState === 'full' ? <Minimize2 size={17} strokeWidth={2.3} /> : <Maximize2 size={17} strokeWidth={2.3} />}
+          </button>
+          {/* §D — accessible 44×44 collapse. Collapsing hides the panel body
+              but never erases the conversation (it lives in AppContext). */}
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-expanded={!collapsed}
+            aria-controls="luca-panel-body"
+            title={`${tl('action.collapse', 'Collapse')} LUCA`}
+            aria-label={`${tl('action.collapse', 'Collapse')} LUCA`}
+            style={{
+              flex: 'none', width: 44, height: 44, display: 'grid', placeItems: 'center',
+              background: 'transparent', border: '1px solid var(--line,#e3ece8)', borderRadius: 12,
+              cursor: 'pointer', color: 'var(--ink,#0A2B29)', marginLeft: 4,
+            }}
+          >
+            <ChevronDown size={18} strokeWidth={2.4} style={{ transition: 'transform .18s ease' }} />
           </button>
         </div>
-
-        {collapsed ? (
-          <div className="coach-collapsed" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span className="tiny muted" style={{ flex: 1, minWidth: 120 }}>
-              LUCA is collapsed — your conversation is saved{messages.length ? ` (${messages.length} message${messages.length === 1 ? '' : 's'})` : ''}.
-            </span>
-            <button type="button" onClick={toggleCollapsed} className="suggest-chip" style={{ minHeight: 44 }}>{tl('action.expand', 'Expand')}</button>
-          </div>
-        ) : (
-        <>
         <div className="coach-body" id="luca-panel-body">
           {loading ? (
             <><Skel h={44} w="58%" /><Skel h={44} w="70%" style={{ alignSelf: 'flex-end' }} /><Skel h={44} w="52%" /></>
@@ -3240,7 +3398,7 @@ function CoachPage({ user, go }) {
         onClose={() => setJourneyOpen(false)}
         profile={appProfile}
         locale={locale}
-        onApprove={(block) => { setApprovedJourney?.(block); setJourneyOpen(false); go('growth'); }}
+        onApprove={(block) => { setApprovedJourney?.(block); setJourneyOpen(false); seedApprovedPersonalizedPlan(block); go('growth'); }}
       />
 
       {/* Right sidebar */}
@@ -3322,14 +3480,13 @@ const DIM_MAP = Object.fromEntries(GROWTH_DIMS.map((d) => [d.key, d]));
 const TODO_KIND_ICON = { checkin: Plus, habit: Droplet, audio: Headphones, activity: Compass, reflection: BookOpen, practitioner: Stethoscope, navigate: ArrowRight };
 
 // CTA shown on a to-do that takes the member somewhere useful (null = no nav).
+// Cadence grouping + action allowlist live in ../lib/todoGrouping.js (pure,
+// unit-tested); here we only attach the icon component for each action key.
+const TODO_CTA_ICON = { start_checkin: Plus, play_audio: Play, open_listing: Stethoscope, open_booking: CalendarClock, navigate: ArrowRight };
 function todoCTA(t) {
-  const type = t.action_type;
-  const tgt = t.action_target;
-  if (type === 'start_checkin') return { label: 'Check in', icon: Plus };
-  if (type === 'play_audio') return { label: 'Play', icon: Play };
-  if (type === 'open_listing') return { label: 'View', icon: Stethoscope };
-  if (type === 'navigate' && tgt && tgt !== 'journal') return { label: 'Go', icon: ArrowRight };
-  return null;
+  const meta = todoActionMeta(t);
+  if (!meta) return null;
+  return { label: meta.label, icon: TODO_CTA_ICON[meta.key] || ArrowRight };
 }
 
 /* Guided-journey To-Do list — the member's personal plan. */
@@ -3337,7 +3494,50 @@ function GrowthTodos({ todos, journeyType, onToggle, onRun, onAdd, onDelete, go 
   const [title, setTitle] = useState('');
   const [dim, setDim] = useState('mind');
   const done = todos.filter((t) => t.done).length;
+  const pct = todos.length ? Math.round((done / todos.length) * 100) : 0;
   const add = () => { const v = title.trim(); if (!v) return; onAdd({ title: v, dimension: dim }); setTitle(''); };
+
+  // Group into Today / This week / This month, preserving sort order within each.
+  const groups = { today: [], week: [], month: [] };
+  for (const t of todos) groups[cadenceForTodo(t)].push(t);
+
+  const renderRow = (t) => {
+    const cta = todoCTA(t);
+    const dm = DIM_MAP[t.dimension];
+    const KindIcon = TODO_KIND_ICON[t.kind] || Compass;
+    const CtaIcon = cta?.icon || ArrowRight;
+    return (
+      <div key={t.id} className="list-row" style={{ padding: '11px 0', opacity: t.done ? 0.62 : 1, borderBottom: '1px solid var(--line,#EDF2F0)' }}>
+        <button
+          onClick={() => onToggle(t)}
+          title={t.done ? 'Mark not done' : 'Mark done'}
+          style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, flex: 'none', display: 'grid', placeItems: 'center' }}
+        >
+          {t.done
+            ? <CheckCircle2 size={22} color="#2DB584" strokeWidth={2.2} />
+            : <span style={{ width: 21, height: 21, borderRadius: 999, border: '2px solid #C9DAD4', display: 'block' }} />}
+        </button>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="small f6" style={{ textDecoration: t.done ? 'line-through' : 'none', display: 'flex', alignItems: 'center', gap: 7 }}>
+            <KindIcon size={13} style={{ color: dm?.color || 'var(--muted)', flex: 'none' }} />
+            {t.title}
+          </div>
+          {t.detail && <div className="tiny muted" style={{ marginTop: 2, lineHeight: 1.45 }}>{t.detail}</div>}
+        </div>
+        <div className="row" style={{ gap: 4, flex: 'none', alignItems: 'center' }}>
+          {cta && !t.done && (
+            <button className="checkin-cta" style={{ padding: '6px 11px', fontSize: 12 }} onClick={() => onRun(t)}>
+              <CtaIcon size={13} strokeWidth={2.4} /> {cta.label}
+            </button>
+          )}
+          <button className="icon-btn" title="Remove" onClick={() => onDelete(t)}
+            style={{ border: 'none', background: 'transparent', color: 'var(--muted,#8AA09C)', cursor: 'pointer', padding: 4 }}>
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <Card className="lg">
@@ -3346,9 +3546,18 @@ function GrowthTodos({ todos, journeyType, onToggle, onRun, onAdd, onDelete, go 
         title="To-do list"
         action={todos.length ? <Pill tone={done === todos.length ? 'gold' : 'mint'} icon={CheckCircle2}>{done}/{todos.length} done</Pill> : null}
       />
+      {/* Compact journey summary/progress header (§4) — replaces the large
+          static bullet card as the primary experience. */}
       {journeyType ? (
-        <div className="tiny muted" style={{ marginTop: -6, marginBottom: 12 }}>
-          Curated from your {String(journeyType).replace(/_/g, ' ')} journey — check each off as you go.
+        <div style={{ marginTop: -6, marginBottom: 14 }}>
+          <div className="tiny muted" style={{ marginBottom: 6 }}>
+            Curated from your {String(journeyType).replace(/_/g, ' ')} journey — check each off as you go.
+          </div>
+          {todos.length > 0 && (
+            <div aria-hidden="true" style={{ height: 6, borderRadius: 999, background: 'var(--line,#EDF2F0)', overflow: 'hidden' }}>
+              <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg,#2DB584,#0E5C57)', transition: 'width .3s ease' }} />
+            </div>
+          )}
         </div>
       ) : (
         <div className="tiny muted" style={{ marginTop: -6, marginBottom: 12 }}>
@@ -3359,44 +3568,19 @@ function GrowthTodos({ todos, journeyType, onToggle, onRun, onAdd, onDelete, go 
       {todos.length === 0 ? (
         <Empty icon={Compass} title="No tasks yet" sub="Begin a guided journey in Explore, or add your first goal below." />
       ) : (
-        <div className="col" style={{ gap: 2 }}>
-          {todos.map((t) => {
-            const cta = todoCTA(t);
-            const dm = DIM_MAP[t.dimension];
-            const KindIcon = TODO_KIND_ICON[t.kind] || Compass;
-            const CtaIcon = cta?.icon || ArrowRight;
-            return (
-              <div key={t.id} className="list-row" style={{ padding: '11px 0', opacity: t.done ? 0.62 : 1, borderBottom: '1px solid var(--line,#EDF2F0)' }}>
-                <button
-                  onClick={() => onToggle(t)}
-                  title={t.done ? 'Mark not done' : 'Mark done'}
-                  style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, flex: 'none', display: 'grid', placeItems: 'center' }}
-                >
-                  {t.done
-                    ? <CheckCircle2 size={22} color="#2DB584" strokeWidth={2.2} />
-                    : <span style={{ width: 21, height: 21, borderRadius: 999, border: '2px solid #C9DAD4', display: 'block' }} />}
-                </button>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="small f6" style={{ textDecoration: t.done ? 'line-through' : 'none', display: 'flex', alignItems: 'center', gap: 7 }}>
-                    <KindIcon size={13} style={{ color: dm?.color || 'var(--muted)', flex: 'none' }} />
-                    {t.title}
-                  </div>
-                  {t.detail && <div className="tiny muted" style={{ marginTop: 2, lineHeight: 1.45 }}>{t.detail}</div>}
+        <div className="col" style={{ gap: 16 }}>
+          {TODO_CADENCE.map(({ key, label }) => (
+            groups[key].length > 0 && (
+              <div key={key}>
+                <div className="tiny f7" style={{ textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--muted,#8AA09C)', fontWeight: 800, marginBottom: 4 }}>
+                  {label} <span style={{ opacity: .7 }}>· {groups[key].filter((t) => t.done).length}/{groups[key].length}</span>
                 </div>
-                <div className="row" style={{ gap: 4, flex: 'none', alignItems: 'center' }}>
-                  {cta && !t.done && (
-                    <button className="checkin-cta" style={{ padding: '6px 11px', fontSize: 12 }} onClick={() => onRun(t)}>
-                      <CtaIcon size={13} strokeWidth={2.4} /> {cta.label}
-                    </button>
-                  )}
-                  <button className="icon-btn" title="Remove" onClick={() => onDelete(t)}
-                    style={{ border: 'none', background: 'transparent', color: 'var(--muted,#8AA09C)', cursor: 'pointer', padding: 4 }}>
-                    <Trash2 size={14} />
-                  </button>
+                <div className="col" style={{ gap: 2 }}>
+                  {groups[key].map(renderRow)}
                 </div>
               </div>
-            );
-          })}
+            )
+          ))}
         </div>
       )}
 
@@ -3499,9 +3683,13 @@ function ApprovedJourneyCard({ journey, onDismiss }) {
           Dismiss
         </button>
       </div>
-      <ul className="f7" style={{ margin: '10px 0 6px', paddingLeft: 18 }}>
-        {(journey.steps || []).map((s, i) => <li key={i} style={{ marginBottom: 4 }}>{s}</li>)}
-      </ul>
+      {/* §4 — a COMPACT summary, not a large static bullet list. The actionable
+          steps live in the To-do list below (Today / This week / This month). */}
+      <div className="tiny muted" style={{ margin: '8px 0 2px' }}>
+        {(journey.steps || []).length} focus step{(journey.steps || []).length === 1 ? '' : 's'}
+        {journey.cadence && journey.cadence !== 'personalized' ? ` · ${journey.cadence} rhythm` : ' · your own rhythm'}
+        {' '}— see your To-do list below.
+      </div>
       <div className="tiny muted2">
         {journey.source ? `${journey.source} · ` : ''}Nothing runs automatically — each step is yours to start.
       </div>
@@ -3559,7 +3747,12 @@ function JournalPage({ user, go, forcedView, hideToggle }) {
   // ── To-Do handlers ──
   const toggleTodo = async (t) => {
     setTodos((xs) => xs.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)));
-    try { await api.toggleTodo(t.id); } catch { setTodos((xs) => xs.map((x) => (x.id === t.id ? { ...x, done: t.done } : x))); }
+    try {
+      await api.toggleTodo(t.id);
+      // Phase 2 — a completed/uncompleted todo changes journey progress; tell the
+      // Dashboard to recompute "Your Next Step" immediately.
+      window.dispatchEvent(new CustomEvent('solaris:progress', { detail: { source: 'todo' } }));
+    } catch { setTodos((xs) => xs.map((x) => (x.id === t.id ? { ...x, done: t.done } : x))); }
   };
   const runTodo = (t) => {
     const type = t.action_type;
@@ -3576,6 +3769,12 @@ function JournalPage({ user, go, forcedView, hideToggle }) {
       case 'open_listing':
         if (target && setPendingProviderId) setPendingProviderId(String(target));
         go && go('explore');
+        break;
+      case 'open_booking':
+        // Deep-link the exact booking when a booking is the task (§4). The
+        // Bookings surface reads the pending id and opens that thread/detail.
+        if (target) window.dispatchEvent(new CustomEvent('solaris:navigate', { detail: { tab: 'bookings', bookingId: String(target) } }));
+        else go && go('bookings');
         break;
       case 'navigate':
         if (target && target !== 'journal') go && go(target);
@@ -6110,15 +6309,17 @@ function MessagesArea({ user, go, sub, onUnread }) {
    "With Yourself" (Journal, Growth, Media). Every section is URL-backed and
    reuses the existing page components (no duplicated functionality). */
 function CommunicationsArea({ user, go, sub, onUnread, onInboxUnread }) {
+  const { t } = useLocale() || {};
+  const tl = (k, fallback) => { const v = t ? t(k) : null; return v && v !== k ? v : fallback; };
   const active = SUBTABS.communications.tabs.includes(sub) ? sub : SUBTABS.communications.def;
   // §F — one unified Messages destination under "With Others" (Inbox is folded in).
   const withOthers = [
-    { id: 'messages', label: 'Messages', icon: MessageSquare },
+    { id: 'messages', label: tl('nav.messages', 'Messages'), icon: MessageSquare },
   ];
   const withYourself = [
-    { id: 'journal', label: 'Journal', icon: BookOpen },
-    { id: 'growth', label: 'Growth', icon: Compass },
-    { id: 'media', label: 'Media', icon: Headphones },
+    { id: 'journal', label: tl('nav.journal', 'Journal'), icon: BookOpen },
+    { id: 'growth', label: tl('nav.growth', 'Growth'), icon: Compass },
+    { id: 'media', label: tl('nav.media', 'Media'), icon: Headphones },
   ];
   let body;
   if (active === 'journal' || active === 'growth') body = <ErrorBoundary><JournalPage user={user} go={go} forcedView={active === 'growth' ? 'grow' : 'reflect'} hideToggle /></ErrorBoundary>;
@@ -6135,21 +6336,21 @@ function CommunicationsArea({ user, go, sub, onUnread, onInboxUnread }) {
           <div className="comm-folder-h">
             <span className="comm-folder-tab" aria-hidden="true"><Users size={14} /></span>
             <div>
-              <div id="comm-others-h" className="comm-folder-title">With Others</div>
-              <div className="comm-folder-sub">Secure messages with your practitioners</div>
+              <div id="comm-others-h" className="comm-folder-title">{tl('comm.withOthers', 'With Others')}</div>
+              <div className="comm-folder-sub">{tl('comm.withOthersSub', 'Secure messages with your practitioners')}</div>
             </div>
           </div>
-          <SubTabs ariaLabel="With Others" variant="others" active={active} onSelect={(id) => go('communications', id)} items={withOthers} />
+          <SubTabs ariaLabel={tl('comm.withOthers', 'With Others')} variant="others" active={active} onSelect={(id) => go('communications', id)} items={withOthers} />
         </section>
         <section className="comm-folder yourself" aria-labelledby="comm-self-h">
           <div className="comm-folder-h">
             <span className="comm-folder-tab" aria-hidden="true"><Sprout size={14} /></span>
             <div>
-              <div id="comm-self-h" className="comm-folder-title">With Yourself</div>
-              <div className="comm-folder-sub">Your private journal, growth, and media</div>
+              <div id="comm-self-h" className="comm-folder-title">{tl('comm.withYourself', 'With Yourself')}</div>
+              <div className="comm-folder-sub">{tl('comm.withYourselfSub', 'Your private journal, growth, and media')}</div>
             </div>
           </div>
-          <SubTabs ariaLabel="With Yourself" variant="yourself" active={active} onSelect={(id) => go('communications', id)} items={withYourself} />
+          <SubTabs ariaLabel={tl('comm.withYourself', 'With Yourself')} variant="yourself" active={active} onSelect={(id) => go('communications', id)} items={withYourself} />
         </section>
       </div>
       <div className="comm-body">{body}</div>
@@ -6503,6 +6704,8 @@ export function SettingsPage({ user, go, sub }) {
             </>
           )}
         </Card>
+        {/* §Phase 8 — Beta Privacy & Sharing defaults (device-local, opt-in). */}
+        <SharingDefaultsCard subjectId={user?.userId || user?.id} />
         {/* §4 — Sovereignty card, relocated here from the Health Passport. */}
         <SovereigntyCard />
         </div>
@@ -6528,7 +6731,9 @@ const LOCALE_NAMES = { en: 'English', es: 'Español (vista previa)' };
 // spacing, ≥48px rows, focus trap, Escape/outside-tap close, and focus return.
 const LANG_FOCUSABLE = 'button:not([disabled]),[tabindex]:not([tabindex="-1"])';
 function LanguageToggle() {
-  const { locale, setLocale } = useLocale();
+  const { locale, setLocale, t } = useLocale();
+  const tl = (k, fallback) => { const v = t ? t(k) : null; return v && v !== k ? v : fallback; };
+  const langLabel = tl('lang.label', 'Language');
   const [open, setOpen] = useState(false);
   const btnRef = useRef(null);
   const panelRef = useRef(null);
@@ -6578,8 +6783,8 @@ function LanguageToggle() {
         className="icon-btn"
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={`Language: ${LOCALE_NAMES[locale] || locale}`}
-        title="Language"
+        aria-label={`${langLabel}: ${LOCALE_NAMES[locale] || locale}`}
+        title={langLabel}
         onClick={() => setOpen((v) => !v)}
         style={{ position: 'relative' }}
       >
@@ -6595,7 +6800,7 @@ function LanguageToggle() {
           <div
             ref={panelRef}
             role="menu"
-            aria-label="Language"
+            aria-label={langLabel}
             data-testid="language-popover"
             tabIndex={-1}
             onClick={(e) => e.stopPropagation()}
@@ -6640,13 +6845,15 @@ function LanguageToggle() {
 }
 
 function ProfileMenu({ user, displayName, go, logout }) {
+  const { t } = useLocale() || {};
+  const tl = (k, fallback) => { const v = t ? t(k) : null; return v && v !== k ? v : fallback; };
   const [open, setOpen] = useState(false);
   const rootRef = useRef(null);
   const items = [
-    { key: 'profile', label: 'My Profile', icon: UserCog, onSelect: () => go('account', 'profile') },
-    { key: 'settings', label: 'Settings', icon: Settings, onSelect: () => go('account', 'preferences') },
-    { key: 'identity', label: 'Identity & Data', icon: ShieldCheck, onSelect: () => go('identity') },
-    { key: 'signout', label: 'Sign out', icon: LogOut, danger: true, onSelect: () => logout?.() },
+    { key: 'profile', label: tl('menu.myProfile', 'My Profile'), icon: UserCog, onSelect: () => go('account', 'profile') },
+    { key: 'settings', label: tl('menu.settings', 'Settings'), icon: Settings, onSelect: () => go('account', 'preferences') },
+    { key: 'identity', label: tl('menu.identityData', 'Identity & Data'), icon: ShieldCheck, onSelect: () => go('identity') },
+    { key: 'signout', label: tl('action.signOut', 'Sign out'), icon: LogOut, danger: true, onSelect: () => logout?.() },
   ];
 
   useEffect(() => {
@@ -6776,10 +6983,18 @@ function AdminSystemPage() {
 // Bottom-nav id → locale key. Missing ids fall back to the hardcoded label,
 // so unmapped destinations keep their reviewed English until translated.
 const BOTTOM_NAV_LABEL_KEYS = {
+  home: 'nav.home',
+  dashboard: 'nav.dashboard',
   explore: 'nav.explore',
   health: 'nav.health',
+  journey: 'nav.journey',
   coach: 'nav.coach',
   communications: 'nav.communications',
+  growth: 'nav.growth',
+  journal: 'nav.journal',
+  media: 'nav.media',
+  messages: 'nav.messages',
+  bookings: 'nav.bookings',
   wallet: 'nav.economic',
   'prac-clients': 'nav.clients',
   'prac-bookings': 'nav.bookings',
@@ -6887,6 +7102,11 @@ export default function LucaPassport() {
       if (wantsCheckin) {
         // Let the Health Passport surface mount before asking it to open check-in.
         setTimeout(() => window.dispatchEvent(new CustomEvent('solaris:open-checkin')), 320);
+      }
+      // Deep-link to an EXACT booking: after the bookings surface mounts, ask
+      // MyBookings to open that booking's detail modal (never a generic tab).
+      if (d.bookingId != null) {
+        setTimeout(() => window.dispatchEvent(new CustomEvent('solaris:focus-booking', { detail: { bookingId: String(d.bookingId) } })), 320);
       }
     };
     window.addEventListener('solaris:navigate', onNav);

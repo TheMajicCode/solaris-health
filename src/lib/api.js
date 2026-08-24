@@ -154,6 +154,7 @@ class ApiClient {
   createTodo(body) { return this.request('/journey/todos', { method: 'POST', body: JSON.stringify(body) }); }
   toggleTodo(id) { return this.request(`/journey/todos/${id}/toggle`, { method: 'POST', body: JSON.stringify({}) }); }
   deleteTodo(id) { return this.request(`/journey/todos/${id}`, { method: 'DELETE' }); }
+  seedJourneyPlan(body) { return this.request('/journey/todos/seed-plan', { method: 'POST', body: JSON.stringify(body) }); }
   getDocuments() { return this.request('/journey/documents'); }
   getDocument(id) { return this.request(`/journey/documents/${id}`); }
   uploadDocument(data) { return this.request('/journey/documents', { method: 'POST', body: JSON.stringify(data) }); }

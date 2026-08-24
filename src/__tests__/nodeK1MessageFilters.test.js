@@ -130,7 +130,9 @@ describe('§F navigation source-contract (LucaPassport)', () => {
   it('the "With Others" folder renders only Messages', () => {
     const m = src.match(/const withOthers = \[([\s\S]*?)\];/);
     expect(m).toBeTruthy();
-    expect(m[1]).toMatch(/label:\s*'Messages'/);
+    // K1.3 §1 — the label is now localized (tl('nav.messages', 'Messages'))
+    // while still surfacing "Messages" as the English fallback.
+    expect(m[1]).toMatch(/label:\s*(?:'Messages'|tl\('nav\.messages',\s*'Messages'\))/);
     expect(m[1]).not.toMatch(/label:\s*'Inbox'/);
   });
 });

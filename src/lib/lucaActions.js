@@ -275,4 +275,114 @@ export function deterministicResponse(actionId, raw = {}) {
   }
 }
 
+// ---- Phase 5: bounded response contract + action validation ----------------
+//
+// The rendered/returned contract is:
+//   { reply: string, actions: [{ id, label, action_type, action_target }], why }
+// Actions are ranked deterministically from real state (above); the cloud model
+// is used only to phrase `reply`, never to invent an action target. Every action
+// is validated against the allowlist before it can be rendered — no dead chips.
+
+// Allowlist of in-app effects a LUCA action may trigger. Mirrors
+// executeChipAction() in the LUCA screen. `navigate`/`open_listing`/`play_audio`
+// require a concrete target; the rest are self-contained workflows.
+export const LUCA_ACTION_TYPES = [
+  'navigate', 'start_checkin', 'start_assessment', 'open_intake',
+  'open_listing', 'play_audio', 'curate', 'open_journey', 'prefill_chat',
+];
+const ACTION_TYPES_NEEDING_TARGET = ['navigate', 'open_listing', 'play_audio'];
+
+// Validate a single action (accepts both the {action_type,action_target}
+// contract shape and the legacy {action,target} chip shape).
+export function isValidLucaAction(a) {
+  if (!a || typeof a !== 'object') return false;
+  if (!a.label || typeof a.label !== 'string') return false;
+  const type = a.action_type ?? a.action;
+  if (!LUCA_ACTION_TYPES.includes(type)) return false;
+  const target = a.action_target ?? a.target;
+  if (ACTION_TYPES_NEEDING_TARGET.includes(type) && (target == null || String(target).trim() === '')) return false;
+  return true;
+}
+
+// Screen a free-text member message for unsafe diagnostic/prescriptive intent.
+// LUCA must never diagnose, prescribe, or recommend a dose — redirect to a
+// licensed practitioner instead. Pattern-based (framework-agnostic, testable).
+const UNSAFE_PATTERNS = [
+  /\bdiagnos(e|is|ing)?\b/i,
+  /\bprescri(be|ption|bing)\b/i,
+  /\bdo i have\b/i,
+  /\bis (this|it|that) (cancer|a tumou?r|serious|dangerous|malignant)\b/i,
+  /\bwhat (medication|drug|dose|dosage|antibiotic)\b/i,
+  /\bshould i (stop|start|increase|decrease|double|take) .*(med|drug|pill|dose|dosage|antibiotic|insulin|steroid)\b/i,
+  /\bhow (much|many) .*(should i take|to take|of the)\b/i,
+];
+export function isUnsafeMedicalRequest(text = '') {
+  const s = String(text || '');
+  return UNSAFE_PATTERNS.some((re) => re.test(s));
+}
+
+// Short transparency line — how the response was ranked, from de-identified
+// counts/flags only (never raw content).
+function whyForAction(actionId, raw = {}) {
+  const d = deidentifyContext(raw);
+  switch (actionId) {
+    case 'next_step':
+      return `Ranked from your live state — check-in today: ${d.hasCheckinToday ? 'done' : 'pending'}, active journey: ${d.activeJourneyType || 'none'}, bookings needing action: ${d.bookingsNeedingActionCount}.`;
+    case 'review_progress':
+      return `Summarized from Passport completeness (${d.completenessPct == null ? 'n/a' : d.completenessPct + '%'}), ${d.checkinCount} check-in(s), vitality band "${d.vitalityBand}".`;
+    case 'prepare_appointment':
+      return `Based on ${d.upcomingBookingCount} upcoming booking(s).`;
+    case 'recommend_practitioner':
+      return `Based on ${d.goalCount} stated goal(s) and ${d.savedProviderCount} saved provider(s); options refresh each time.`;
+    case 'build_journey':
+      return 'Opens the planner you approve — nothing is saved until you confirm.';
+    default:
+      return 'Chosen from your permissioned local context only.';
+  }
+}
+
+// Map the deterministic chips to the validated {id,label,action_type,action_target}
+// contract, drop anything invalid, and cap at three buttons.
+function chipsToActions(actionId, chips = []) {
+  return (chips || [])
+    .map((c, i) => ({
+      id: `${actionId}:${c.action}:${i}`,
+      label: c.label,
+      action_type: c.action,
+      action_target: c.target ?? null,
+    }))
+    .filter(isValidLucaAction)
+    .slice(0, 3);
+}
+
+// Phase 5 primary entry point. Returns the bounded contract with deterministically
+// ranked, validated actions. `reply` may be replaced by a model phrasing upstream;
+// actions/why always come from real, de-identified member state.
+export function buildLucaResponse(actionId, raw = {}) {
+  const base = deterministicResponse(actionId, raw);
+  return {
+    reply: base.text,
+    actions: chipsToActions(actionId, base.chips),
+    why: whyForAction(actionId, raw),
+    degraded: base.degraded,
+    needsContext: base.needsContext,
+  };
+}
+
+// Safe, non-diagnostic response for an unsafe medical free-text request.
+// Returns null when the message is not an unsafe request.
+export function safeMessageResponse(text, raw = {}) { // eslint-disable-line no-unused-vars
+  if (!isUnsafeMedicalRequest(text)) return null;
+  const actions = [
+    { id: 'safe:curate', label: 'Find practitioners', action_type: 'curate', action_target: null },
+    { id: 'safe:explore', label: 'Browse Explore', action_type: 'navigate', action_target: 'explore' },
+  ].filter(isValidLucaAction);
+  return {
+    reply: 'I can\u2019t diagnose conditions or recommend medications or doses — that needs a licensed practitioner who can examine you. What I can do: help you prepare questions, organize what you\u2019re noticing, or find the right practitioner. If this feels urgent, please contact local emergency services.',
+    actions,
+    why: 'Safety guardrail: diagnostic/prescriptive requests are redirected to a licensed practitioner and never answered clinically.',
+    degraded: true,
+  };
+}
+
 export default LUCA_ACTIONS;

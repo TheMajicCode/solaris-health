@@ -444,6 +444,63 @@ router.delete('/todos/:id', authMiddleware, async (req, res) => {
   } catch (err) { console.error('[todos] delete', err); res.status(500).json({ error: 'Server error' }); }
 });
 
+// Seed an approved personalized (LUCA-drafted) journey into the SAME member_todos
+// pipeline as a guided journey. Idempotent via the (user_id, journey_type,
+// step_key) partial unique index — a double approve / reload never duplicates.
+// No migration (reuses member_todos). No PHI: only generic template step text.
+const SEED_CADENCE_KIND = { today: 'habit', week: 'activity', month: 'navigate' };
+const SEED_CADENCE_SORT = { today: 0, week: 100, month: 200 };
+// Allowlisted action types a seeded step may carry (§4). Anything else is
+// stored as a plain, non-actionable checklist item — never a dead button.
+const SEED_ACTION_TYPES = ['start_checkin', 'play_audio', 'open_listing', 'open_booking', 'navigate'];
+
+router.post('/todos/seed-plan', authMiddleware, async (req, res) => {
+  try {
+    const journeyType = (String(req.body?.journeyType || 'personalized')
+      .replace(/[^a-z0-9_]/gi, '') || 'personalized').slice(0, 40);
+    const rawSteps = Array.isArray(req.body?.steps) ? req.body.steps.slice(0, 40) : [];
+    if (!rawSteps.length) return res.status(400).json({ error: 'No steps' });
+
+    let seeded = 0;
+    for (let i = 0; i < rawSteps.length; i++) {
+      const s = rawSteps[i] || {};
+      const title = String(s.title || '').trim().slice(0, 200);
+      if (!title) continue;
+      const cadence = ['today', 'week', 'month'].includes(String(s.cadence)) ? String(s.cadence) : 'week';
+      const stepKey = String(s.step_key || `${journeyType}_${cadence}_${i}`).slice(0, 80);
+      const kind = SEED_CADENCE_KIND[cadence] || 'activity';
+      let dimension = String(s.dimension || '').trim().toLowerCase();
+      if (!TODO_DIMENSIONS.includes(dimension)) dimension = null;
+      const actionType = SEED_ACTION_TYPES.includes(s.action_type) ? s.action_type : null;
+      const actionTarget = actionType && s.action_target != null
+        ? String(s.action_target).slice(0, 120) : null;
+      const detail = s.detail ? String(s.detail).slice(0, 500) : null;
+      try {
+        const r = await db.query(
+          `INSERT INTO member_todos
+             (user_id, journey_type, step_key, title, detail, kind, dimension, action_type, action_target, sort_order)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+           ON CONFLICT (user_id, journey_type, step_key)
+             WHERE journey_type IS NOT NULL AND step_key IS NOT NULL
+           DO NOTHING
+           RETURNING id`,
+          [req.user.userId, journeyType, stepKey, title, detail, kind, dimension, actionType, actionTarget,
+           (SEED_CADENCE_SORT[cadence] || 100) + i]);
+        if (r.rows.length) seeded += 1;
+      } catch (e) { /* ignore individual step failures */ }
+    }
+
+    const all = await db.query(
+      `SELECT id, journey_type, step_key, title, detail, kind, dimension,
+              action_type, action_target, done,
+              to_char(done_at,'YYYY-MM-DD"T"HH24:MI:SSZ') AS done_at, sort_order, created_at
+         FROM member_todos WHERE user_id=$1
+        ORDER BY done ASC, sort_order ASC, created_at ASC`,
+      [req.user.userId]);
+    res.json({ seeded, todos: all.rows });
+  } catch (err) { console.error('[todos] seed-plan', err); res.status(500).json({ error: 'Server error' }); }
+});
+
 // ---------- REWARDS ----------
 router.get('/rewards', authMiddleware, async (req, res) => {
   const events = await db.query('SELECT * FROM reward_events WHERE user_id=$1 ORDER BY created_at DESC LIMIT 50', [req.user.userId]);

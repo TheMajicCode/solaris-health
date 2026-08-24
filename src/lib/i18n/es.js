@@ -76,21 +76,67 @@ export default {
   'action.close': 'Cerrar',
   'action.expand': 'Expandir',
   'action.collapse': 'Contraer',
+  'action.maximize': 'Pantalla completa',
+  'action.minimize': 'Minimizar',
+  'luca.online': 'En línea',
+  'luca.offlineMode': 'Modo sin conexión',
+  'luca.paused': 'En pausa',
+  'luca.tagline': 'Inteligencia centrada en el corazón',
+  'luca.voiceOn': 'Voz activada',
+  'luca.voiceOff': 'Voz desactivada',
+  'luca.message': 'mensaje',
+  'luca.messages': 'mensajes',
 
   // ── Messages filters (Communications) ──
   'msg.filterAll': 'Todos',
   'msg.filterBookings': 'Reservas',
   'msg.filterUnread': 'No leídos',
 
+  // ── Communications binder (folders) ──
+  'comm.withOthers': 'Con otras personas',
+  'comm.withOthersSub': 'Mensajes seguros con tus profesionales',
+  'comm.withYourself': 'Contigo mismo',
+  'comm.withYourselfSub': 'Tu diario, crecimiento y contenido privados',
+
+  // ── Privacy & Sharing (Beta, device-local) ──
+  'share.sectionTitle': 'Privacidad y uso compartido',
+  'share.sectionHint': 'Elige qué estás dispuesto a compartir con tus profesionales de forma predeterminada. Compartir es opcional y puedes cambiarlo cuando quieras.',
+  'share.savedOnDevice': 'Guardado en este dispositivo',
+  'share.whatIShare': 'Qué comparto',
+  'share.messagePractitioner': 'Enviar mensaje al profesional',
+  'share.opening': 'Abriendo…',
+  'share.bookingOverrideTitle': 'Qué comparto para esta reserva',
+  'share.bookingOverrideHint': 'Estas opciones se aplican solo a esta cita y anulan tus valores predeterminados.',
+  'share.usingDefaults': 'Usando los valores predeterminados de tu cuenta',
+  'share.useDefaults': 'Usar mis valores predeterminados',
+  'share.saveDefaults': 'Guardar valores de uso compartido',
+  'share.cat.checkins': 'Registros diarios',
+  'share.cat.checkins.hint': 'Registros de ánimo, energía y síntomas que anotas en Solaris.',
+  'share.cat.journalSummaries': 'Reflexiones del diario',
+  'share.cat.journalSummaries.hint': 'Resúmenes de las reflexiones privadas que decidas mostrar.',
+  'share.cat.assessments': 'Resultados de evaluaciones',
+  'share.cat.assessments.hint': 'Resultados de las evaluaciones que hayas completado.',
+  'share.cat.passport': 'Datos básicos del Pasaporte de Salud',
+  'share.cat.passport.hint': 'Datos básicos no clínicos del pasaporte que decidas compartir.',
+  'share.cat.contact': 'Datos de contacto',
+  'share.cat.contact.hint': 'Un teléfono o correo para coordinar la cita.',
+
   // ── Dashboard · LUCA recommendation cards ──
   'dash.lucaRecommends': 'LUCA recomienda',
   'dash.personalizedForYou': 'Personalizado para ti',
   'dash.curatedJourney': 'Camino personalizado para ti',
+  'dash.viewProvider': 'Ver profesional',
+  'dash.explore': 'Explorar',
 
   // ── Language switcher ──
   'lang.label': 'Idioma',
   'lang.english': 'English',
   'lang.spanish': 'Español',
+
+  // ── Account / profile menu ──
+  'menu.myProfile': 'Mi perfil',
+  'menu.settings': 'Ajustes',
+  'menu.identityData': 'Identidad y datos',
 
   // ── Portal switching (Node E5) ──
   'portal.switchToPractitioner': 'Cambiar al portal de profesional',

@@ -520,6 +520,20 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
       ? 'Finding providers…'
       : `${visibleProviders.length} provider${visibleProviders.length === 1 ? '' : 's'}`;
 
+    // Join Solaris entitlement routing (§9). Visibility never grants privileges:
+    // the practitioner check reads ONLY the authenticated server user. An already
+    // approved practitioner returns to My Practice (add/claim a practice) instead
+    // of filing a duplicate application; an ordinary member opens the application
+    // flow. If no onBecomeProvider handler is wired the button is not rendered.
+    const isApprovedPractitioner = user?.role === 'practitioner' || user?.isProvider === true;
+    const handleJoinSolaris = () => {
+      if (isApprovedPractitioner) {
+        window.dispatchEvent(new CustomEvent('solaris:navigate', { detail: { tab: 'my-practice' } }));
+      } else if (onBecomeProvider) {
+        onBecomeProvider();
+      }
+    };
+
     // "Recommend for me" — surfaces LUCA's recommendation as a bottom sheet whose
     // primary action opens the EXACT recommended practitioner (deep-link by id).
     const openRecommendedProvider = () => {
@@ -660,9 +674,20 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
               Guided journeys
             </button>
           </div>
-          {/* Compact Map/List selector sharing its row with the result count. */}
+          {/* Join Solaris (left, orange/gold) + Map/List selector (right).
+              The provider count moves to a compact line below so nothing overlaps
+              at 360px. */}
           <div className="exm-mtools">
-            <span className="exm-mcount" aria-live="polite">{countLabel}</span>
+            {onBecomeProvider && (
+              <button
+                type="button"
+                className="exm-mjoin"
+                onClick={handleJoinSolaris}
+                aria-label={isApprovedPractitioner ? 'Go to My Practice' : 'Join Solaris — apply to list your practice'}
+              >
+                <Store size={15} /> Join Solaris
+              </button>
+            )}
             <div className="exm-mseg" role="group" aria-label="Choose map or list view">
               <button
                 type="button"
@@ -682,6 +707,7 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
               </button>
             </div>
           </div>
+          <div className="exm-mcountline" aria-live="polite">{countLabel}</div>
           <div className="exm-mstage">
             {mobileView === 'map' ? (
               <div className="exm-mmap">{mapPanel}</div>
@@ -1178,14 +1204,29 @@ const CSS = `
 .luca .exm-mgbtn:disabled{opacity:.6;cursor:default}
 /* Compact Map/List selector sharing its row with the live result count. */
 .luca .exm-mtools{flex:none;display:flex;align-items:center;justify-content:space-between;gap:10px;
-  padding:2px 12px;background:var(--bg);border-bottom:1px solid var(--line)}
+  padding:6px 12px;background:var(--bg);border-bottom:1px solid var(--line)}
 .luca .exm-mcount{font-size:12px;font-weight:700;color:var(--muted);min-width:0;overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap}
+/* Join Solaris — warm orange/gold, visually related to the Home control orb. */
+.luca .exm-mjoin{flex:none;display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  min-height:44px;min-width:44px;padding:0 15px;border:none;border-radius:12px;
+  background:linear-gradient(145deg,#F6B34A 0%,#EE8A2A 52%,#D9781E 100%);color:#3A2408;
+  font-size:13px;font-weight:800;font-family:inherit;cursor:pointer;
+  box-shadow:0 1px 3px rgba(194,118,27,.35);white-space:nowrap}
+.luca .exm-mjoin:hover{background:linear-gradient(145deg,#F8BC5A 0%,#F0932F 52%,#E07E21 100%)}
+.luca .exm-mjoin:active{transform:translateY(1px)}
+.luca .exm-mjoin svg{flex:none}
+.luca .exm-mcountline{flex:none;padding:4px 14px 2px;font-size:12px;font-weight:700;color:var(--muted);
+  background:var(--bg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:360px){
+  .luca .exm-mjoin{padding:0 11px;font-size:12px}
+  .luca .exm-seg{padding:0 12px}
+}
 .luca .exm-mseg{flex:none;display:inline-flex;gap:0;border:1px solid var(--line);border-radius:10px;
   overflow:hidden;background:var(--surface)}
 .luca .exm-seg{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:none;
   background:transparent;color:var(--ink);padding:0 16px;font-size:13px;font-weight:700;
-  cursor:pointer;font-family:inherit;min-height:40px}
+  cursor:pointer;font-family:inherit;min-height:44px}
 .luca .exm-seg+.exm-seg{border-left:1px solid var(--line)}
 .luca .exm-seg.on{background:var(--teal-d);color:#fff}
 .luca .exm-mstage{position:relative;flex:1;min-height:0;overflow:hidden}
