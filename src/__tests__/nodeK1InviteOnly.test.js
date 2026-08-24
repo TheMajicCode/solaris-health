@@ -16,6 +16,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import en from '../lib/i18n/en.js';
 
 const SRC = fs.readFileSync(path.resolve(__dirname, '../flows/Auth.jsx'), 'utf8');
 
@@ -41,27 +42,36 @@ describe('§3 invite-only Beta boundary — Auth.jsx welcome screen (config-driv
   });
 
   it('displays a "Beta · Invite only" badge only when invite-only is on', () => {
+    // K1.2: the badge copy is now localized via t('auth.welcome.betaBadge') — the
+    // gated render + badge class stay in source; the reviewed English copy lives in
+    // the catalog (parity with es is enforced by i18n.locale.test.jsx).
     expect(SRC).toMatch(/\{inviteOnly && \(/);
     expect(SRC).toMatch(/ob-beta-badge/);
-    expect(SRC).toMatch(/Beta ·\s*Invite only/);
+    expect(SRC).toMatch(/t\('auth\.welcome\.betaBadge'\)/);
+    expect(en['auth.welcome.betaBadge']).toMatch(/Beta ·\s*Invite only/);
   });
 
   it('renders "Join the waitlist" ONLY when invite-only AND a URL are present', () => {
     // Guarded render: {inviteOnly && waitlistUrl && (<a ... href={waitlistUrl} ...>)}
     expect(SRC).toMatch(/\{inviteOnly && waitlistUrl &&/);
     expect(SRC).toMatch(/href=\{waitlistUrl\}/);
-    expect(SRC).toMatch(/Join the waitlist/);
+    expect(SRC).toMatch(/t\('error\.register\.inviteWaitlistCta'\)/);
+    expect(en['error.register.inviteWaitlistCta']).toMatch(/Join the waitlist/);
     expect(SRC).toMatch(/target="_blank"[\s\S]*rel="noopener noreferrer"/);
   });
 
   it('hides public account creation when invite-only is on', () => {
     expect(SRC).toMatch(/\{!inviteOnly && \(/);
-    expect(SRC).toMatch(/Create a Solaris account/);
+    expect(SRC).toMatch(/t\('auth\.welcome\.createAccount'\)/);
+    expect(en['auth.welcome.createAccount']).toMatch(/Create a Solaris account/i);
   });
 
   it('states the invite-only boundary and keeps sign-in available for invited members', () => {
-    expect(SRC).toMatch(/invite-only Beta/i);
-    expect(SRC).toMatch(/Invited members can sign in/i);
+    // Copy is localized via t('auth.welcome.inviteNote'); source wires the key and
+    // the reviewed English copy states the boundary and that sign-in stays available.
+    expect(SRC).toMatch(/t\('auth\.welcome\.inviteNote'\)/);
+    expect(en['auth.welcome.inviteNote']).toMatch(/invite-only Beta/i);
+    expect(en['auth.welcome.inviteNote']).toMatch(/Invited members can sign in/i);
   });
 
   it('does NOT hardcode any absolute solaris/marketing URL in the waitlist CTA', () => {

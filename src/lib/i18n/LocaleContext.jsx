@@ -3,8 +3,9 @@
 // intent to sync users.language after login WITHOUT writing to the shared DB
 // (persistence deferred per Majd — see syncLanguageToProfile).
 import React, { createContext, useContext, useCallback, useEffect, useState } from 'react';
-import { resolve, resolveSafe, formatDate as fmtDate, formatNumber as fmtNum } from './index.js';
+import { resolve, resolveSafe, formatDate as fmtDate, formatNumber as fmtNum, localeToLanguage } from './index.js';
 import { SUPPORTED_LOCALES, DEFAULT_LOCALE, LOCALE_STORAGE_KEY, enabledLocales, SPANISH_PREVIEW_ENABLED } from './constants.js';
+import { api } from '../api.js';
 
 const LocaleContext = createContext(null);
 export const useLocale = () => {
@@ -51,17 +52,26 @@ export function LocaleProvider({ children }) {
     try { localStorage.setItem(LOCALE_STORAGE_KEY, next); } catch {}
   }, []);
 
-  // Post-login sync to users.language is DEFERRED: writing it needs a shared-DB
-  // column/migration which Majd has deferred. We keep the authoritative choice in
-  // localStorage and stage a NON-PHI intent record only. No shared-DB write here.
+  // K1.2 §5 — persist the active locale to the authenticated profile. The
+  // users.language column and the PATCH /api/users/me { language } allowed-field
+  // ALREADY EXIST (no migration required), so this now performs the write it used
+  // to defer. It is BEST-EFFORT and NON-BLOCKING: the authoritative choice always
+  // lives in localStorage, so a failed/absent request never disrupts the session
+  // or the UI. A local intent record is still staged for audit / offline replay.
   const syncLanguageToProfile = useCallback((locale_) => {
+    const loc = enabledLocales().includes(locale_) ? locale_ : locale;
     try {
       const intents = JSON.parse(localStorage.getItem('solaris.langSyncIntents') || '[]');
-      intents.push({ locale: locale_, at: new Date().toISOString(), applied: false });
+      intents.push({ locale: loc, at: new Date().toISOString(), applied: false });
       localStorage.setItem('solaris.langSyncIntents', JSON.stringify(intents.slice(-20)));
     } catch {}
-    // Future contract: PATCH /api/users/me { language } once migration is applied.
-  }, []);
+    // Only attempt the write when authenticated. Fire-and-forget; swallow errors.
+    try {
+      if (api && api.token && typeof api.updateMe === 'function') {
+        Promise.resolve(api.updateMe({ language: localeToLanguage(loc) })).catch(() => {});
+      }
+    } catch { /* never throw from a locale sync */ }
+  }, [locale]);
 
   const t = useCallback((key) => resolve(locale, key), [locale]);
   // RC1 item7 — honest safety resolver: returns { text, reviewPending, notice }.

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '../lib/api.js';
 import { signChallenge, rememberKeyForSession, forgetSessionKey } from '../lib/identity-key.js';
 
@@ -9,6 +9,15 @@ export function AppProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  // K1.2 §3 — session-boot resilience. `sessionUnavailable` is true ONLY during a
+  // TRANSIENT backend outage (5xx / network / timeout / offline / malformed) while a
+  // saved token is still present. It drives a retryable "temporarily unavailable"
+  // screen and is NEVER set for a confirmed 401 (which clears the token instead).
+  const [sessionUnavailable, setSessionUnavailable] = useState(false);
+  // In-flight guard: prevents duplicate concurrent /users/me calls from React
+  // StrictMode's double effect invocation, rapid Retry taps, or an 'online' event
+  // racing a manual retry.
+  const bootInFlight = useRef(false);
   const [tab, setTab] = useState('home');        // main app tab
   const [authView, setAuthView] = useState('intro'); // intro | auth
   const [demoRole, setDemoRole] = useState(null); // null = use real user.role; else overrides for demo
@@ -106,21 +115,56 @@ export function AppProvider({ children }) {
     finally { setLucaLoaded(true); }
   }, [lucaLoaded]);
 
-  const loadUser = useCallback(async () => {
-    if (!api.token) { setLoading(false); return; }
+  // K1.2 §3 — resilient session boot. Clear the saved token ONLY on a CONFIRMED 401
+  // (invalid/revoked token) from /users/me. For every other failure — 5xx gateway
+  // errors, network errors, offline, timeouts, malformed gateway responses, or any
+  // temporary server failure — PRESERVE the token and ALL local data (locale,
+  // device-local journeys, encryption identity, …) and surface a retryable
+  // "temporarily unavailable" screen instead of silently logging the member out.
+  const loadUser = useCallback(async ({ isRetry = false } = {}) => {
+    if (!api.token) { setSessionUnavailable(false); setLoading(false); return; }
+    // Deduplicate concurrent boot/recovery attempts.
+    if (bootInFlight.current) return;
+    bootInFlight.current = true;
+    if (isRetry) setSessionUnavailable(false);
     try {
       const { user, profile } = await api.getMe();
       setUser(user);
       setProfile(profile);
-    } catch {
-      api.logout();
-      setUser(null);
+      setSessionUnavailable(false); // connectivity restored → authenticated session back
+    } catch (e) {
+      if (e && e.status === 401) {
+        // CONFIRMED invalid/revoked token — safe to clear and drop to auth. This is
+        // the ONLY branch that erases the token. api.logout() removes only the token
+        // (locale / journeys / identity are left untouched).
+        api.logout();
+        setUser(null);
+        setSessionUnavailable(false);
+      } else {
+        // TRANSIENT outage — keep the token and local data; show Retry / Sign out.
+        setSessionUnavailable(true);
+      }
     } finally {
+      bootInFlight.current = false;
       setLoading(false);
     }
   }, []);
 
   useEffect(() => { loadUser(); }, [loadUser]);
+
+  // Member-triggered recovery from the "temporarily unavailable" screen. The
+  // in-flight guard inside loadUser collapses duplicate taps into a single request.
+  const retrySession = useCallback(() => { loadUser({ isRetry: true }); }, [loadUser]);
+
+  // Auto-restore the authenticated session the moment connectivity returns, without
+  // any user action, but only while we are actually in the transient-outage state.
+  useEffect(() => {
+    const onOnline = () => {
+      if (api.token && sessionUnavailable) loadUser({ isRetry: true });
+    };
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [sessionUnavailable, loadUser]);
 
   // Boot failsafe: never let the "Awakening Solaris…" splash hang forever.
   // If bootstrap has not resolved within 25s (e.g. an unexpected stall), drop the
@@ -199,7 +243,7 @@ export function AppProvider({ children }) {
 
   return (
     <AppContext.Provider value={{
-      user, profile, loading, tab, setTab, authView, setAuthView,
+      user, profile, loading, sessionUnavailable, retrySession, tab, setTab, authView, setAuthView,
       login, loginWithIdentityKey, identityAuthDeferred, register, registerAccountDeferred,
       activateUser, logout, refreshUser, setUser, setProfile,
       demoRole, setDemoRole, nostrBanner, setNostrBanner,

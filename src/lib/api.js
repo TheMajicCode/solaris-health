@@ -23,7 +23,15 @@ class ApiClient {
     try {
       res = await fetch(`${API_URL}${endpoint}`, { ...options, headers, signal: controller.signal });
     } catch (e) {
-      if (e && e.name === 'AbortError') throw new Error('Request timed out', { cause: e });
+      // K1.2 §4 — tag the failure kind so callers can render a useful, non-technical
+      // message (never a raw "Failed to fetch"/"Request failed"). A timeout is an
+      // AbortError; anything else thrown by fetch is a network/offline failure.
+      if (e && e.name === 'AbortError') {
+        const te = new Error('Request timed out', { cause: e });
+        te.isTimeout = true;
+        throw te;
+      }
+      if (e) e.isNetworkError = true;
       throw e;
     } finally {
       clearTimeout(timer);
@@ -535,3 +543,39 @@ class ApiClient {
 }
 
 export const api = new ApiClient();
+
+// K1.2 §4 — map ANY thrown API error to a stable i18n key describing a useful,
+// user-safe message. It NEVER exposes internals (stack, raw "Failed to fetch",
+// SQL, status numbers): callers resolve the returned key through the locale
+// catalog. Transient failures (offline / network / timeout / 5xx gateway) are
+// clearly separated from actionable auth failures (bad credentials, invite-only,
+// duplicate email) so the member always knows whether to retry or to change input.
+//   context: 'login' | 'register' | 'generic'
+// Returns an i18n key. For invite-only, callers should also surface the waitlist
+// action (see 'error.register.inviteOnly').
+export function classifyApiError(e, context = 'generic') {
+  if (!e) return 'error.generic';
+  // Transient / connectivity — safe to retry, not the member's fault.
+  if (e.isTimeout) return 'error.timeout';
+  if (e.isNetworkError || e.status == null) return 'error.unavailable';
+  const status = e.status;
+  if (status >= 500) return 'error.unavailable';           // 500/502/503/504 gateway
+  const bodyMsg = String((e.body && e.body.error) || '').toLowerCase();
+
+  if (context === 'login') {
+    if (status === 401 || status === 400) return 'error.login.invalid';
+  }
+  if (context === 'register') {
+    if (status === 403) return 'error.register.inviteOnly';
+    if (status === 409) return 'error.register.exists';
+    if (status === 400) {
+      if (bodyMsg.includes('already registered') || bodyMsg.includes('already exists')) return 'error.register.exists';
+      if (bodyMsg.includes('password')) return 'error.register.password';
+      if (bodyMsg.includes('required')) return 'error.fieldsRequired';
+      return 'error.generic';
+    }
+  }
+  if (status === 401) return 'error.login.invalid';
+  if (status === 403) return 'error.forbidden';
+  return 'error.generic';
+}

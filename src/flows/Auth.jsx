@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../state/AppContext.jsx';
+import { useLocale } from '../lib/i18n/LocaleContext.jsx';
 import { Button } from '../components/ui.jsx';
-import { api } from '../lib/api.js';
+import { api, classifyApiError } from '../lib/api.js';
 import SparkWalletCard from '../components/SparkWalletCard.jsx';
 import {
   ArrowRight, ArrowLeft, KeyRound, Info, X, ShieldCheck, Copy, Check,
@@ -237,6 +238,7 @@ export default function Auth() {
     setAuthView, login, loginWithIdentityKey,
     identityAuthDeferred, registerAccountDeferred, activateUser,
   } = useApp();
+  const { t, locale } = useLocale();
 
   // Wizard stage machine.
   const [stage, setStage] = useState('welcome');
@@ -269,6 +271,10 @@ export default function Auth() {
   const waitlistUrl = publicConfig.waitlistUrl;
   const [busy, setBusy] = useState(false);
   const [ikInfo, setIkInfo] = useState(false);
+  // Node K1.2 §4 — set when /register is refused by the invite-only boundary
+  // (HTTP 403) so the render can surface the waitlist call-to-action alongside
+  // the friendly, non-internal error message.
+  const [inviteBlocked, setInviteBlocked] = useState(false);
 
   // Identity-key (new standalone) state — secrets held in memory only.
   const [ident, setIdent] = useState(null); // { npub, nsec, pubkeyHex, skHex }
@@ -300,11 +306,18 @@ export default function Auth() {
   const [signin, setSignin] = useState({ email: '', password: '' });
 
   // Minimum profile (spec §4) collected after Screen 3 — REQUIRED persistence.
+  // Node K1.2 §5 — the minimum profile's language is seeded from the ACTIVE app
+  // locale (the device choice made on the Welcome screen / in-app switch), never
+  // a hardcoded 'en'. Kept in sync below so a locale switch before finalize is
+  // reflected in the persisted profile language.
   const [profile, setProfile] = useState({
     firstName: '', lastName: '', dob: '', country: '', city: '',
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '', language: 'en',
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '', language: locale || 'en',
     email: '', phone: '',
   });
+  useEffect(() => {
+    setProfile((p) => (p.language === locale ? p : { ...p, language: locale }));
+  }, [locale]);
 
   // Which NEW-account method reached the shared screens: 'identity' | 'email'.
   const [method, setMethod] = useState(null);
@@ -344,12 +357,12 @@ export default function Auth() {
   const submitSignin = async (e) => {
     if (e) e.preventDefault();
     setError('');
-    if (!signin.email || !signin.password) { setError('Enter your email and password to sign in.'); return; }
+    if (!signin.email || !signin.password) { setError(t('auth.err.signinFields')); return; }
     setBusy(true);
     try {
       await login(signin.email, signin.password); // loadUser → Root routes
     } catch (err) {
-      setError(err.message || 'Sign in failed. Please check your email and password.');
+      setError(t(classifyApiError(err, 'login')));
       setBusy(false);
     }
   };
@@ -361,8 +374,8 @@ export default function Auth() {
     let keys;
     try {
       keys = identityFromNsec(nsecInput); // decode on-device; derive pubkey
-    } catch (err) {
-      setError(err.message || 'That does not look like a valid nsec key.');
+    } catch {
+      setError(t('auth.err.invalidNsec'));
       return;
     }
     setBusy(true);
@@ -374,8 +387,10 @@ export default function Auth() {
       // Offer account creation instead of silently provisioning one.
       if (err && (err.mustCreateAccount || err.body?.mustCreateAccount || /create a solaris account/i.test(err.message || ''))) {
         setNsecNeedsAccount(true);
+        setError(t('auth.err.identityNoAccount'));
+      } else {
+        setError(t(classifyApiError(err, 'login')));
       }
-      setError(err.message || 'Sign in failed. Please check your identity key and try again.');
       setBusy(false);
     }
   };
@@ -391,7 +406,7 @@ export default function Auth() {
       setSavedConfirmed(false);
       setStage('ik-reveal');
     } catch {
-      setError('Could not generate an identity key. Please try again.');
+      setError(t('auth.err.generateFailed'));
     }
   };
 
@@ -402,8 +417,8 @@ export default function Auth() {
     let keys;
     try {
       keys = identityFromNsec(nsecInput); // { npub, nsec, pubkeyHex, skHex } — on-device only
-    } catch (err) {
-      setError(err.message || 'That does not look like a valid nsec key.');
+    } catch {
+      setError(t('auth.err.invalidNsec'));
       return;
     }
     setIdent(keys);
@@ -422,7 +437,7 @@ export default function Auth() {
   // so we bind ONLY the public npub to it and record the backup ACKNOWLEDGEMENT
   // server-side. The nsec/skHex never leave the device.
   const finishIdentityKey = async () => {
-    if (!savedConfirmed) { setError('Please confirm you have saved your private key to continue.'); return; }
+    if (!savedConfirmed) { setError(t('auth.err.confirmSaved')); return; }
     setError(''); setBusy(true);
     try {
       // Proof-of-control binding (blocker #2): request a short-lived BIND
@@ -437,7 +452,7 @@ export default function Auth() {
       setStage('wallet');
     } catch (err) {
       setBusy(false);
-      setError(err.message || 'We could not link your identity key. Please try again.');
+      setError(t(classifyApiError(err, 'generic')));
     }
   };
 
@@ -466,13 +481,13 @@ export default function Auth() {
   const submitRestore = async () => {
     setError('');
     const clean = phrase.trim().toLowerCase().replace(/\s+/g, ' ');
-    if (!isValidMnemonic(clean)) { setError('That does not look like a valid 12-word recovery phrase.'); return; }
+    if (!isValidMnemonic(clean)) { setError(t('auth.err.phraseInvalid')); return; }
     setBusy(true);
     try {
       const keys = deriveFromMnemonic(clean); // { npub, nsec, pubkeyHex, skHex }
       await loginWithIdentityKey({ npub: keys.npub, skHex: keys.skHex, pubkeyHex: keys.pubkeyHex });
     } catch (err) {
-      setError(err.message || 'Sign in failed. Please check your phrase and try again.');
+      setError(t(classifyApiError(err, 'login')));
       setBusy(false);
     }
   };
@@ -484,19 +499,24 @@ export default function Auth() {
   // does not route into the intake until the flow completes.
   const submitSignup = async (e) => {
     e.preventDefault();
-    setError('');
+    setError(''); setInviteBlocked(false);
     if (!signup.firstName || !signup.lastName || !signup.email || !signup.password) {
-      setError('Please complete every field to continue.'); return;
+      setError(t('auth.err.signupFields')); return;
     }
     setBusy(true);
     try {
       await registerAccountDeferred({
         firstName: signup.firstName, lastName: signup.lastName,
         email: signup.email, password: signup.password, role: 'patient',
+        // Node K1.2 §5 — carry the user's chosen language into account creation
+        // so the persisted account records the selected locale from the start.
+        language: locale,
       });
     } catch (err) {
       setBusy(false);
-      setError(err.message || 'We could not create your account. Please try again.');
+      // Invite-only boundary (server /register 403) → surface the waitlist CTA.
+      if (err && (err.status === 403 || err.body?.inviteOnly)) setInviteBlocked(true);
+      setError(t(classifyApiError(err, 'register')));
       return;
     }
     setProfile((p) => ({ ...p, firstName: signup.firstName, lastName: signup.lastName, email: signup.email }));
@@ -520,7 +540,7 @@ export default function Auth() {
     if (e) e.preventDefault();
     setError('');
     if (!profile.firstName || !profile.lastName || !profile.dob || !profile.country || !profile.city || !profile.timezone || !profile.language) {
-      setError('Please complete the required profile fields.'); return;
+      setError(t('auth.err.profileFields')); return;
     }
     setBusy(true);
 
@@ -535,7 +555,7 @@ export default function Auth() {
         contactEmail: profile.email || undefined, phone: profile.phone || undefined,
       });
     } catch {
-      setError('We could not save your profile. Your account is ready — please try saving again.');
+      setError(t('auth.err.saveProfile'));
       setBusy(false);
       return; // fail-closed: stay on the profile screen
     }
@@ -544,7 +564,7 @@ export default function Auth() {
     try {
       await activateUser();
     } catch {
-      setError('We could not finish signing you in. Please try again.');
+      setError(t('auth.err.activate'));
       setBusy(false);
     }
   };
@@ -558,8 +578,8 @@ export default function Auth() {
       <div className="page ob-page">
         {/* Top-left back to intro */}
         {stage === 'welcome' && (
-          <button onClick={() => setAuthView('intro')} className="ob-back" aria-label="Back">
-            <ArrowLeft size={15} /> Back
+          <button onClick={() => setAuthView('intro')} className="ob-back" aria-label={t('action.back')}>
+            <ArrowLeft size={15} /> {t('action.back')}
           </button>
         )}
 
@@ -569,23 +589,23 @@ export default function Auth() {
             <div className="ob-brand">
               <img src="/solaris-logo.png" alt="Solaris Holistic Health" className="ob-logo" />
               <p className="wordmark ob-wordmark">SOLARIS</p>
-              <p className="ob-tag">Holistic Health</p>
+              <p className="ob-tag">{t('ob.splash.holistic')}</p>
               {/* §G / K1.1 §3 — invite-only Beta boundary. Rendered ONLY when the
                   public config reports invite-only, so the badge and the server
                   /register gate can never disagree. */}
               {inviteOnly && (
                 <span className="ob-beta-badge">
-                  <Lock size={12} /> Beta · Invite only
+                  <Lock size={12} /> {t('auth.welcome.betaBadge')}
                 </span>
               )}
             </div>
-            <p className="ob-lede">Choose how you'd like to begin your sovereign health journey.</p>
+            <p className="ob-lede">{t('auth.welcome.lede')}</p>
 
             <button className="ob-primary ob-primary-plain" onClick={startEmailSignin}>
-              <Mail size={17} /> Sign in with email and password
+              <Mail size={17} /> {t('auth.welcome.signinEmail')}
             </button>
             <button className="ob-secondary" onClick={chooseIdentity}>
-              <KeyRound size={17} /> Sign in with identity key
+              <KeyRound size={17} /> {t('auth.welcome.signinKey')}
               <span role="button" tabIndex={0} className="ob-info" aria-label="What is an Identity Key?"
                 onClick={(ev) => { ev.stopPropagation(); setIkInfo(true); }}
                 onKeyDown={(ev) => { if (ev.key === 'Enter') { ev.stopPropagation(); setIkInfo(true); } }}>
@@ -597,7 +617,7 @@ export default function Auth() {
                 app makes no invite-only claim and account creation remains. */}
             {!inviteOnly && (
               <button className="ob-secondary" onClick={startEmailCreate}>
-                <UserPlus size={17} /> Create a Solaris account
+                <UserPlus size={17} /> {t('auth.welcome.createAccount')}
               </button>
             )}
 
@@ -607,18 +627,18 @@ export default function Auth() {
                 config supplies a real, validated public URL. */}
             {inviteOnly && (
               <p className="ob-invite-note">
-                Solaris is in invite-only Beta. Invited members can sign in above.
+                {t('auth.welcome.inviteNote')}
               </p>
             )}
             {inviteOnly && waitlistUrl && (
               <a className="ob-waitlist" href={waitlistUrl} target="_blank" rel="noopener noreferrer">
-                <Mail size={15} /> Join the waitlist <ArrowRight size={14} />
+                <Mail size={15} /> {t('error.register.inviteWaitlistCta')} <ArrowRight size={14} />
               </a>
             )}
 
             <p className="text-center" style={{ marginTop: 18, fontSize: '0.86rem' }}>
               <button className="ob-textbtn" onClick={() => { window.location.href = '/find'; }}>
-                Browse practitioners <ArrowRight size={14} />
+                {t('auth.welcome.browse')} <ArrowRight size={14} />
               </button>
             </p>
           </div>
@@ -627,24 +647,24 @@ export default function Auth() {
         {/* ───────── Returning member — email sign in ───────── */}
         {stage === 'email-signin' && (
           <form className="ob-card fade-up" onSubmit={submitSignin}>
-            <h2 className="ob-title">Welcome back</h2>
-            <p className="ob-lede">Sign in with the email and password on your Solaris account.</p>
+            <h2 className="ob-title">{t('auth.signin.title')}</h2>
+            <p className="ob-lede">{t('auth.signin.lede')}</p>
             <div style={{ marginBottom: 12 }}>
-              <label className="field-label" htmlFor="signin-email">Email</label>
+              <label className="field-label" htmlFor="signin-email">{t('auth.field.email')}</label>
               <input id="signin-email" className="input" type="email" autoComplete="email"
                 value={signin.email} onChange={(e) => setSignin({ ...signin, email: e.target.value })} required />
             </div>
             <div style={{ marginBottom: 14 }}>
-              <label className="field-label" htmlFor="signin-password">Password</label>
+              <label className="field-label" htmlFor="signin-password">{t('auth.field.password')}</label>
               <input id="signin-password" className="input" type="password" autoComplete="current-password"
                 value={signin.password} onChange={(e) => setSignin({ ...signin, password: e.target.value })} required />
             </div>
             {error && <p className="ob-error">{error}</p>}
             <Button type="submit" className="btn-block" disabled={busy}>
-              {busy ? 'Signing in…' : 'Sign in'} <ArrowRight size={16} />
+              {busy ? t('auth.signin.busy') : t('auth.signin.submit')} <ArrowRight size={16} />
             </Button>
             <button type="button" className="ob-back-inline" onClick={backHome}>
-              <ArrowLeft size={14} /> Back
+              <ArrowLeft size={14} /> {t('action.back')}
             </button>
           </form>
         )}
@@ -802,36 +822,42 @@ export default function Auth() {
         {/* ───────── Email create path — minimum profile first ───────── */}
         {stage === 'email-form' && (
           <form className="ob-card fade-up" onSubmit={submitSignup}>
-            <h2 className="ob-title">Create your account</h2>
-            <p className="ob-lede">Just the essentials to get started — you can add your Solaris identity key later.</p>
+            <h2 className="ob-title">{t('auth.create.title')}</h2>
+            <p className="ob-lede">{t('auth.create.lede')}</p>
             <div className="row gap-2" style={{ marginBottom: 12 }}>
               <div style={{ flex: 1 }}>
-                <label className="field-label" htmlFor="signup-first">First name</label>
+                <label className="field-label" htmlFor="signup-first">{t('auth.field.firstName')}</label>
                 <input id="signup-first" className="input" autoComplete="given-name"
                   value={signup.firstName} onChange={(e) => setSignup({ ...signup, firstName: e.target.value })} required />
               </div>
               <div style={{ flex: 1 }}>
-                <label className="field-label" htmlFor="signup-last">Last name</label>
+                <label className="field-label" htmlFor="signup-last">{t('auth.field.lastName')}</label>
                 <input id="signup-last" className="input" autoComplete="family-name"
                   value={signup.lastName} onChange={(e) => setSignup({ ...signup, lastName: e.target.value })} required />
               </div>
             </div>
             <div style={{ marginBottom: 12 }}>
-              <label className="field-label" htmlFor="signup-email">Email</label>
+              <label className="field-label" htmlFor="signup-email">{t('auth.field.email')}</label>
               <input id="signup-email" className="input" type="email" autoComplete="email"
                 value={signup.email} onChange={(e) => setSignup({ ...signup, email: e.target.value })} required />
             </div>
             <div style={{ marginBottom: 14 }}>
-              <label className="field-label" htmlFor="signup-password">Password</label>
+              <label className="field-label" htmlFor="signup-password">{t('auth.field.password')}</label>
               <input id="signup-password" className="input" type="password" autoComplete="new-password"
                 value={signup.password} onChange={(e) => setSignup({ ...signup, password: e.target.value })} required />
             </div>
             {error && <p className="ob-error">{error}</p>}
+            {/* K1.2 §4 — invite-only /register refusal surfaces the waitlist CTA. */}
+            {inviteBlocked && waitlistUrl && (
+              <a className="ob-waitlist" href={waitlistUrl} target="_blank" rel="noopener noreferrer">
+                <Mail size={15} /> {t('error.register.inviteWaitlistCta')} <ArrowRight size={14} />
+              </a>
+            )}
             <Button type="submit" className="btn-block" disabled={busy}>
-              {busy ? 'Creating your account…' : 'Continue'} <ArrowRight size={16} />
+              {busy ? t('auth.create.busy') : t('action.continue')} <ArrowRight size={16} />
             </Button>
             <button type="button" className="ob-back-inline" onClick={backHome}>
-              <ArrowLeft size={14} /> Back
+              <ArrowLeft size={14} /> {t('action.back')}
             </button>
           </form>
         )}
@@ -841,9 +867,9 @@ export default function Auth() {
           <div className="ob-card ob-transition fade-up">
             <div className="ob-node" aria-hidden="true"><Sparkles size={30} /></div>
             <p className="ob-transition-copy">
-              {signup.firstName || profile.firstName}, your account is ready — now here's the part nobody else gives you.
+              {signup.firstName || profile.firstName}{t('auth.transition.copy')}
             </p>
-            <Button className="btn-block" onClick={() => setStage('ik-screen1')}>Continue <ArrowRight size={16} /></Button>
+            <Button className="btn-block" onClick={() => setStage('ik-screen1')}>{t('action.continue')} <ArrowRight size={16} /></Button>
           </div>
         )}
 
@@ -901,64 +927,64 @@ export default function Auth() {
         {/* ───────── Minimum profile (spec §4) — REQUIRED persistence GATE ───────── */}
         {stage === 'profile' && (
           <form className="ob-card fade-up" onSubmit={finalize}>
-            <h2 className="ob-title">Your profile</h2>
-            <p className="ob-lede">A few details to personalise your Solaris journey.</p>
+            <h2 className="ob-title">{t('auth.profile.title')}</h2>
+            <p className="ob-lede">{t('auth.profile.lede')}</p>
             <div className="row gap-2" style={{ marginBottom: 12 }}>
               <div style={{ flex: 1 }}>
-                <label className="field-label" htmlFor="profile-first">First name</label>
+                <label className="field-label" htmlFor="profile-first">{t('auth.field.firstName')}</label>
                 <input id="profile-first" className="input" autoComplete="given-name"
                   value={profile.firstName} onChange={(e) => setProfile({ ...profile, firstName: e.target.value })} required />
               </div>
               <div style={{ flex: 1 }}>
-                <label className="field-label" htmlFor="profile-last">Last name</label>
+                <label className="field-label" htmlFor="profile-last">{t('auth.field.lastName')}</label>
                 <input id="profile-last" className="input" autoComplete="family-name"
                   value={profile.lastName} onChange={(e) => setProfile({ ...profile, lastName: e.target.value })} required />
               </div>
             </div>
             <div className="row gap-2" style={{ marginBottom: 12 }}>
               <div style={{ flex: 1 }}>
-                <label className="field-label" htmlFor="profile-dob">Date of birth</label>
+                <label className="field-label" htmlFor="profile-dob">{t('auth.field.dob')}</label>
                 <input id="profile-dob" className="input" type="date"
                   value={profile.dob} onChange={(e) => setProfile({ ...profile, dob: e.target.value })} required />
               </div>
               <div style={{ flex: 1 }}>
-                <label className="field-label" htmlFor="profile-country">Country</label>
+                <label className="field-label" htmlFor="profile-country">{t('auth.field.country')}</label>
                 <input id="profile-country" className="input" autoComplete="country-name"
                   value={profile.country} onChange={(e) => setProfile({ ...profile, country: e.target.value })} required />
               </div>
             </div>
             <div className="row gap-2" style={{ marginBottom: 12 }}>
               <div style={{ flex: 1 }}>
-                <label className="field-label" htmlFor="profile-city">City / current location</label>
+                <label className="field-label" htmlFor="profile-city">{t('auth.field.city')}</label>
                 <input id="profile-city" className="input" autoComplete="address-level2"
-                  value={profile.city} onChange={(e) => setProfile({ ...profile, city: e.target.value })} placeholder="Your current city" required />
+                  value={profile.city} onChange={(e) => setProfile({ ...profile, city: e.target.value })} placeholder={t('auth.field.cityPlaceholder')} required />
               </div>
               <div style={{ flex: 1 }}>
-                <label className="field-label" htmlFor="profile-tz">Timezone</label>
+                <label className="field-label" htmlFor="profile-tz">{t('auth.field.timezone')}</label>
                 <input id="profile-tz" className="input"
                   value={profile.timezone} onChange={(e) => setProfile({ ...profile, timezone: e.target.value })} required />
               </div>
             </div>
             <div className="row gap-2" style={{ marginBottom: 12 }}>
               <div style={{ flex: 1 }}>
-                <label className="field-label" htmlFor="profile-lang">Language</label>
+                <label className="field-label" htmlFor="profile-lang">{t('auth.field.language')}</label>
                 <input id="profile-lang" className="input"
                   value={profile.language} onChange={(e) => setProfile({ ...profile, language: e.target.value })} required />
               </div>
               <div style={{ flex: 1 }}>
-                <label className="field-label" htmlFor="profile-contact">Contact email <span className="ob-optional">(optional)</span></label>
+                <label className="field-label" htmlFor="profile-contact">{t('auth.field.contactEmail')} <span className="ob-optional">{t('auth.field.optional')}</span></label>
                 <input id="profile-contact" className="input" type="email" autoComplete="email"
                   value={profile.email} onChange={(e) => setProfile({ ...profile, email: e.target.value })} />
               </div>
             </div>
             <div style={{ marginBottom: 14 }}>
-              <label className="field-label" htmlFor="profile-phone">Phone <span className="ob-optional">(optional)</span></label>
+              <label className="field-label" htmlFor="profile-phone">{t('auth.field.phone')} <span className="ob-optional">{t('auth.field.optional')}</span></label>
               <input id="profile-phone" className="input" autoComplete="tel"
                 value={profile.phone} onChange={(e) => setProfile({ ...profile, phone: e.target.value })} />
             </div>
             {error && <p className="ob-error">{error}</p>}
             <Button type="submit" className="btn-block" disabled={busy}>
-              {busy ? 'Creating your Solaris account…' : 'Continue to my intake'} <ArrowRight size={16} />
+              {busy ? t('auth.profile.busy') : t('auth.profile.submit')} <ArrowRight size={16} />
             </Button>
           </form>
         )}

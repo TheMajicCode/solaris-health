@@ -8,7 +8,11 @@
 // MUST be network-first so the freshly deployed index.html (which points at the
 // current bundle) is always used; the cached shell is only a last-resort offline
 // fallback. Hashed static assets remain cache-first (they are immutable).
-const CACHE_NAME = 'solaris-v15';
+// K1.2: bumped v15→v16 so the new deploy purges the previous static cache (old
+// hashed bundle) on activate. Only obsolete caches are dropped; the SW never
+// touches localStorage/sessionStorage, so identity keys, active locale, journeys
+// and user data all survive an update untouched.
+const CACHE_NAME = 'solaris-v16';
 const SHELL_URL = '/index.html';
 
 self.addEventListener('install', () => {

@@ -13,6 +13,27 @@ export {
   isSafetyKey, enabledLocales, SPANISH_PREVIEW_ENABLED,
 };
 
+// K1.2 §5 — normalize a stored users.language value (which may be a locale code
+// like 'en'/'es' OR a display name like 'English'/'Spanish'/'Español') into an
+// ENABLED locale code, or null when it does not map to a currently-enabled locale.
+// Used to hydrate the app locale from the authenticated profile when the device
+// has made no explicit choice.
+export function languageToLocale(language) {
+  if (!language) return null;
+  const v = String(language).trim().toLowerCase();
+  const allowed = enabledLocales();
+  let code = null;
+  if (v === 'es' || v.startsWith('es') || v.includes('span') || v.includes('español') || v.includes('espanol')) code = 'es';
+  else if (v === 'en' || v.startsWith('en') || v.includes('engl') || v.includes('inglés') || v.includes('ingles')) code = 'en';
+  return code && allowed.includes(code) ? code : null;
+}
+
+// K1.2 §5 — the value persisted to users.language for a given locale. We store the
+// stable locale code; languageToLocale() reads either the code or a display name.
+export function localeToLanguage(locale) {
+  return locale === 'es' ? 'es' : 'en';
+}
+
 // Keys present in `base` but missing from `other` (drives the missing-key CI test).
 export function missingKeys(base, other) {
   return Object.keys(base).filter((k) => !(k in other));
