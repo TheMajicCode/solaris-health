@@ -48,7 +48,10 @@ describe('resolveNav — legacy redirects', () => {
     expect(resolveNav('growth')).toEqual({ tab: 'communications', sub: 'growth' });
     expect(resolveNav('media')).toEqual({ tab: 'communications', sub: 'media' });
     expect(resolveNav('messages')).toEqual({ tab: 'communications', sub: 'messages' });
-    expect(resolveNav('inbox')).toEqual({ tab: 'communications', sub: 'inbox' });
+    // §F — Inbox is unified into a single Messages destination.
+    expect(resolveNav('inbox')).toEqual({ tab: 'communications', sub: 'messages' });
+    // legacy communications/inbox deep links redirect to communications/messages.
+    expect(resolveNav('communications', 'inbox')).toEqual({ tab: 'communications', sub: 'messages' });
     expect(resolveNav('contributions')).toEqual({ tab: 'wallet', sub: 'contributions' });
     expect(resolveNav('gps-map')).toEqual({ tab: 'wallet', sub: 'network' });
     expect(resolveNav('network')).toEqual({ tab: 'wallet', sub: 'network' });
@@ -85,7 +88,16 @@ describe('resolveNav — canonicalisation', () => {
 
   it('leaves a flat tab (no sub-tabs) with a null sub', () => {
     expect(resolveNav('dashboard')).toEqual({ tab: 'dashboard', sub: null });
-    expect(resolveNav('health')).toEqual({ tab: 'health', sub: null });
+    expect(resolveNav('explore')).toEqual({ tab: 'explore', sub: null });
+  });
+
+  // §E — Health Passport now carries Overview / Timeline / Bookings sub-tabs,
+  // and the removed standalone Appointments tab redirects into Bookings.
+  it('defaults Health Passport to Overview and preserves its sub-tabs', () => {
+    expect(resolveNav('health')).toEqual({ tab: 'health', sub: 'overview' });
+    expect(resolveNav('health', 'timeline')).toEqual({ tab: 'health', sub: 'timeline' });
+    expect(resolveNav('health', 'bookings')).toEqual({ tab: 'health', sub: 'bookings' });
+    expect(resolveNav('appointments')).toEqual({ tab: 'health', sub: 'bookings' });
   });
 });
 
@@ -96,8 +108,9 @@ describe('SUBTABS shape', () => {
   it('LUCA Coach carries Coach and Intelligence', () => {
     expect(SUBTABS.coach.tabs).toEqual(['coach', 'intelligence']);
   });
-  it('Communications merges With Others (Messages, Inbox) + With Yourself (Journal, Growth, Media)', () => {
-    expect(SUBTABS.communications.tabs).toEqual(['messages', 'inbox', 'journal', 'growth', 'media']);
+  it('Communications merges a unified Messages + With Yourself (Journal, Growth, Media)', () => {
+    // §F — Inbox folded into a single Messages destination.
+    expect(SUBTABS.communications.tabs).toEqual(['messages', 'journal', 'growth', 'media']);
     expect(SUBTABS.communications.def).toBe('messages');
   });
   it('Settings exposes the five account sections', () => {

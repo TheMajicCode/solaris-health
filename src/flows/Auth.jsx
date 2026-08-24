@@ -39,6 +39,16 @@ import {
  * gates on a REQUIRED minimum-profile save before the React user is activated.
  * ──────────────────────────────────────────────────────────────────────────── */
 
+// §G — Invite-only Beta boundary. The public marketing site owns the email
+// waitlist; the app only LINKS to it. The destination is supplied through build
+// configuration (VITE_WAITLIST_URL) — never a hardcoded private/temporary URL.
+// When unset (e.g. local dev), the waitlist CTA is simply omitted rather than
+// pointing at a placeholder. Only absolute http(s) URLs are accepted.
+const WAITLIST_URL = (() => {
+  const raw = (import.meta.env.VITE_WAITLIST_URL || '').trim();
+  return /^https?:\/\//i.test(raw) ? raw : '';
+})();
+
 // Beta-safe copy blocks (spec §2A) — used verbatim; do NOT paraphrase or broaden.
 const SCREEN1 = {
   eyebrow: 'Your health identity',
@@ -539,6 +549,10 @@ export default function Auth() {
               <img src="/solaris-logo.png" alt="Solaris Holistic Health" className="ob-logo" />
               <p className="wordmark ob-wordmark">SOLARIS</p>
               <p className="ob-tag">Holistic Health</p>
+              {/* §G — invite-only Beta boundary, shown up front on the access screen. */}
+              <span className="ob-beta-badge">
+                <Lock size={12} /> Beta · Invite only
+              </span>
             </div>
             <p className="ob-lede">Choose how you'd like to begin your sovereign health journey.</p>
 
@@ -556,6 +570,18 @@ export default function Auth() {
             <button className="ob-secondary" onClick={startEmailCreate}>
               <UserPlus size={17} /> Create a Solaris account
             </button>
+
+            {/* §G — invited members sign in above; everyone else joins the public
+                waitlist on the marketing site (this app never collects waitlist
+                emails). The link renders only when a real URL is configured. */}
+            <p className="ob-invite-note">
+              Solaris is in invite-only Beta. Invited members can sign in above.
+            </p>
+            {WAITLIST_URL && (
+              <a className="ob-waitlist" href={WAITLIST_URL} target="_blank" rel="noopener noreferrer">
+                <Mail size={15} /> Join the waitlist <ArrowRight size={14} />
+              </a>
+            )}
 
             <p className="text-center" style={{ marginTop: 18, fontSize: '0.86rem' }}>
               <button className="ob-textbtn" onClick={() => { window.location.href = '/find'; }}>

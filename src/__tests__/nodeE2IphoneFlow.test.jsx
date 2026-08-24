@@ -42,9 +42,9 @@ describe('E2 §4 — provider "Message" routes to Communications → Messages', 
 
   it('Communications owns both semantic folders (Others + Yourself) sub-tabs', () => {
     const tabs = SUBTABS.communications.tabs;
-    // With Others
+    // With Others — §F unified Messages (Inbox folded in; no longer a separate sub-tab)
     expect(tabs).toContain('messages');
-    expect(tabs).toContain('inbox');
+    expect(tabs).not.toContain('inbox');
     // With Yourself
     expect(tabs).toContain('journal');
     expect(tabs).toContain('growth');

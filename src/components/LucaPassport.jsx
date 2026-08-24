@@ -40,7 +40,10 @@ import HealthNFT from './wallet/HealthNFT.jsx';
 import ExploreMarketplace from './marketplace/ExploreMarketplace.jsx';
 import ProviderApplication from './provider/ProviderApplication.jsx';
 import MyPractice from './provider/MyPractice.jsx';
-import MemberLucaRecommendations, { LUCA_RECS_SIMULATED } from './luca/MemberLucaRecommendations.jsx';
+import PersonalizedJourneySheet from './luca/PersonalizedJourneySheet.jsx';
+import resolveNextAction from '../lib/nextAction.js';
+import { pickAlternate, eligibleProviders } from '../lib/alternateProvider.js';
+import { LUCA_ACTIONS, deterministicResponse } from '../lib/lucaActions.js';
 import ProviderBookings from './provider/ProviderBookings.jsx';
 import ProviderApprovals from './admin/ProviderApprovals.jsx';
 import MyBookings from './booking/MyBookings.jsx';
@@ -405,7 +408,7 @@ textarea.input-line{resize:vertical;min-height:64px}
 .luca .coach-input-row:focus-within{border-color:var(--mint);box-shadow:0 0 0 3px var(--mint-soft)}
 .luca .coach-input-row input{flex:1;border:none;outline:none;background:transparent;font-size:13.5px;color:var(--ink);font-family:inherit;min-width:0}
 .luca .coach-disclaimer{font-size:11px;color:var(--muted-2);text-align:center;margin-top:9px}
-@media(max-width:1080px){.luca .coach-layout{grid-template-columns:1fr}.luca .coach-shell{height:auto;min-height:60vh}}
+@media(max-width:1080px){.luca .coach-layout{grid-template-columns:1fr}.luca .coach-shell{height:calc(100dvh - 210px);min-height:420px;max-height:calc(100dvh - 120px)}.luca .coach-footer{padding-bottom:calc(14px + env(safe-area-inset-bottom,0px))}}
 /* Follow-up suggestion chips */
 .luca .luca-chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
 .luca .luca-chip{display:inline-flex;align-items:center;gap:5px;border:1px solid transparent;border-radius:999px;padding:6px 11px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;line-height:1.2;transition:filter .15s,transform .1s}
@@ -1028,7 +1031,12 @@ export const LEGACY_TAB_MAP = {
   growth: { tab: 'communications', sub: 'growth' },
   media: { tab: 'communications', sub: 'media' },
   messages: { tab: 'communications', sub: 'messages' },
-  inbox: { tab: 'communications', sub: 'inbox' },
+  // §F — Inbox is unified into a single Messages destination. Legacy inbox deep
+  // links (standalone and communications/inbox) redirect to Communications → Messages.
+  inbox: { tab: 'communications', sub: 'messages' },
+  // §E — the standalone Appointments tab is removed (it duplicated My Bookings).
+  // Legacy appointments deep links redirect into Health Passport → My Bookings.
+  appointments: { tab: 'health', sub: 'bookings' },
   contributions: { tab: 'wallet', sub: 'contributions' },
   'gps-map': { tab: 'wallet', sub: 'network' },
   network: { tab: 'wallet', sub: 'network' },
@@ -1041,10 +1049,13 @@ export const LEGACY_TAB_MAP = {
 // Areas that own a set of nested sub-tabs, with the default (first) sub-tab.
 export const SUBTABS = {
   coach: { tabs: ['coach', 'intelligence'], def: 'coach' },
-  // Communications: "With Others" (messages, inbox) + "With Yourself" (journal, growth, media).
-  communications: { tabs: ['messages', 'inbox', 'journal', 'growth', 'media'], def: 'messages' },
+  // §E — Health Passport tabs (Appointments removed; My Bookings = 'bookings').
+  health: { tabs: ['overview', 'timeline', 'bookings'], def: 'overview' },
+  // §F — Communications: "With Others" is a single unified Messages destination;
+  // "With Yourself" (journal, growth, media). Inbox is folded into Messages.
+  communications: { tabs: ['messages', 'journal', 'growth', 'media'], def: 'messages' },
   journal: { tabs: ['journal', 'growth', 'media'], def: 'journal' },
-  messages: { tabs: ['conversations', 'inbox'], def: 'conversations' },
+  messages: { tabs: ['conversations'], def: 'conversations' },
   wallet: { tabs: ['wallet', 'gps', 'contributions', 'network'], def: 'wallet' },
   account: { tabs: ['profile', 'preferences', 'notifications', 'security', 'privacy'], def: 'profile' },
 };
@@ -1361,6 +1372,9 @@ function DashboardPage({ user, go }) {
   const [consentBusy, setConsentBusy] = useState('');
   const [completeness, setCompleteness] = useState(null);
   const [myBookings, setMyBookings] = useState([]);
+  const [journeyOpen, setJourneyOpen] = useState(false);
+  const { profile: appProfile, setApprovedJourney } = useApp() || {};
+  const { locale } = useLocale() || {};
 
   const loadConsents = async () => {
     try {
@@ -1553,7 +1567,11 @@ function DashboardPage({ user, go }) {
         })()}
 
         {/* LUCA Recommends */}
-        <LucaRecommends recs={recs} loading={recsLoading} go={go} user={user} vitality={vitality} focus={focus} />
+        <LucaRecommends
+          recs={recs} loading={recsLoading} go={go} user={user} vitality={vitality} focus={focus}
+          checkins={checkins} completeness={completeness} journeys={journeys} bookings={myBookings}
+          onOpenJourney={() => setJourneyOpen(true)}
+        />
 
         {/* Active journey */}
         {(() => {
@@ -1683,6 +1701,19 @@ function DashboardPage({ user, go }) {
       </div>
 
       <DailyCheckinModal user={user} open={checkinOpen} onClose={() => setCheckinOpen(false)} onSaved={reloadDaily} />
+      <PersonalizedJourneySheet
+        open={journeyOpen}
+        onClose={() => setJourneyOpen(false)}
+        profile={appProfile || {}}
+        locale={locale || 'en'}
+        onApprove={(block) => {
+          // Local/session enrollment only — hand the exact approved draft to
+          // AppContext and surface it under Communications → Growth.
+          setApprovedJourney?.(block);
+          setJourneyOpen(false);
+          go('growth');
+        }}
+      />
     </div>
   );
 }
@@ -1707,8 +1738,62 @@ function pickJourney(focus) {
   return CURATED_JOURNEYS[Math.floor(Math.random() * CURATED_JOURNEYS.length)];
 }
 
-function LucaRecommends({ recs, loading, go, user, vitality = 0, focus = [] }) {
-  const { setPendingProviderId, setPendingBookProviderId, setApprovedJourney } = useApp() || {};
+// Icon lookup for the resolved next-action (icon is a string key from the resolver).
+const NEXT_ACTION_ICONS = {
+  checkin: Zap, assessment: Activity, passport: ShieldCheck, growth: Compass,
+  journal: BookOpen, media: Headphones, booking: CalendarClock, journey: Sparkles,
+};
+
+// Map a raw provider row (api.getProviders) to the curated card shape.
+function providerCardFrom(p) {
+  if (!p) return null;
+  const type = p.provider_type || p.specialty || 'Practitioner';
+  return {
+    providerId: p.id ?? p.providerId,
+    title: p.business_name || p.title || 'Approved provider',
+    specialty: type,
+    city: p.city || '',
+    reason: p.reason || `An approved ${String(type).toLowerCase()} matched to your focus areas — a caring next step when you're ready.`,
+    // Marketplace rows expose approval_status ('approved') separately from the
+    // lifecycle status ('active'). Prefer approval_status; fall back to status.
+    approved: p.approved !== false && (
+      p.approval_status ? p.approval_status === 'approved'
+        : p.status ? (p.status === 'approved' || p.status === 'active')
+          : true
+    ),
+  };
+}
+
+function LucaRecommends({
+  recs, loading, go, user, vitality = 0, focus = [],
+  checkins = [], completeness = null, journeys = [], bookings = [], onOpenJourney,
+}) {
+  const { startRetake, approvedJourney } = useApp() || {};
+
+  // ── A2: alternate-provider pool. ONE purpose-specific fetch (a rotating pool
+  // of eligible providers) — NOT a duplicate of api.getLucaRecommendations(),
+  // which returns only a single curated provider. ──
+  const [pool, setPool] = useState([]);
+  const [altProvider, setAltProvider] = useState(null);
+  const [used, setUsed] = useState(() => new Set());
+  const [dismissed] = useState(() => new Set());
+
+  useEffect(() => {
+    let alive = true;
+    api.getProviders({ limit: 24 })
+      .then((d) => {
+        const list = (d && Array.isArray(d.providers)) ? d.providers : [];
+        const mapped = list.map(providerCardFrom).filter((p) => p && p.approved && p.providerId != null);
+        if (alive) setPool(mapped);
+      })
+      .catch(() => { /* preserve whatever is shown; Find alternate simply no-ops */ });
+    return () => { alive = false; };
+  }, []);
+
+  // Recompute the alternate when the member books or the pool changes.
+  const bookedKey = (bookings || []).map((b) => b.provider_id ?? b.providerId ?? b.provider_profile_id).filter(Boolean).join(',');
+  useEffect(() => { setAltProvider(null); setUsed(new Set()); }, [bookedKey]);
+
   if (loading) {
     return (
       <Card>
@@ -1721,113 +1806,124 @@ function LucaRecommends({ recs, loading, go, user, vitality = 0, focus = [] }) {
     );
   }
 
-  const firstName = user?.firstName || 'friend';
-
-  // ── Card 1: "Your Next Step" (teal) — always resolved to something actionable ──
-  let ns = recs?.nextStep;
-  if (!ns) {
-    if (!vitality) {
-      ns = {
-        title: 'Begin Your Solaris Journey',
-        description: 'Take the Solaris Method assessment to reveal your 360° health map.',
-        cta: 'Start assessment', target: 'health',
-      };
-    } else {
-      ns = {
-        title: 'Journal Your Day',
-        description: 'Capture how you feel right now. 3 minutes, big impact.',
-        cta: 'Open journal', target: 'journal',
-      };
-    }
-  }
-  const nsTarget = ns.target || (!vitality ? 'health' : 'journal');
-  const nsCta = ns.cta || (!vitality ? 'Start assessment' : 'Check in today');
-  // "Check in today" must land on Health Passport AND auto-open the daily check-in
-  // overlay — routed through the typed navigation action so the shell handles it.
-  const nsIsCheckin = /check.?in/i.test(nsCta) || ns.action === 'start_checkin';
+  // ── Card 1: "Your Next Step" (green) — resolved by the ONE centralized resolver ──
+  const action = resolveNextAction({
+    vitality, completeness, checkins, journeys, approvedJourney, bookings, now: new Date(),
+  });
+  const NsIcon = NEXT_ACTION_ICONS[action.icon] || Zap;
   const runNextStep = () => {
-    if (nsIsCheckin) {
-      window.dispatchEvent(new CustomEvent('solaris:navigate', { detail: { tab: 'health', action: 'checkin' } }));
-    } else {
-      go(nsTarget);
+    const d = action.destination || {};
+    switch (d.type) {
+      case 'checkin':
+        window.dispatchEvent(new CustomEvent('solaris:navigate', { detail: { tab: 'health', action: 'checkin' } }));
+        break;
+      case 'assessment':
+        if (startRetake) startRetake(); else go('health');
+        break;
+      case 'section':
+        go(d.tab || 'health');
+        break;
+      case 'communications':
+        go(d.section || 'growth');
+        break;
+      case 'booking':
+        go('my-bookings');
+        break;
+      case 'journey':
+        onOpenJourney?.();
+        break;
+      case 'explore':
+        go('explore');
+        break;
+      default:
+        go('health');
     }
   };
 
-  // ── Card 2: "Curated Journey" (gold) — server value or a smart fallback ──
+  // ── Card 2: "Curated Journey" (gold) — a provider recommendation with Find alternate ──
   const cj = recs?.curatedJourney;
-  const fallbackJourney = cj ? null : pickJourney(focus);
+  const cjProvider = cj && (cj.providerId != null)
+    ? { providerId: cj.providerId, title: cj.title, specialty: cj.specialty, city: cj.city, reason: cj.reason, approved: true }
+    : null;
+  const displayProvider = altProvider || cjProvider;
+  const fallbackJourney = displayProvider ? null : pickJourney(focus);
+  const currentId = displayProvider ? displayProvider.providerId : null;
+
+  const bookedSet = new Set((bookings || []).map((b) => String(b.provider_id ?? b.providerId ?? b.provider_profile_id ?? '')).filter(Boolean));
+  const eligibleAlt = eligibleProviders(pool, { currentId, dismissed, booked: bookedSet });
+  const canFindAlternate = eligibleAlt.length > 0;
+
+  const findAlternate = () => {
+    const { provider, used: nextUsed } = pickAlternate({ pool, currentId, dismissed, booked: bookedSet, used });
+    if (provider) { setAltProvider(provider); setUsed(nextUsed); } // preserve current if none
+  };
 
   return (
     <Card>
       <SectionHead eyebrow="Personalized for you" title="LUCA Recommends" action={<Pill tone="mint" icon={Sparkles}>LUCA</Pill>} />
       <div className="grid rec-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        {/* Card 1 — Next Step */}
-        <div className="card flat" style={{ padding: 16, background: 'linear-gradient(165deg,#0E5C57,#0A413D)', color: '#E7F8F3', border: 'none', display: 'flex', flexDirection: 'column' }}>
+        {/* Card 1 — Your Next Step (resolver-driven) */}
+        <div className="card flat" data-testid="luca-next-step" style={{ padding: 16, background: 'linear-gradient(165deg,#0E5C57,#0A413D)', color: '#E7F8F3', border: 'none', display: 'flex', flexDirection: 'column' }}>
           <div className="row gap-2" style={{ alignItems: 'center' }}>
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(159,231,214,.16)', display: 'grid', placeItems: 'center', flex: 'none' }}><Zap size={17} color="#9FE7D6" /></div>
-            <div className="tiny" style={{ color: 'rgba(231,248,243,.75)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 700 }}>Your Next Step</div>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(159,231,214,.16)', display: 'grid', placeItems: 'center', flex: 'none' }}><NsIcon size={17} color="#9FE7D6" /></div>
+            <div className="tiny" style={{ color: 'rgba(231,248,243,.75)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 700 }}>{action.eyebrow}</div>
           </div>
-          <div className="dp f7" style={{ fontSize: 15.5, marginTop: 11 }}>{ns.title}</div>
-          <div style={{ fontSize: 13, lineHeight: 1.55, color: 'rgba(231,248,243,.92)', marginTop: 6, flex: 1 }}>{ns.description}</div>
-          {ns.action ? (
-            <div className="tiny" style={{ marginTop: 12, color: 'rgba(231,248,243,.72)', display: 'flex', gap: 6, alignItems: 'flex-start' }}>
-              <ArrowRight size={13} style={{ marginTop: 2, flex: 'none' }} /><span>{ns.action}</span>
-            </div>
-          ) : null}
+          <div className="dp f7" style={{ fontSize: 15.5, marginTop: 11 }}>{action.title}</div>
+          <div style={{ fontSize: 13, lineHeight: 1.55, color: 'rgba(231,248,243,.92)', marginTop: 6, flex: 1 }}>{action.explanation}</div>
           <button
             onClick={runNextStep}
             style={{ marginTop: 13, alignSelf: 'flex-start', padding: '8px 16px', borderRadius: 10, cursor: 'pointer', border: '1px solid rgba(159,231,214,.35)', background: 'rgba(159,231,214,.14)', color: '#E7F8F3', fontSize: 13, fontWeight: 600, display: 'inline-flex', gap: 6, alignItems: 'center' }}
           >
-            {nsCta} <ArrowRight size={14} />
+            {action.cta} <ArrowRight size={14} />
           </button>
         </div>
 
-        {/* Card 2 — Curated Journey */}
-        <div className="card flat" style={{ padding: 16, background: 'linear-gradient(165deg,#7A5A1E,#4E3A12)', color: '#FBF3DF', border: 'none', display: 'flex', flexDirection: 'column' }}>
-          <div className="row gap-2" style={{ alignItems: 'center' }}>
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(240,210,140,.18)', display: 'grid', placeItems: 'center', flex: 'none' }}><Compass size={17} color="#F0D28C" /></div>
-            <div className="tiny" style={{ color: 'rgba(251,243,223,.78)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 700 }}>Curated Journey for You</div>
+        {/* Card 2 — Curated provider (with Find alternate + Personalized Journey) */}
+        <div className="card flat" data-testid="luca-curated" style={{ padding: 16, background: 'linear-gradient(165deg,#7A5A1E,#4E3A12)', color: '#FBF3DF', border: 'none', display: 'flex', flexDirection: 'column' }}>
+          <div className="between" style={{ gap: 8, alignItems: 'flex-start' }}>
+            <div className="row gap-2" style={{ alignItems: 'center' }}>
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(240,210,140,.18)', display: 'grid', placeItems: 'center', flex: 'none' }}><Compass size={17} color="#F0D28C" /></div>
+              <div className="tiny" style={{ color: 'rgba(251,243,223,.78)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 700 }}>Curated Journey for You</div>
+            </div>
+            {canFindAlternate && (
+              <button
+                type="button"
+                onClick={findAlternate}
+                aria-label="Find alternate"
+                title="Find alternate"
+                style={{ width: 44, height: 44, minWidth: 44, borderRadius: 12, flex: 'none', cursor: 'pointer', border: '1px solid rgba(240,210,140,.35)', background: 'rgba(240,210,140,.14)', color: '#FBF3DF', display: 'grid', placeItems: 'center' }}
+              >
+                <RefreshCw size={17} />
+              </button>
+            )}
           </div>
-          <div className="dp f7" style={{ fontSize: 15.5, marginTop: 11 }}>{cj ? cj.title : fallbackJourney.title}</div>
-          {cj && (cj.specialty || cj.city) && (
-            <div className="tiny" style={{ color: 'rgba(251,243,223,.72)', marginTop: 3, display: 'flex', gap: 6, alignItems: 'center' }}>
-              {cj.specialty ? <span>{cj.specialty}</span> : null}
-              {cj.specialty && cj.city ? <span>·</span> : null}
-              {cj.city ? <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center' }}><MapPin size={11} />{cj.city}</span> : null}
+          <div className="dp f7" style={{ fontSize: 15.5, marginTop: 11 }}>{displayProvider ? displayProvider.title : fallbackJourney.title}</div>
+          {displayProvider && (displayProvider.specialty || displayProvider.city) && (
+            <div className="tiny" style={{ color: 'rgba(251,243,223,.72)', marginTop: 3, display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              {displayProvider.specialty ? <span>{displayProvider.specialty}</span> : null}
+              {displayProvider.specialty && displayProvider.city ? <span>·</span> : null}
+              {displayProvider.city ? <span style={{ display: 'inline-flex', gap: 3, alignItems: 'center' }}><MapPin size={11} />{displayProvider.city}</span> : null}
             </div>
           )}
-          <div style={{ fontSize: 13, lineHeight: 1.55, color: 'rgba(251,243,223,.92)', marginTop: 8, flex: 1 }}>{cj ? cj.reason : fallbackJourney.tagline}</div>
-          <button
-            onClick={() => go('explore')}
-            style={{ marginTop: 13, alignSelf: 'flex-start', padding: '8px 16px', borderRadius: 10, cursor: 'pointer', border: '1px solid rgba(240,210,140,.35)', background: 'rgba(240,210,140,.14)', color: '#FBF3DF', fontSize: 13, fontWeight: 600, display: 'inline-flex', gap: 6, alignItems: 'center' }}
-          >
-            Explore <ArrowRight size={14} />
-          </button>
+          <div style={{ fontSize: 13, lineHeight: 1.55, color: 'rgba(251,243,223,.92)', marginTop: 8, flex: 1 }}>{displayProvider ? displayProvider.reason : fallbackJourney.tagline}</div>
+          <div className="rec-actions" style={{ marginTop: 13, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <button
+              onClick={() => go('explore')}
+              style={{ padding: '8px 14px', borderRadius: 10, cursor: 'pointer', border: '1px solid rgba(240,210,140,.35)', background: 'rgba(240,210,140,.14)', color: '#FBF3DF', fontSize: 13, fontWeight: 600, display: 'inline-flex', gap: 6, alignItems: 'center', minHeight: 40 }}
+            >
+              Explore <ArrowRight size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => onOpenJourney?.()}
+              aria-label="Personalized Journey"
+              style={{ padding: '8px 14px', borderRadius: 10, cursor: 'pointer', border: '1px solid rgba(251,243,223,.55)', background: 'transparent', color: '#FBF3DF', fontSize: 13, fontWeight: 600, display: 'inline-flex', gap: 6, alignItems: 'center', minHeight: 40 }}
+            >
+              <Sparkles size={14} /> Personalized Journey
+            </button>
+          </div>
         </div>
       </div>
-      {LUCA_RECS_SIMULATED && (
-        <div style={{ marginTop: 14 }}>
-          <MemberLucaRecommendations
-            user={user}
-            onView={(c) => {
-              const pid = c?.providerId ?? c?.id;
-              if (pid != null) setPendingProviderId?.(String(pid)); // open the EXACT provider profile
-              go('explore');
-            }}
-            onBook={(c) => {
-              const pid = c?.providerId ?? c?.id;
-              if (pid != null) setPendingBookProviderId?.(String(pid)); // open the REAL shared BookingFlow
-              go('explore');
-            }}
-            onApprove={(block) => {
-              // Local/simulated enrollment: stash the exact approved draft, then
-              // land the member on Communications → Growth where it is shown.
-              setApprovedJourney?.(block);
-              go('growth');
-            }}
-          />
-        </div>
-      )}
     </Card>
   );
 }
@@ -2768,10 +2864,32 @@ function runSuggestionAction(sug, go) {
   }
 }
 
+// Lucide icon lookup for the shared LUCA action registry chips.
+const LUCA_ACTION_ICONS = { compass: Compass, store: Store, sparkles: Sparkles, activity: Activity, calendarClock: CalendarClock };
+
 function CoachPage({ user, go }) {
-  const { lucaMessages: messages, setLucaMessages: setMessages, lucaLoaded, loadLucaHistory, startRetake, setPendingProviderId, setPendingCurate } = useApp();
+  const { lucaMessages: messages, setLucaMessages: setMessages, lucaLoaded, loadLucaHistory, startRetake, setPendingProviderId, setPendingCurate, approvedJourney, setApprovedJourney, profile: appProfile } = useApp();
+  const { locale } = useLocale() || {};
   const { playFromLibrary } = useAudio();
   const [input, setInput] = useState('');
+  // §D — remember the collapsed state for the current browser session only.
+  // Collapsing never erases the conversation (it lives in AppContext).
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return sessionStorage.getItem('solaris:luca-collapsed') === 'true'; } catch { return false; }
+  });
+  const toggleCollapsed = useCallback(() => {
+    setCollapsed((c) => {
+      const next = !c;
+      try { sessionStorage.setItem('solaris:luca-collapsed', String(next)); } catch { /* noop */ }
+      return next;
+    });
+  }, []);
+  const [journeyOpen, setJourneyOpen] = useState(false);
+  // Permissioned local context for the shared action registry (never sent raw to a cloud model).
+  const [ctxBookings, setCtxBookings] = useState([]);
+  const [ctxJourneys, setCtxJourneys] = useState([]);
+  const [ctxCheckins, setCtxCheckins] = useState([]);
+  const [ctxCompleteness, setCtxCompleteness] = useState(null);
   const [sending, setSending] = useState(false);
   const [degraded, setDegraded] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -2831,11 +2949,21 @@ function CoachPage({ user, go }) {
     let alive = true;
     loadLucaHistory();
     (async () => {
-      const l = await api.getLatestAssessment().catch(() => null);
-      if (alive) setLatest(l);
+      const [l, bk, jr, ck] = await Promise.all([
+        api.getLatestAssessment().catch(() => null),
+        api.getMyBookings().catch(() => []),
+        api.getMyJourneys().catch(() => []),
+        api.getCheckins().catch(() => []),
+      ]);
+      if (!alive) return;
+      setLatest(l);
+      setCtxBookings(Array.isArray(bk) ? bk : (bk?.bookings || []));
+      setCtxJourneys(Array.isArray(jr) ? jr : (jr?.journeys || []));
+      setCtxCheckins(Array.isArray(ck) ? ck : (ck?.checkins || []));
+      setCtxCompleteness(appProfile?.completeness ?? null);
     })();
     return () => { alive = false; stopAudio(); };
-  }, [loadLucaHistory, stopAudio]);
+  }, [loadLucaHistory, stopAudio, appProfile]);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, sending]);
 
   // Auto-play the newest assistant message when voice is enabled.
@@ -2886,6 +3014,60 @@ function CoachPage({ user, go }) {
     } finally { setSending(false); }
   };
 
+  // Assemble the member's permissioned local context for the shared registry.
+  const actionContext = () => ({
+    vitality: latest?.response?.vitality_score ?? 0,
+    completeness: ctxCompleteness,
+    checkins: ctxCheckins,
+    journeys: ctxJourneys,
+    approvedJourney,
+    bookings: ctxBookings,
+    goals: latest?.response?.top_focus_areas_json || [],
+    savedIds: [], bookedIds: [],
+    locale,
+    now: new Date(),
+  });
+
+  // §D — run one of the five shared quick actions. Workflow actions open the
+  // workflow they promise; response actions try the configured LUCA model and
+  // fall back to an honest, contextual deterministic response (labelled).
+  const runAction = async (actionId) => {
+    if (sending) return;
+    const action = LUCA_ACTIONS.find((a) => a.id === actionId);
+    if (!action) return;
+    if (collapsed) toggleCollapsed();          // expand so the reply is visible
+
+    // Workflow actions: open, never auto-complete.
+    if (action.id === 'build_journey') { setJourneyOpen(true); return; }
+
+    const now = new Date().toISOString();
+    const local = deterministicResponse(actionId, actionContext());
+    setMessages((m) => [...m, { role: 'user', content: action.label, created_at: now }]);
+    setSending(true);
+    try {
+      const res = await api.sendLucaMessage(action.label);   // existing model boundary
+      const modelReply = res?.reply && !res?.degraded ? res.reply : null;
+      setDegraded(!!res?.degraded);
+      setMessages((m) => [...m, {
+        role: 'assistant',
+        content: modelReply || local.text,
+        model: modelReply ? res.model : undefined,
+        degraded: !modelReply,
+        suggestions: (res?.suggestions && res.suggestions.length) ? res.suggestions : local.chips,
+        created_at: new Date().toISOString(),
+      }]);
+    } catch (e) {
+      if (e?.agentDisabled) {
+        setPaused(true);
+        setMessages((m) => [...m, { role: 'assistant', content: 'LUCA is paused — you turned it off. Re-enable anytime.', created_at: new Date().toISOString() }]);
+      } else {
+        // Offline / error / expired-session: fall back to the deterministic reply.
+        setDegraded(true);
+        setMessages((m) => [...m, { role: 'assistant', content: local.text, degraded: true, suggestions: local.chips, created_at: new Date().toISOString() }]);
+      }
+    } finally { setSending(false); }
+  };
+
   const vitality = latest?.response?.vitality_score ?? 0;
   const focus = latest?.response?.top_focus_areas_json || [];
   const firstName = user.firstName || 'friend';
@@ -2916,9 +3098,35 @@ function CoachPage({ user, go }) {
             {voiceOn ? <Volume2 size={16} strokeWidth={2.2} /> : <VolumeX size={16} strokeWidth={2.2} />}
             <span>{voiceOn ? 'Voice on' : 'Voice off'}</span>
           </button>
+          {/* §D — accessible 44×44 expand/collapse. Collapsing hides the panel
+              body but never erases the conversation (it lives in AppContext). */}
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-expanded={!collapsed}
+            aria-controls="luca-panel-body"
+            title={collapsed ? 'Expand LUCA' : 'Collapse LUCA'}
+            aria-label={collapsed ? 'Expand LUCA' : 'Collapse LUCA'}
+            style={{
+              flex: 'none', width: 44, height: 44, display: 'grid', placeItems: 'center',
+              background: 'transparent', border: '1px solid var(--line,#e3ece8)', borderRadius: 12,
+              cursor: 'pointer', color: 'var(--ink,#0A2B29)', marginLeft: 4,
+            }}
+          >
+            <ChevronDown size={18} strokeWidth={2.4} style={{ transform: collapsed ? 'rotate(180deg)' : 'none', transition: 'transform .18s ease' }} />
+          </button>
         </div>
 
-        <div className="coach-body">
+        {collapsed ? (
+          <div className="coach-collapsed" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span className="tiny muted" style={{ flex: 1, minWidth: 120 }}>
+              LUCA is collapsed — your conversation is saved{messages.length ? ` (${messages.length} message${messages.length === 1 ? '' : 's'})` : ''}.
+            </span>
+            <button type="button" onClick={toggleCollapsed} className="suggest-chip" style={{ minHeight: 44 }}>Expand</button>
+          </div>
+        ) : (
+        <>
+        <div className="coach-body" id="luca-panel-body">
           {loading ? (
             <><Skel h={44} w="58%" /><Skel h={44} w="70%" style={{ alignSelf: 'flex-end' }} /><Skel h={44} w="52%" /></>
           ) : messages.length === 0 ? (
@@ -2927,9 +3135,14 @@ function CoachPage({ user, go }) {
               <div className="dp f7" style={{ fontSize: 18, color: 'var(--ink)', textAlign: 'center' }}>How can I support you today, {firstName}?</div>
               <div className="small muted" style={{ maxWidth: 360, textAlign: 'center' }}>I guide and educate — never diagnose. Ask about your results, daily habits, or finding the right care.</div>
               <div className="coach-suggestions">
-                {COACH_SUGGESTIONS.map((s) => (
-                  <button key={s} className="suggest-chip" onClick={() => send(s)} disabled={sending}>{s}</button>
-                ))}
+                {LUCA_ACTIONS.map((a) => {
+                  const Icon = LUCA_ACTION_ICONS[a.icon] || Sparkles;
+                  return (
+                    <button key={a.id} className="suggest-chip" onClick={() => runAction(a.id)} disabled={sending} style={{ minHeight: 44 }}>
+                      <Icon size={13} strokeWidth={2.3} style={{ marginRight: 6, verticalAlign: '-2px' }} />{a.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           ) : messages.map((m, i) => {
@@ -2987,6 +3200,21 @@ function CoachPage({ user, go }) {
               </Btn>
             </div>
           ) : (
+            <>
+              {/* §D — the shared quick actions stay reachable mid-conversation. */}
+              {messages.length > 0 && (
+                <div className="coach-quickbar" style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 8, marginBottom: 2 }}>
+                  {LUCA_ACTIONS.map((a) => {
+                    const Icon = LUCA_ACTION_ICONS[a.icon] || Sparkles;
+                    return (
+                      <button key={a.id} className="suggest-chip" onClick={() => runAction(a.id)} disabled={sending}
+                        style={{ minHeight: 44, whiteSpace: 'nowrap', flex: 'none' }}>
+                        <Icon size={13} strokeWidth={2.3} style={{ marginRight: 6, verticalAlign: '-2px' }} />{a.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             <div className="coach-input-row">
               <input
                 value={input}
@@ -2996,10 +3224,21 @@ function CoachPage({ user, go }) {
               />
               <Btn variant="primary" icon={Send} onClick={() => send()} disabled={sending || !input.trim()}>Send</Btn>
             </div>
+            </>
           )}
           <div className="coach-disclaimer">LUCA guides and educates — never diagnoses or prescribes. Pre-production preview · not for emergencies — if this is urgent, contact local emergency services.</div>
         </div>
+        </>
+        )}
       </div>
+
+      <PersonalizedJourneySheet
+        open={journeyOpen}
+        onClose={() => setJourneyOpen(false)}
+        profile={appProfile}
+        locale={locale}
+        onApprove={(block) => { setApprovedJourney?.(block); setJourneyOpen(false); go('growth'); }}
+      />
 
       {/* Right sidebar */}
       <div className="col gap-4">
@@ -5481,14 +5720,23 @@ export function PassportActions({ go }) {
   );
 }
 
+// §E — Appointments tab removed (duplicated My Bookings). Overview / Timeline /
+// My Bookings remain. Legacy 'appointments' state maps to My Bookings.
 const HP_TABS = [
   { id: 'overview', label: 'Overview' },
   { id: 'timeline', label: 'Timeline' },
-  { id: 'appointments', label: 'Appointments' },
   { id: 'bookings', label: 'My Bookings' },
 ];
-function HealthPassportPage({ user, go }) {
-  const [hpTab, setHpTab] = useState('overview');
+const HP_TAB_IDS = HP_TABS.map((t) => t.id);
+// Map an incoming sub/deep-link (incl. the legacy 'appointments') to a valid tab.
+function normalizeHpTab(sub) {
+  if (sub === 'appointments') return 'bookings';   // §E legacy redirect
+  return HP_TAB_IDS.includes(sub) ? sub : 'overview';
+}
+function HealthPassportPage({ user, go, sub }) {
+  const [hpTab, setHpTab] = useState(() => normalizeHpTab(sub));
+  // Honor deep-link / legacy-route changes (e.g. ?tab=appointments → My Bookings).
+  useEffect(() => { setHpTab(normalizeHpTab(sub)); }, [sub]);
   return (
     <div className="col gap-4">
       <ErrorBoundary><PassportActions go={go} /></ErrorBoundary>
@@ -5507,7 +5755,6 @@ function HealthPassportPage({ user, go }) {
       </div>
       {hpTab === 'overview' && <ErrorBoundary><HealthPage go={go} /></ErrorBoundary>}
       {hpTab === 'timeline' && <ErrorBoundary><TimelinePage user={user} /></ErrorBoundary>}
-      {hpTab === 'appointments' && <ErrorBoundary><AppointmentsPage /></ErrorBoundary>}
       {hpTab === 'bookings' && <ErrorBoundary><MyBookings user={user} onExplore={() => go('explore')} /></ErrorBoundary>}
     </div>
   );
@@ -5840,35 +6087,26 @@ function JournalArea({ user, go, sub }) {
   );
 }
 
-function MessagesArea({ user, go, sub, onUnread, onInboxUnread }) {
-  const active = SUBTABS.messages.tabs.includes(sub) ? sub : SUBTABS.messages.def;
+function MessagesArea({ user, go, sub, onUnread }) {
+  // §F — single unified Messages destination (Inbox folded in). Kept for legacy
+  // /messages deep links; canonical target is Communications → Messages.
+  void go; void sub;
   return (
     <div>
-      <SubTabs
-        ariaLabel="Messages sections"
-        active={active}
-        onSelect={(id) => go('messages', id)}
-        items={[
-          { id: 'conversations', label: 'Conversations', icon: MessageSquare },
-          { id: 'inbox', label: 'Inbox', icon: Inbox },
-        ]}
-      />
-      {active === 'inbox'
-        ? <ErrorBoundary><InboxPage user={user} go={go} onUnread={onInboxUnread} /></ErrorBoundary>
-        : <SecureChat user={user} onUnread={onUnread} />}
+      <SecureChat user={user} onUnread={onUnread} go={go} />
     </div>
   );
 }
 
 /* Communications — one destination that merges the former Journal + Messages.
-   Two accessible segmented controls: "With Others" (Messages, Inbox) and
+   Two accessible segmented controls: "With Others" (unified Messages) and
    "With Yourself" (Journal, Growth, Media). Every section is URL-backed and
    reuses the existing page components (no duplicated functionality). */
 function CommunicationsArea({ user, go, sub, onUnread, onInboxUnread }) {
   const active = SUBTABS.communications.tabs.includes(sub) ? sub : SUBTABS.communications.def;
+  // §F — one unified Messages destination under "With Others" (Inbox is folded in).
   const withOthers = [
     { id: 'messages', label: 'Messages', icon: MessageSquare },
-    { id: 'inbox', label: 'Inbox', icon: Inbox },
   ];
   const withYourself = [
     { id: 'journal', label: 'Journal', icon: BookOpen },
@@ -5876,10 +6114,9 @@ function CommunicationsArea({ user, go, sub, onUnread, onInboxUnread }) {
     { id: 'media', label: 'Media', icon: Headphones },
   ];
   let body;
-  if (active === 'inbox') body = <ErrorBoundary><InboxPage user={user} go={go} onUnread={onInboxUnread} /></ErrorBoundary>;
-  else if (active === 'journal' || active === 'growth') body = <ErrorBoundary><JournalPage user={user} go={go} forcedView={active === 'growth' ? 'grow' : 'reflect'} hideToggle /></ErrorBoundary>;
+  if (active === 'journal' || active === 'growth') body = <ErrorBoundary><JournalPage user={user} go={go} forcedView={active === 'growth' ? 'grow' : 'reflect'} hideToggle /></ErrorBoundary>;
   else if (active === 'media') body = <ErrorBoundary><MediaPage user={user} go={go} /></ErrorBoundary>;
-  else body = <SecureChat user={user} onUnread={onUnread} />;
+  else body = <SecureChat user={user} onUnread={onUnread} go={go} />;
   return (
     <div>
       {/* Communications binder — two clearly framed semantic folders. "With
@@ -5892,7 +6129,7 @@ function CommunicationsArea({ user, go, sub, onUnread, onInboxUnread }) {
             <span className="comm-folder-tab" aria-hidden="true"><Users size={14} /></span>
             <div>
               <div id="comm-others-h" className="comm-folder-title">With Others</div>
-              <div className="comm-folder-sub">Messages &amp; inbox shared with your practitioners</div>
+              <div className="comm-folder-sub">Secure messages with your practitioners</div>
             </div>
           </div>
           <SubTabs ariaLabel="With Others" variant="others" active={active} onSelect={(id) => go('communications', id)} items={withOthers} />
@@ -6276,27 +6513,60 @@ export function SettingsPage({ user, go, sub }) {
 const LOCALE_LABELS = { en: 'EN', es: 'ES' };
 // RC1 item7 — Spanish is labeled a PREVIEW everywhere it is offered.
 const LOCALE_NAMES = { en: 'English', es: 'Español (vista previa)' };
+// §C — viewport-safe language popover. Rendered through a body portal as one
+// stacked overlay above page content, so it can never be clipped by the sticky
+// header's overflow or a transformed route wrapper, and it is pinned to the
+// viewport at every phone width (360–430). Tokenized width, ≥16px edge
+// clearance, dynamic-viewport max-height with internal scroll, safe-area
+// spacing, ≥48px rows, focus trap, Escape/outside-tap close, and focus return.
+const LANG_FOCUSABLE = 'button:not([disabled]),[tabindex]:not([tabindex="-1"])';
 function LanguageToggle() {
   const { locale, setLocale } = useLocale();
   const [open, setOpen] = useState(false);
-  const rootRef = useRef(null);
+  const btnRef = useRef(null);
+  const panelRef = useRef(null);
+
   useEffect(() => {
     if (!open) return undefined;
-    const onDocClick = (e) => { if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false); };
-    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
-    document.addEventListener('mousedown', onDocClick);
-    document.addEventListener('touchstart', onDocClick);
-    document.addEventListener('keydown', onKey);
+    const prevFocus = document.activeElement;
+    // Move focus into the panel.
+    const panel = panelRef.current;
+    const focusables = panel ? panel.querySelectorAll(LANG_FOCUSABLE) : [];
+    if (focusables.length) focusables[0].focus(); else if (panel) panel.focus();
+
+    const onDocPointer = (e) => {
+      if (panelRef.current && panelRef.current.contains(e.target)) return;
+      if (btnRef.current && btnRef.current.contains(e.target)) return;
+      setOpen(false);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); return; }
+      if (e.key !== 'Tab' || !panel) return;
+      const nodes = Array.from(panel.querySelectorAll(LANG_FOCUSABLE)).filter((n) => n.offsetParent !== null);
+      if (!nodes.length) return;
+      const first = nodes[0]; const last = nodes[nodes.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('mousedown', onDocPointer);
+    document.addEventListener('touchstart', onDocPointer);
+    window.addEventListener('keydown', onKey, true);
     return () => {
-      document.removeEventListener('mousedown', onDocClick);
-      document.removeEventListener('touchstart', onDocClick);
-      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', onDocPointer);
+      document.removeEventListener('touchstart', onDocPointer);
+      window.removeEventListener('keydown', onKey, true);
+      // Focus return.
+      if (prevFocus && typeof prevFocus.focus === 'function') prevFocus.focus();
+      else if (btnRef.current) btnRef.current.focus();
     };
   }, [open]);
+
   const choose = (loc) => { setLocale(loc); setOpen(false); };
+
   return (
-    <div ref={rootRef} style={{ position: 'relative' }}>
+    <div style={{ position: 'relative' }}>
       <button
+        ref={btnRef}
         type="button"
         className="icon-btn"
         aria-haspopup="menu"
@@ -6309,24 +6579,54 @@ function LanguageToggle() {
         <Globe size={18} />
         <span aria-hidden="true" style={{ position: 'absolute', bottom: 3, right: 3, fontSize: 8, fontWeight: 800, letterSpacing: 0.3, color: 'var(--ink)' }}>{LOCALE_LABELS[locale] || locale.toUpperCase()}</span>
       </button>
-      {open && (
-        <div role="menu" aria-label="Language" style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', minWidth: 168, background: '#fff', border: '1px solid var(--line,#e3ece8)', borderRadius: 14, boxShadow: '0 12px 34px rgba(10,43,41,.18)', padding: 8, zIndex: 60 }}>
-          {enabledLocales().map((loc) => (
-            <button
-              key={loc}
-              role="menuitemradio"
-              aria-checked={locale === loc}
-              type="button"
-              onClick={() => choose(loc)}
-              style={{ width: '100%', textAlign: 'left', padding: '9px 12px', borderRadius: 10, cursor: 'pointer', background: locale === loc ? 'var(--surface-2,#eafbf4)' : 'transparent', border: 'none', color: 'var(--ink)', fontSize: 13.5, fontWeight: locale === loc ? 700 : 500, display: 'flex', alignItems: 'center', gap: 8 }}
-            >
-              <Globe size={15} className="t-teal" /> {LOCALE_NAMES[loc] || loc}
-              {locale === loc && <BadgeCheck size={14} className="t-teal" style={{ marginLeft: 'auto' }} />}
-            </button>
-          ))}
-          {/* RC1 item7 — Spanish preview disclosure, shown only while ES is active. */}
-          <div style={{ marginTop: 6 }}><SpanishPreviewDisclosure /></div>
-        </div>
+      {open && typeof document !== 'undefined' && document.body && createPortal(
+        <div
+          className="lang-pop-scrim"
+          onClick={() => setOpen(false)}
+          style={{ position: 'fixed', inset: 0, zIndex: 6200, background: 'transparent' }}
+        >
+          <div
+            ref={panelRef}
+            role="menu"
+            aria-label="Language"
+            data-testid="language-popover"
+            tabIndex={-1}
+            onClick={(e) => e.stopPropagation()}
+            className="lang-pop"
+            style={{
+              position: 'fixed',
+              top: 'calc(env(safe-area-inset-top, 0px) + 64px)',
+              right: 'max(16px, env(safe-area-inset-right, 0px))',
+              width: 'min(320px, calc(100vw - 32px))',
+              maxHeight: 'min(70dvh, calc(100dvh - 96px - env(safe-area-inset-bottom, 0px)))',
+              overflowY: 'auto',
+              WebkitOverflowScrolling: 'touch',
+              background: '#fff',
+              border: '1px solid var(--line,#e3ece8)',
+              borderRadius: 16,
+              boxShadow: '0 18px 44px rgba(10,43,41,.22)',
+              padding: 8,
+              paddingBottom: 'calc(8px + env(safe-area-inset-bottom, 0px))',
+            }}
+          >
+            {enabledLocales().map((loc) => (
+              <button
+                key={loc}
+                role="menuitemradio"
+                aria-checked={locale === loc}
+                type="button"
+                onClick={() => choose(loc)}
+                style={{ width: '100%', textAlign: 'left', minHeight: 48, padding: '12px 12px', borderRadius: 10, cursor: 'pointer', background: locale === loc ? 'var(--surface-2,#eafbf4)' : 'transparent', border: 'none', color: 'var(--ink)', fontSize: 14, fontWeight: locale === loc ? 700 : 500, display: 'flex', alignItems: 'center', gap: 8 }}
+              >
+                <Globe size={16} className="t-teal" style={{ flex: 'none' }} /> <span style={{ minWidth: 0, whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{LOCALE_NAMES[loc] || loc}</span>
+                {locale === loc && <BadgeCheck size={15} className="t-teal" style={{ marginLeft: 'auto', flex: 'none' }} />}
+              </button>
+            ))}
+            {/* §C — Spanish preview disclosure wraps normally (never a narrow second column). */}
+            <div style={{ marginTop: 6 }}><SpanishPreviewDisclosure /></div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -6409,13 +6709,14 @@ function TabPage({ tab, sub, user, go, effectiveRole, onUnread, onInboxUnread, o
     case 'aura-admin': return <ErrorBoundary><AuraAdmin /></ErrorBoundary>;
     case 'dashboard': return <ErrorBoundary><DashboardPage user={user} go={go} /></ErrorBoundary>;
     case 'explore': return <ErrorBoundary><ExploreMarketplace user={user} onBecomeProvider={onBecomeProvider} /></ErrorBoundary>;
-    case 'health': return <HealthPassportPage user={user} go={go} />;
+    case 'health': return <HealthPassportPage user={user} go={go} sub={sub} />;
     case 'timeline': return <TimelinePage user={user} />;
     case 'coach': return <ErrorBoundary><CoachArea user={user} go={go} sub={sub} /></ErrorBoundary>;
     case 'intelligence': return <ErrorBoundary><IntelligencePage user={user} go={go} /></ErrorBoundary>;
     case 'journal': return <ErrorBoundary><JournalArea user={user} go={go} sub={sub} /></ErrorBoundary>;
     case 'media': return <ErrorBoundary><MediaPage user={user} go={go} /></ErrorBoundary>;
-    case 'appointments': return <AppointmentsPage user={user} />;
+    // §E — 'appointments' is redirected to Health Passport → My Bookings by
+    // resolveNav; this tab no longer renders a standalone appointments page.
     case 'my-bookings': return <MyBookings user={user} onExplore={() => go('explore')} />;
     case 'booking-oversight': return <BookingManagement />;
     case 'messages': return <ErrorBoundary><MessagesArea user={user} go={go} sub={sub} onUnread={onUnread} onInboxUnread={onInboxUnread} /></ErrorBoundary>;

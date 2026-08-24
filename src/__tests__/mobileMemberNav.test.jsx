@@ -77,8 +77,8 @@ describe('Communications outer label / consolidated inner tabs', () => {
   });
 
   it('consolidates Messages + Journal / Growth / Media under the Communications area', () => {
-    // "With Others" (messages, inbox) + "With Yourself" (journal, growth, media).
-    expect(SUBTABS.communications.tabs).toEqual(['messages', 'inbox', 'journal', 'growth', 'media']);
+    // §F — "With Others" (unified Messages) + "With Yourself" (journal, growth, media).
+    expect(SUBTABS.communications.tabs).toEqual(['messages', 'journal', 'growth', 'media']);
     expect(SUBTABS.communications.def).toBe('messages');
   });
 });

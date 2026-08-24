@@ -135,12 +135,27 @@ router.post('/request', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: `Bookings must be at least ${MIN_ADVANCE_HOURS} hours in advance and within ${MAX_ADVANCE_DAYS} days.` });
     }
 
+    // §F — resolve the provider profile to its practitioner OWNER server-side so
+    // the booking can be linked to the canonical member↔practitioner conversation.
+    // We never trust a practitioner user id from the client; it is derived here.
     const prof = await db.query(
-      'SELECT id, business_name, address, user_id, auto_confirm_bookings FROM provider_profiles WHERE id=$1',
+      `SELECT p.id, p.business_name, p.address, p.user_id, p.auto_confirm_bookings,
+              u.role AS owner_role, p.approval_status, p.claimed
+         FROM provider_profiles p
+         LEFT JOIN users u ON u.id = p.user_id
+        WHERE p.id = $1`,
       [providerId]
     );
     if (!prof.rows.length) return res.status(404).json({ error: 'Provider not found' });
     const provider = prof.rows[0];
+    // A conversation can only be created against a real, approved, claimed
+    // practitioner owner. Unmapped/demo providers still book (backward compatible)
+    // but return conversationId:null — the client must not synthesize a thread.
+    const ownerIsPractitioner =
+      provider.user_id != null &&
+      provider.owner_role === 'practitioner' &&
+      provider.approval_status === 'approved' &&
+      provider.claimed === true;
 
     let service = null;
     if (serviceId) {
@@ -201,6 +216,24 @@ router.post('/request', authMiddleware, async (req, res) => {
       [booking.id, providerId, date, startTime]
     );
 
+    // §F — in the SAME transaction, find/create the canonical member↔practitioner
+    // conversation using the existing UNIQUE(patient_id, practitioner_id) upsert.
+    // No new inbox model, no conversation-per-booking, no new migration. If this
+    // fails, the whole booking rolls back so we never create a threadless booking
+    // for a mapped practitioner. Unmapped/demo providers skip this (conversationId
+    // stays null) and remain backward compatible.
+    let conversationId = null;
+    if (ownerIsPractitioner) {
+      const convRes = await client.query(
+        `INSERT INTO conversations (patient_id, practitioner_id)
+         VALUES ($1, $2)
+         ON CONFLICT (patient_id, practitioner_id) DO UPDATE SET updated_at = now()
+         RETURNING id`,
+        [req.user.userId, provider.user_id]
+      );
+      conversationId = convRes.rows[0].id;
+    }
+
     await client.query('COMMIT');
 
     // --- Side effects (best-effort, outside the txn) ---
@@ -232,7 +265,7 @@ router.post('/request', authMiddleware, async (req, res) => {
       });
     }
 
-    res.status(201).json({ booking, reference: booking.id.slice(0, 8).toUpperCase(), autoConfirmed: autoConfirm });
+    res.status(201).json({ booking, reference: booking.id.slice(0, 8).toUpperCase(), autoConfirmed: autoConfirm, conversationId });
   } catch (err) {
     try { await client.query('ROLLBACK'); } catch { /* ignore */ }
     console.error('booking request', err);

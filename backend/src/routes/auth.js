@@ -15,6 +15,17 @@ const notificationProvider = require('../lib/notification-provider');
 
 const router = express.Router();
 
+// §G — Invite-only Beta gate (12-factor). When BETA_INVITE_ONLY=true, public
+// self-registration is REFUSED server-side; invited members still sign in
+// normally. This is a documented, DEFAULT-OFF gate — the public marketing site
+// owns the waitlist, so the app never collects waitlist emails. It must NOT be
+// activated until the shared-backend Beta cutover is separately approved. Read at
+// request time so it is toggled purely by environment (no code change) and can be
+// asserted deterministically in tests.
+function inviteOnlyEnabled() {
+  return String(process.env.BETA_INVITE_ONLY || '').trim().toLowerCase() === 'true';
+}
+
 async function award(userId, eventType, points, category, note) {
   await db.query(
     'INSERT INTO reward_events (user_id, event_type, points, category, note) VALUES ($1,$2,$3,$4,$5)',
@@ -59,6 +70,11 @@ function shapeUser(u) {
 // Register (patient or practitioner)
 router.post('/register', async (req, res) => {
   try {
+    // §G — refuse public self-registration while the invite-only gate is enabled.
+    // Returns before any DB work; invited members use the sign-in paths instead.
+    if (inviteOnlyEnabled()) {
+      return res.status(403).json({ error: 'Solaris is currently invite-only. Please join the waitlist to request access.' });
+    }
     const { email, password, firstName, lastName, country, language, referralCode } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
 

@@ -16,11 +16,15 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   MessageSquare, Plus, Search, ShieldCheck, Lock, Loader2, X, Bell, BellOff,
   Paperclip, ChevronRight, Stethoscope, User as UserIcon, AlertTriangle, KeyRound,
+  CalendarClock, ChevronDown,
 } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { useApp } from '../state/AppContext.jsx';
 import { loadOrCreateIdentity, cryptoAvailable } from '../lib/encryption.js';
 import MessageThread from './MessageThread.jsx';
+import {
+  MESSAGE_FILTERS, applyMessageFilter, summarizeBookingContext,
+} from '../lib/messageFilters.js';
 
 const CSS = `
 .luca .sc-wrap{display:grid;grid-template-columns:330px 1fr;gap:16px;height:calc(100vh - 150px);min-height:520px}
@@ -38,7 +42,34 @@ const CSS = `
   border-radius:11px;background:var(--surface-2)}
 .luca .sc-search input{flex:1;border:none;background:transparent;outline:none;font-size:13px;color:var(--ink);font-family:inherit}
 .luca .sc-e2e-note{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--mint-ink);margin-top:9px}
+.luca .sc-filters{display:flex;gap:7px;margin-top:10px;flex-wrap:wrap}
+.luca .sc-filter{border:1px solid var(--line);background:var(--surface);color:var(--muted-2);border-radius:999px;
+  padding:5px 13px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;line-height:1.2;transition:all .12s}
+.luca .sc-filter:hover{border-color:var(--mint)}
+.luca .sc-filter.on{background:var(--mint-soft);border-color:var(--mint);color:var(--mint-ink)}
 .luca .sc-scroll{flex:1;overflow-y:auto}
+.luca .sc-thread-col{display:flex;flex-direction:column;height:100%;min-height:0}
+.luca .sc-bctx{flex:none;border:1px solid var(--line);border-radius:var(--r);background:linear-gradient(180deg,var(--surface),var(--surface-2));
+  padding:11px 13px;margin:0 0 10px}
+.luca .sc-bctx-main{display:flex;align-items:center;gap:11px}
+.luca .sc-bctx-ic{flex:none;width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+  background:var(--gold-soft,rgba(198,161,74,.14));color:var(--gold-ink,#8a6d1f)}
+.luca .sc-bctx-body{flex:1;min-width:0}
+.luca .sc-bctx-top{display:flex;align-items:center;gap:8px;justify-content:space-between}
+.luca .sc-bctx-title{font-weight:700;font-size:13.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.luca .sc-bctx-sub{font-size:12px;color:var(--muted-2);margin-top:2px}
+.luca .sc-bctx-status{flex:none;font-size:10.5px;font-weight:800;padding:2px 8px;border-radius:999px;text-transform:uppercase;letter-spacing:.02em}
+.luca .sc-bctx-status.ok{background:var(--mint-soft);color:var(--mint-ink)}
+.luca .sc-bctx-status.warn{background:rgba(198,161,74,.16);color:#8a6d1f}
+.luca .sc-bctx-status.muted{background:var(--surface-2);color:var(--muted-2)}
+.luca .sc-bctx-act{flex:none;min-height:36px;border:1px solid var(--line);background:var(--surface);color:var(--ink);
+  border-radius:9px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+.luca .sc-bctx-act:hover{border-color:var(--mint)}
+.luca .sc-bctx-past{margin-top:9px;border-top:1px dashed var(--line);padding-top:8px}
+.luca .sc-bctx-toggle{display:inline-flex;align-items:center;gap:5px;border:none;background:none;color:var(--muted-2);
+  font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;padding:2px 0}
+.luca .sc-bctx-plist{list-style:none;margin:7px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.luca .sc-bctx-plist li{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted-2)}
 .luca .sc-conv{display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer;border-bottom:1px solid var(--line-2);
   transition:background .12s ease;position:relative}
 .luca .sc-conv:hover{background:var(--surface-2)}
@@ -99,7 +130,72 @@ const fmtAgo = (d) => {
   return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 };
 
-export default function SecureChat({ user, onUnread }) {
+/* §F — compact booking-context card shown above the composer. Booking status is
+   server-derived structured data (never plaintext in the encrypted message
+   table). Display-only: it never books, sends, or mutates. */
+const BOOKING_STATUS_META = {
+  pending: { label: 'Pending', tone: 'warn' },
+  confirmed: { label: 'Confirmed', tone: 'ok' },
+  reschedule_proposed: { label: 'Reschedule proposed', tone: 'warn' },
+  rescheduled: { label: 'Rescheduled', tone: 'warn' },
+  cancelled: { label: 'Cancelled', tone: 'muted' },
+  canceled: { label: 'Cancelled', tone: 'muted' },
+  completed: { label: 'Completed', tone: 'muted' },
+};
+function statusMeta(s) {
+  return BOOKING_STATUS_META[String(s || '').toLowerCase()] || { label: s || 'Requested', tone: 'muted' };
+}
+function fmtBookingWhen(b) {
+  if (!b) return '';
+  const d = b.booking_date ? new Date(b.booking_date + 'T00:00:00') : null;
+  const day = d && !isNaN(d) ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : (b.booking_date || '');
+  const t = (b.start_time || '').slice(0, 5);
+  return [day, t].filter(Boolean).join(' · ');
+}
+function BookingContextCard({ ctx, pastOpen, onTogglePast, onViewBooking }) {
+  const b = ctx.current;
+  if (!b) return null;
+  const meta = statusMeta(b.status);
+  const provider = b.business_name || b.provider_name || 'Practitioner';
+  const service = b.service_name || 'Consultation';
+  return (
+    <div className="sc-bctx" role="region" aria-label="Booking context">
+      <div className="sc-bctx-main">
+        <span className="sc-bctx-ic" aria-hidden="true"><CalendarClock size={16} /></span>
+        <div className="sc-bctx-body">
+          <div className="sc-bctx-top">
+            <span className="sc-bctx-title">{provider}</span>
+            <span className={'sc-bctx-status ' + meta.tone}>{meta.label}</span>
+          </div>
+          <div className="sc-bctx-sub">{service} · {fmtBookingWhen(b)}</div>
+        </div>
+        {onViewBooking && (
+          <button type="button" className="sc-bctx-act" onClick={onViewBooking}>View booking</button>
+        )}
+      </div>
+      {ctx.past.length > 0 && (
+        <div className="sc-bctx-past">
+          <button type="button" className="sc-bctx-toggle" aria-expanded={pastOpen} onClick={onTogglePast}>
+            <ChevronDown size={13} style={{ transform: pastOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+            {pastOpen ? 'Hide' : 'Show'} past bookings ({ctx.past.length})
+          </button>
+          {pastOpen && (
+            <ul className="sc-bctx-plist">
+              {ctx.past.map((p) => (
+                <li key={p.id}>
+                  <span>{p.service_name || 'Consultation'} · {fmtBookingWhen(p)}</span>
+                  <span className={'sc-bctx-status ' + statusMeta(p.status).tone}>{statusMeta(p.status).label}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function SecureChat({ user, onUnread, go }) {
   const myId = user.userId || user.id;
   const { pendingConversation, setPendingConversation } = useApp() || {};
   const [identity, setIdentity] = useState(null);
@@ -109,6 +205,9 @@ export default function SecureChat({ user, onUnread }) {
   const [active, setActive] = useState(null);          // { id, otherId, otherName, otherRole, otherAvatar }
   const [recipientPub, setRecipientPub] = useState(null);
   const [query, setQuery] = useState('');
+  const [filterMode, setFilterMode] = useState('all');   // §F compact filter: all|bookings|unread
+  const [myBookings, setMyBookings] = useState([]);       // read-only booking context
+  const [pastOpen, setPastOpen] = useState(false);        // collapsed past bookings in context card
   const [showPicker, setShowPicker] = useState(false);
   const [contacts, setContacts] = useState([]);
   const [loadingContacts, setLoadingContacts] = useState(false);
@@ -176,6 +275,16 @@ export default function SecureChat({ user, onUnread }) {
     const t = setInterval(() => refreshList(true), 60000);
     return () => clearInterval(t);
   }, [refreshList]);
+
+  /* ---- read-only booking context for the compact context card / Bookings filter.
+     Derived from the member's own bookings; never mutates and never sends. ---- */
+  useEffect(() => {
+    let alive = true;
+    api.getMyBookings()
+      .then((res) => { if (alive) setMyBookings((res && res.bookings) || []); })
+      .catch(() => { if (alive) setMyBookings([]); });
+    return () => { alive = false; };
+  }, []);
 
   /* ---- open a conversation: fetch recipient public key ---- */
   const openConversation = useCallback(async (conv) => {
@@ -252,9 +361,11 @@ export default function SecureChat({ user, onUnread }) {
 
   const onThreadActivity = useCallback(() => { refreshList(false); }, [refreshList]);
 
-  const filtered = query.trim()
+  const byQuery = query.trim()
     ? conversations.filter((c) => c.otherName.toLowerCase().includes(query.trim().toLowerCase()))
     : conversations;
+  const filtered = applyMessageFilter(byQuery, filterMode, myBookings);
+  const activeContext = active ? summarizeBookingContext(active, myBookings) : { current: null, past: [], total: 0 };
 
   if (identityErr) {
     return (
@@ -288,6 +399,19 @@ export default function SecureChat({ user, onUnread }) {
             <input placeholder="Search conversations…" value={query} onChange={(e) => setQuery(e.target.value)} />
             {query && <X size={15} style={{ cursor: 'pointer', color: 'var(--muted-2)' }} onClick={() => setQuery('')} />}
           </div>
+          <div className="sc-filters" role="group" aria-label="Filter conversations">
+            {MESSAGE_FILTERS.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                className={'sc-filter' + (filterMode === f.id ? ' on' : '')}
+                aria-pressed={filterMode === f.id}
+                onClick={() => setFilterMode(f.id)}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
           <div className="sc-e2e-note"><ShieldCheck size={13} /> All messages are end-to-end encrypted</div>
           {identity && (
             <div className="sc-keychip" title="Your encryption key fingerprint">
@@ -302,9 +426,9 @@ export default function SecureChat({ user, onUnread }) {
           ) : filtered.length === 0 ? (
             <div className="sc-empty">
               <div className="sc-eic"><MessageSquare size={24} /></div>
-              <div style={{ fontWeight: 700, color: 'var(--ink)' }}>{query ? 'No matches' : 'No conversations yet'}</div>
-              <div style={{ fontSize: 12.5 }}>{query ? 'Try another name.' : 'Start a secure conversation with your care network.'}</div>
-              {!query && <button className="sc-ico" style={{ width: 'auto', padding: '8px 14px', gap: 7, display: 'flex', alignItems: 'center', fontSize: 13, fontWeight: 600 }} onClick={openPicker}><Plus size={16} /> New message</button>}
+              <div style={{ fontWeight: 700, color: 'var(--ink)' }}>{(query || filterMode !== 'all') ? 'No matches' : 'No conversations yet'}</div>
+              <div style={{ fontSize: 12.5 }}>{query ? 'Try another name.' : filterMode === 'bookings' ? 'No conversations with a booking yet.' : filterMode === 'unread' ? 'You are all caught up.' : 'Start a secure conversation with your care network.'}</div>
+              {!query && filterMode === 'all' && <button className="sc-ico" style={{ width: 'auto', padding: '8px 14px', gap: 7, display: 'flex', alignItems: 'center', fontSize: 13, fontWeight: 600 }} onClick={openPicker}><Plus size={16} /> New message</button>}
             </div>
           ) : filtered.map((c) => (
             <div key={c.id} className={'sc-conv' + (active && active.id === c.id ? ' active' : '')} onClick={() => openConversation(c)}>
@@ -331,14 +455,24 @@ export default function SecureChat({ user, onUnread }) {
       {/* active thread / placeholder */}
       <div className="sc-pane">
         {active && identity ? (
-          <MessageThread
-            user={user}
-            identity={identity}
-            conversation={active}
-            recipientPubJwk={recipientPub}
-            onBack={() => setActive(null)}
-            onActivity={onThreadActivity}
-          />
+          <div className="sc-thread-col">
+            {activeContext.current && (
+              <BookingContextCard
+                ctx={activeContext}
+                pastOpen={pastOpen}
+                onTogglePast={() => setPastOpen((v) => !v)}
+                onViewBooking={go ? () => go('health', 'bookings') : null}
+              />
+            )}
+            <MessageThread
+              user={user}
+              identity={identity}
+              conversation={active}
+              recipientPubJwk={recipientPub}
+              onBack={() => setActive(null)}
+              onActivity={onThreadActivity}
+            />
+          </div>
         ) : (
           <div className="sc-pane-empty">
             <div className="sc-pic"><Lock size={32} /></div>
