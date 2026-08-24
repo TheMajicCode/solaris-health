@@ -2,7 +2,7 @@ import React from 'react';
 
 export const SolarisMark = ({ size = 36 }) => (
   <img
-    src="/solaris-logo.png"
+    src="/solaris-logo-v2.png"
     alt="Solaris Holistic Health"
     style={{ width: size, height: size, objectFit: 'contain', display: 'block', filter: 'drop-shadow(0 0 10px rgba(47,190,159,0.35))' }}
   />

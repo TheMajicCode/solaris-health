@@ -257,7 +257,7 @@ export default function SecureChat({ user, onUnread, go }) {
               try {
                 new Notification('New secure message', {
                   body: `${c.otherName} sent you ${lm.hasAttachment ? 'an attachment' : 'a message'}`,
-                  icon: '/icons/icon-maskable-192.png', tag: 'luca-msg-' + c.id,
+                  icon: '/icons/icon-maskable-192-v2.png', tag: 'luca-msg-' + c.id,
                 });
               } catch { /* ignore */ }
             }

@@ -587,7 +587,7 @@ export default function Auth() {
         {stage === 'welcome' && (
           <div className="ob-card fade-up">
             <div className="ob-brand">
-              <img src="/solaris-logo.png" alt="Solaris Holistic Health" className="ob-logo" />
+              <img src="/solaris-logo-v2.png" alt="Solaris Holistic Health" className="ob-logo" />
               <p className="wordmark ob-wordmark">SOLARIS</p>
               <p className="ob-tag">{t('ob.splash.holistic')}</p>
               {/* §G / K1.1 §3 — invite-only Beta boundary. Rendered ONLY when the

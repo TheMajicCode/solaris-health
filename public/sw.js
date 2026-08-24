@@ -17,7 +17,14 @@
 // favicon replacing the purple lightning, notification/Media Session artwork).
 // New branding assets are precached on install. Same rule: only obsolete Solaris
 // caches are deleted on activate — never auth/local data.
-const CACHE_NAME = 'solaris-v17';
+// K1.4 (§5): bumped v17->v18 to purge the previous static cache after the
+// source-quality branding regeneration - all marks are now downscaled from the
+// 2048x2048 transparent master (never an upscaled small raster). New versioned
+// -v2 filenames (transparent `any` icons + favicons, full-bleed deep-teal
+// `maskable` icons with a safe logo zone and no white circle, high-resolution
+// splash/onboarding mark). Same rule: only obsolete Solaris caches are deleted
+// on activate - never auth/local data.
+const CACHE_NAME = 'solaris-v18';
 const SHELL_URL = '/index.html';
 
 // Branding assets to precache so the installed icon, splash, favicon and
@@ -25,15 +32,15 @@ const SHELL_URL = '/index.html';
 const PRECACHE_URLS = [
   '/manifest.json',
   '/favicon.svg',
-  '/favicon.png',
-  '/favicon-32.png',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
-  '/icons/icon-maskable-192.png',
-  '/icons/icon-maskable-512.png',
-  '/icons/apple-touch-icon.png',
-  '/icons/media-artwork-512.png',
-  '/icons/splash-logo-512.png',
+  '/favicon-v2.png',
+  '/favicon-32-v2.png',
+  '/icons/icon-192-v2.png',
+  '/icons/icon-512-v2.png',
+  '/icons/icon-maskable-192-v2.png',
+  '/icons/icon-maskable-512-v2.png',
+  '/icons/apple-touch-icon-v2.png',
+  '/icons/media-artwork-512-v2.png',
+  '/icons/splash-logo-1024-v2.png',
 ];
 
 self.addEventListener('install', (event) => {
@@ -132,8 +139,8 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(title, {
       body,
-      icon: '/icons/icon-maskable-192.png',
-      badge: '/icons/icon-192.png',
+      icon: '/icons/icon-maskable-192-v2.png',
+      badge: '/icons/icon-192-v2.png',
       data: { url },
     })
   );

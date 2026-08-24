@@ -54,7 +54,7 @@ export default function FindPractitioner() {
         {/* Header / brand */}
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', paddingTop: 14 }}>
           <div className="row gap-2" style={{ alignItems: 'center' }}>
-            <img src="/solaris-logo.png" alt="Solaris Holistic Health" style={{ width: 40, height: 40, objectFit: 'contain', filter: 'drop-shadow(0 0 10px rgba(47,190,159,0.4))' }} />
+            <img src="/solaris-logo-v2.png" alt="Solaris Holistic Health" style={{ width: 40, height: 40, objectFit: 'contain', filter: 'drop-shadow(0 0 10px rgba(47,190,159,0.4))' }} />
             <div>
               <p className="wordmark" style={{ fontSize: '1.1rem', letterSpacing: '.16em', margin: 0 }}>SOLARIS</p>
               <p style={{ color: 'rgba(47,190,159,0.8)', fontSize: '0.6rem', letterSpacing: '.18em', textTransform: 'uppercase', margin: 0 }}>Holistic Health</p>

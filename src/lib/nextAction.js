@@ -104,7 +104,27 @@ export function resolveNextAction(ctx = {}) {
     approvedJourney = null,
     bookings = [],
     now = new Date(),
+    dataError = false,
   } = ctx;
+
+  // ── Priority 0 — Data could not be loaded (contract §6) ──────────────────
+  // NEVER silently fall back to "Check in today" as if it were true. When the
+  // dashboard could not fetch check-ins / journeys / to-dos / bookings, the
+  // resolver reports an explicit, RETRYABLE unavailable state so the card shows
+  // a "Try again" control instead of a fabricated action.
+  if (dataError) {
+    return {
+      priority: 0,
+      key: 'unavailable',
+      unavailable: true,
+      eyebrow: 'Your Next Step',
+      title: "Couldn't load your next step",
+      explanation: 'We had trouble reaching your latest activity. Check your connection and try again.',
+      cta: 'Try again',
+      icon: 'retry',
+      destination: { type: 'retry' },
+    };
+  }
 
   const checks = (completeness && completeness.checks) || {};
   // Intake is complete when the member has an assessment (vitality) or the
@@ -115,6 +135,7 @@ export function resolveNextAction(ctx = {}) {
   if (isCheckinDue({ intakeComplete, checkins, now })) {
     return {
       priority: 1,
+      key: 'checkin',
       eyebrow: 'Your Next Step',
       title: 'Check in with yourself',
       explanation: 'A quick daily check-in helps LUCA notice what moves your vitality.',
@@ -132,6 +153,7 @@ export function resolveNextAction(ctx = {}) {
   if (!intakeComplete) {
     return {
       priority: 2,
+      key: 'assessment',
       eyebrow: 'Your Next Step',
       title: 'Map your health',
       explanation: 'Take the Solaris Method assessment to reveal your 360° Mind, Body, Heart & Spirit map.',
@@ -144,6 +166,7 @@ export function resolveNextAction(ctx = {}) {
   if (ns && (ns.key === 'health_doc' || ns.key === 'profile')) {
     return {
       priority: 2,
+      key: 'passport',
       eyebrow: 'Your Next Step',
       title: ns.label || 'Complete your Passport',
       explanation: ns.hint || 'A little more information helps LUCA guide you well.',
@@ -161,13 +184,14 @@ export function resolveNextAction(ctx = {}) {
     const stepLabel = aj.milestone.label || 'your next step';
     if (sub) {
       const labels = {
-        growth: { title: 'Continue your journey', cta: 'Open Growth', icon: 'growth', section: 'growth' },
-        journal: { title: 'Reflect in your journal', cta: 'Open Journal', icon: 'journal', section: 'journal' },
-        media: { title: 'Your next practice', cta: 'Open Media', icon: 'media', section: 'media' },
+        growth: { key: 'journey_growth', title: 'Continue your journey', cta: 'Open Growth', icon: 'growth', section: 'growth' },
+        journal: { key: 'journey_journal', title: 'Reflect in your journal', cta: 'Open Journal', icon: 'journal', section: 'journal' },
+        media: { key: 'journey_media', title: 'Your next practice', cta: 'Open Media', icon: 'media', section: 'media' },
       };
       const m = labels[sub];
       return {
         priority: 4,
+        key: m.key,
         eyebrow: 'Your Next Step',
         title: m.title,
         explanation: stepLabel,
@@ -178,6 +202,7 @@ export function resolveNextAction(ctx = {}) {
     }
     return {
       priority: 3,
+      key: 'journey_continue',
       eyebrow: 'Your Next Step',
       title: 'Continue your journey',
       explanation: stepLabel,
@@ -192,6 +217,7 @@ export function resolveNextAction(ctx = {}) {
   if (bk) {
     return {
       priority: 5,
+      key: 'booking',
       eyebrow: 'Your Next Step',
       title: 'A new time is waiting',
       explanation: 'Your practitioner proposed a session time — review and confirm to lock it in.',
@@ -204,6 +230,7 @@ export function resolveNextAction(ctx = {}) {
   // ── Priority 6 — Fallback: build a personalized journey ───────────────────
   return {
     priority: 6,
+    key: 'fallback',
     eyebrow: 'Your Next Step',
     title: 'Design your path',
     explanation: 'Let LUCA draft a personalized journey shaped around your goals — you approve every step.',

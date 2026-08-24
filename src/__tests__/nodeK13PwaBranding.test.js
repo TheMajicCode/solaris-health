@@ -39,32 +39,32 @@ describe('Node K1.3 §Phase 7 — manifest icon purposes', () => {
   });
 });
 
-describe('Node K1.3 §Phase 7 — service worker v17', () => {
+describe('Node K1.3 §Phase 7 — service worker v18', () => {
   const sw = readFileSync(P('public/sw.js'), 'utf8');
-  it('bumps the Solaris cache to v17', () => {
-    expect(sw).toMatch(/CACHE_NAME\s*=\s*'solaris-v17'/);
-    expect(sw).not.toMatch(/'solaris-v16'/);
+  it('bumps the Solaris cache to v18', () => {
+    expect(sw).toMatch(/CACHE_NAME\s*=\s*'solaris-v18'/);
+    expect(sw).not.toMatch(/'solaris-v17'/);
   });
   it('precaches the new branding assets', () => {
-    expect(sw).toContain('/icons/icon-maskable-192.png');
-    expect(sw).toContain('/icons/icon-maskable-512.png');
-    expect(sw).toContain('/icons/apple-touch-icon.png');
+    expect(sw).toContain('/icons/icon-maskable-192-v2.png');
+    expect(sw).toContain('/icons/icon-maskable-512-v2.png');
+    expect(sw).toContain('/icons/apple-touch-icon-v2.png');
     expect(sw).toContain('/favicon.svg');
   });
   it('notification icon uses the branded Solaris mark, not a lightning/ico', () => {
     expect(sw).not.toContain("icon: '/favicon.ico'");
-    expect(sw).toMatch(/icon:\s*'\/icons\/icon-maskable-192\.png'/);
+    expect(sw).toMatch(/icon:\s*'\/icons\/icon-maskable-192-v2\.png'/);
   });
 });
 
 describe('Node K1.3 §Phase 7 — HTML head links', () => {
   const html = readFileSync(P('index.html'), 'utf8');
   it('references the branded apple-touch-icon (no white circle asset)', () => {
-    expect(html).toContain('rel="apple-touch-icon" href="/icons/apple-touch-icon.png"');
+    expect(html).toContain('rel="apple-touch-icon" href="/icons/apple-touch-icon-v2.png"');
   });
   it('keeps favicon links (svg + png) pointing at the Solaris mark', () => {
     expect(html).toContain('href="/favicon.svg"');
-    expect(html).toContain('href="/favicon.png"');
+    expect(html).toContain('href="/favicon-v2.png"');
   });
 });
 
@@ -78,16 +78,16 @@ describe('Node K1.3 §Phase 7 — favicon no longer the purple lightning', () =>
 
 describe('Node K1.3 §Phase 7 — generated icon files exist and any-icons are transparent', () => {
   const files = [
-    'public/icons/icon-192.png', 'public/icons/icon-512.png',
-    'public/icons/icon-maskable-192.png', 'public/icons/icon-maskable-512.png',
-    'public/icons/apple-touch-icon.png', 'public/icons/media-artwork-512.png',
-    'public/icons/splash-logo-512.png', 'public/favicon.png',
+    'public/icons/icon-192-v2.png', 'public/icons/icon-512-v2.png',
+    'public/icons/icon-maskable-192-v2.png', 'public/icons/icon-maskable-512-v2.png',
+    'public/icons/apple-touch-icon-v2.png', 'public/icons/media-artwork-512-v2.png',
+    'public/icons/splash-logo-1024-v2.png', 'public/favicon-v2.png',
   ];
   it('all branding files exist', () => {
     for (const f of files) expect(existsSync(P(f)), f).toBe(true);
   });
   it('the transparent "any" icons carry an alpha channel (PNG color type 6)', () => {
-    expect(pngColorType(P('public/icons/icon-192.png'))).toBe(6);
-    expect(pngColorType(P('public/icons/icon-512.png'))).toBe(6);
+    expect(pngColorType(P('public/icons/icon-192-v2.png'))).toBe(6);
+    expect(pngColorType(P('public/icons/icon-512-v2.png'))).toBe(6);
   });
 });

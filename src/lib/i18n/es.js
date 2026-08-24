@@ -134,9 +134,62 @@ export default {
   'lang.spanish': 'Español',
 
   // ── Account / profile menu ──
+  'menu.account': 'Cuenta',
+  'menu.accountMenu': 'Menú de cuenta',
   'menu.myProfile': 'Mi perfil',
   'menu.settings': 'Ajustes',
   'menu.identityData': 'Identidad y datos',
+
+  // ── Panel · tarjeta verde "Tu siguiente paso" (K1.4 Defecto 2 + Defecto 5) ──
+  // Las claves reflejan los `key` del descriptor en src/lib/nextAction.js. El
+  // texto dinámico (etiqueta de la sección del pasaporte y del paso del camino)
+  // NO se traduce aquí para usar el valor en vivo del resolutor.
+  'nextStep.unavailable.eyebrow': 'Tu siguiente paso',
+  'nextStep.unavailable.title': 'No pudimos cargar tu siguiente paso',
+  'nextStep.unavailable.explanation': 'Tuvimos problemas para acceder a tu actividad reciente. Revisa tu conexión e inténtalo de nuevo.',
+  'nextStep.unavailable.cta': 'Reintentar',
+  'nextStep.checkin.eyebrow': 'Tu siguiente paso',
+  'nextStep.checkin.title': 'Regístrate contigo mismo',
+  'nextStep.checkin.explanation': 'Un registro diario rápido ayuda a LUCA a notar qué mueve tu vitalidad.',
+  'nextStep.checkin.cta': 'Registrarme hoy',
+  'nextStep.assessment.eyebrow': 'Tu siguiente paso',
+  'nextStep.assessment.title': 'Mapea tu salud',
+  'nextStep.assessment.explanation': 'Haz la evaluación del Método Solaris para revelar tu mapa 360° de Mente, Cuerpo, Corazón y Espíritu.',
+  'nextStep.assessment.cta': 'Comenzar evaluación',
+  'nextStep.passport.eyebrow': 'Tu siguiente paso',
+  'nextStep.journey_growth.eyebrow': 'Tu siguiente paso',
+  'nextStep.journey_growth.title': 'Continúa tu camino',
+  'nextStep.journey_growth.cta': 'Abrir Crecimiento',
+  'nextStep.journey_journal.eyebrow': 'Tu siguiente paso',
+  'nextStep.journey_journal.title': 'Reflexiona en tu diario',
+  'nextStep.journey_journal.cta': 'Abrir Diario',
+  'nextStep.journey_media.eyebrow': 'Tu siguiente paso',
+  'nextStep.journey_media.title': 'Tu próxima práctica',
+  'nextStep.journey_media.cta': 'Abrir Multimedia',
+  'nextStep.journey_continue.eyebrow': 'Tu siguiente paso',
+  'nextStep.journey_continue.title': 'Continúa tu camino',
+  'nextStep.journey_continue.cta': 'Continuar camino',
+  'nextStep.booking.eyebrow': 'Tu siguiente paso',
+  'nextStep.booking.title': 'Un nuevo horario te espera',
+  'nextStep.booking.explanation': 'Tu profesional propuso un horario para la sesión — revísalo y confírmalo para reservarlo.',
+  'nextStep.booking.cta': 'Revisar y confirmar',
+  'nextStep.fallback.eyebrow': 'Tu siguiente paso',
+  'nextStep.fallback.title': 'Diseña tu camino',
+  'nextStep.fallback.explanation': 'Deja que LUCA prepare un camino personalizado según tus objetivos — tú apruebas cada paso.',
+  'nextStep.fallback.cta': 'Camino personalizado',
+
+  // ── Aprobación del Camino personalizado → To-dos (K1.4 Defecto 3) ──
+  'journey.approved.syncedTitle': 'Agregado a tu lista de tareas',
+  'journey.approved.unsyncedTitle': 'Guardado en este dispositivo',
+  'journey.approved.syncedBody': 'Tus pasos personalizados están listos — mira tu lista de tareas abajo.',
+  'journey.approved.unsyncedBody': 'Guardamos tu plan en este dispositivo pero aún no pudimos agregarlo a tu lista de tareas.',
+  'journey.approved.retry': 'Agregar a mi lista de tareas',
+  'journey.approved.retrying': 'Agregando…',
+  'journey.approved.eyebrow': 'Aprobaste este camino',
+  'journey.approved.dismiss': 'Descartar',
+  'journey.todosToday': 'Hoy',
+  'journey.todosWeek': 'Esta semana',
+  'journey.todosMonth': 'Este mes',
 
   // ── Portal switching (Node E5) ──
   'portal.switchToPractitioner': 'Cambiar al portal de profesional',

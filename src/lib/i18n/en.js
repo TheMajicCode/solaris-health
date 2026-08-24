@@ -130,9 +130,62 @@ export default {
   'lang.spanish': 'Español',
 
   // ── Account / profile menu ──
+  'menu.account': 'Account',
+  'menu.accountMenu': 'Account menu',
   'menu.myProfile': 'My Profile',
   'menu.settings': 'Settings',
   'menu.identityData': 'Identity & Data',
+
+  // ── Dashboard · "Your Next Step" green card (K1.4 Defect 2 + Defect 5) ──
+  // Keys mirror the descriptor `key`s from src/lib/nextAction.js. Dynamic copy
+  // (the passport section label and journey step labels) is intentionally NOT
+  // keyed here so the resolver's live value is used verbatim.
+  'nextStep.unavailable.eyebrow': 'Your Next Step',
+  'nextStep.unavailable.title': "Couldn't load your next step",
+  'nextStep.unavailable.explanation': 'We had trouble reaching your latest activity. Check your connection and try again.',
+  'nextStep.unavailable.cta': 'Try again',
+  'nextStep.checkin.eyebrow': 'Your Next Step',
+  'nextStep.checkin.title': 'Check in with yourself',
+  'nextStep.checkin.explanation': 'A quick daily check-in helps LUCA notice what moves your vitality.',
+  'nextStep.checkin.cta': 'Check in today',
+  'nextStep.assessment.eyebrow': 'Your Next Step',
+  'nextStep.assessment.title': 'Map your health',
+  'nextStep.assessment.explanation': 'Take the Solaris Method assessment to reveal your 360° Mind, Body, Heart & Spirit map.',
+  'nextStep.assessment.cta': 'Start assessment',
+  'nextStep.passport.eyebrow': 'Your Next Step',
+  'nextStep.journey_growth.eyebrow': 'Your Next Step',
+  'nextStep.journey_growth.title': 'Continue your journey',
+  'nextStep.journey_growth.cta': 'Open Growth',
+  'nextStep.journey_journal.eyebrow': 'Your Next Step',
+  'nextStep.journey_journal.title': 'Reflect in your journal',
+  'nextStep.journey_journal.cta': 'Open Journal',
+  'nextStep.journey_media.eyebrow': 'Your Next Step',
+  'nextStep.journey_media.title': 'Your next practice',
+  'nextStep.journey_media.cta': 'Open Media',
+  'nextStep.journey_continue.eyebrow': 'Your Next Step',
+  'nextStep.journey_continue.title': 'Continue your journey',
+  'nextStep.journey_continue.cta': 'Continue journey',
+  'nextStep.booking.eyebrow': 'Your Next Step',
+  'nextStep.booking.title': 'A new time is waiting',
+  'nextStep.booking.explanation': 'Your practitioner proposed a session time — review and confirm to lock it in.',
+  'nextStep.booking.cta': 'Review & confirm',
+  'nextStep.fallback.eyebrow': 'Your Next Step',
+  'nextStep.fallback.title': 'Design your path',
+  'nextStep.fallback.explanation': 'Let LUCA draft a personalized journey shaped around your goals — you approve every step.',
+  'nextStep.fallback.cta': 'Personalized Journey',
+
+  // ── Personalized Journey approval → To-dos (K1.4 Defect 3) ──
+  'journey.approved.syncedTitle': 'Added to your To-do list',
+  'journey.approved.unsyncedTitle': 'Saved on this device',
+  'journey.approved.syncedBody': 'Your personalized steps are ready — see your To-do list below.',
+  'journey.approved.unsyncedBody': "We saved your plan on this device but couldn't add it to your To-do list yet.",
+  'journey.approved.retry': 'Add to my To-do list',
+  'journey.approved.retrying': 'Adding…',
+  'journey.approved.eyebrow': 'You approved this journey',
+  'journey.approved.dismiss': 'Dismiss',
+  'journey.todosToday': 'Today',
+  'journey.todosWeek': 'This week',
+  'journey.todosMonth': 'This month',
 
   // ── Portal switching (Node E5) ──
   'portal.switchToPractitioner': 'Switch to Practitioner portal',

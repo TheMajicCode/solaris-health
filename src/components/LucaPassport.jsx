@@ -41,6 +41,7 @@ import ExploreMarketplace from './marketplace/ExploreMarketplace.jsx';
 import ProviderApplication from './provider/ProviderApplication.jsx';
 import MyPractice from './provider/MyPractice.jsx';
 import PersonalizedJourneySheet from './luca/PersonalizedJourneySheet.jsx';
+import TopbarPopover from './ui/TopbarPopover.jsx';
 import resolveNextAction from '../lib/nextAction.js';
 import { pickAlternate, eligibleProviders } from '../lib/alternateProvider.js';
 import { curatedNavIntent } from '../lib/curatedDeepLink.js';
@@ -76,21 +77,64 @@ import AuraAdmin from './clinic/AuraAdmin.jsx';
 import AdaptiveOverlay from './ui/AdaptiveOverlay.jsx';
 import toast from 'react-hot-toast';
 
-/* NODE K1.3 §4 — When a personalized journey is approved it is saved on this
-   device (AppContext) AND seeded server-side into the shared member_todos
-   pipeline, idempotently, so guided and personalized journeys render the same.
-   Pre-cutover the shared backend has no seed endpoint (404) — that (and any
-   offline/transient failure) falls back silently to the device-local copy that
-   was just saved, so we never fake or block on server persistence. */
+/* K1.4 §7 — TRUTHFUL personalized-journey persistence.
+   Approving a personalized journey must create the SAME persisted member_todos
+   as a guided journey — and we only claim success once the server actually holds
+   them. Sequence: seed (idempotent, ON CONFLICT DO NOTHING) → refetch → VERIFY
+   every seeded step_key is present. Returns a result the caller uses to decide
+   whether to show success or a retryable error. Never resolves ok:true unless
+   the rows are confirmed present, so the UI never says "see your To-do list
+   below" beside an empty list. */
 async function seedApprovedPersonalizedPlan(block) {
+  const steps = personalizedSeedSteps(block);
+  if (!steps.length) return { ok: false, reason: 'empty', steps: [] };
   try {
-    const steps = personalizedSeedSteps(block);
-    if (!steps.length) return;
     await api.seedJourneyPlan({ journeyType: PERSONALIZED_JOURNEY_TYPE, steps });
-    window.dispatchEvent(new CustomEvent('solaris:progress'));
   } catch (_e) {
-    /* device-local copy already saved — no server seed available yet */
+    // Endpoint missing (pre-cutover 404) or transient failure — retain draft.
+    return { ok: false, reason: 'seed_failed', steps };
   }
+  // Refetch and verify the seeded steps are actually present server-side before
+  // reporting success (contract §7 steps 3–4).
+  try {
+    const r = await api.getTodos();
+    const have = new Set((r?.todos || [])
+      .filter((t) => t.journey_type === PERSONALIZED_JOURNEY_TYPE)
+      .map((t) => t.step_key));
+    const present = steps.every((s) => have.has(s.step_key));
+    if (!present) return { ok: false, reason: 'verify_failed', steps };
+    window.dispatchEvent(new CustomEvent('solaris:progress'));
+    return { ok: true, reason: 'seeded', steps, todos: r.todos || [] };
+  } catch (_e) {
+    return { ok: false, reason: 'verify_failed', steps };
+  }
+}
+
+/* K1.4 §7 — the ONE truthful approval flow, shared by every onApprove site:
+   approve → seed → refetch → VERIFY present → ONLY THEN success + navigate.
+   On failure retain the draft locally (approval is never lost) and show a
+   retryable error — never claim To-dos that aren't there. */
+async function runApprovePersonalizedJourney({ block, setApprovedJourney, setJourneyOpen, go }) {
+  const t = toast.loading('Adding your steps to your To-do list…');
+  const res = await seedApprovedPersonalizedPlan(block);
+  if (res.ok) {
+    setApprovedJourney?.({ ...block, seeded: true, seededAt: new Date().toISOString() });
+    setJourneyOpen?.(false);
+    toast.success('Your journey is ready — steps added to your To-do list', { id: t });
+    go?.('growth');
+    setTimeout(() => window.dispatchEvent(new CustomEvent('solaris:focus-todos')), 400);
+  } else {
+    setApprovedJourney?.({ ...block, seeded: false });
+    setJourneyOpen?.(false);
+    toast.error(
+      res.reason === 'empty'
+        ? 'This plan has no steps to add yet.'
+        : 'Saved on this device, but we couldn’t sync your steps yet. Open Growth to try again.',
+      { id: t },
+    );
+    go?.('growth');
+  }
+  return res;
 }
 
 /* ============================== DESIGN SYSTEM ============================== */
@@ -1405,6 +1449,11 @@ function DashboardPage({ user, go }) {
   const [recsLoading, setRecsLoading] = useState(true);
   const [journeys, setJourneys] = useState([]);
   const [loading, setLoading] = useState(true);
+  // §6 — true when the Next Step resolver inputs (check-ins / journeys /
+  // bookings / completeness) could not be loaded, so the card shows an explicit
+  // retryable "couldn't load" state instead of a fabricated "Check in today".
+  const [dataError, setDataError] = useState(false);
+  const [dashboardRefreshing, setDashboardRefreshing] = useState(false);
   const [checkinOpen, setCheckinOpen] = useState(false);
   const [consentReqs, setConsentReqs] = useState([]);
   const [consentBusy, setConsentBusy] = useState('');
@@ -1438,18 +1487,29 @@ function DashboardPage({ user, go }) {
   // fires, so the Next Step card rotates immediately without a reload or
   // next-day rollover. getCheckins() is normalized in exactly one place here.
   const reloadDashboardState = useCallback(async () => {
-    const [r, ci, jr, bk, comp] = await Promise.all([
-      api.getRewards().catch(() => ({ events: [], total: 0 })),
-      api.getCheckins().catch(() => ({ checkins: [] })),
-      api.getMyJourneys().catch(() => ({ journeys: [] })),
-      api.getMyBookings().catch(() => ({ bookings: [] })),
-      api.getPassportCompleteness().catch(() => null),
+    setDashboardRefreshing(true);
+    // allSettled so ONE failing resolver input does not silently become an
+    // empty array (which the resolver would misread as "no check-in today").
+    // Rewards is best-effort chrome, NOT a Next Step input, so it never trips
+    // the unavailable state.
+    const [r, ci, jr, bk, comp] = await Promise.allSettled([
+      api.getRewards(),
+      api.getCheckins(),
+      api.getMyJourneys(),
+      api.getMyBookings(),
+      api.getPassportCompleteness(),
     ]);
-    setRewards(r || { events: [], total: 0 });
-    setCheckins(ci?.checkins || []);
-    setJourneys(jr?.journeys || []);
-    setMyBookings(bk?.bookings || []);
-    setCompleteness(comp || null);
+    if (r.status === 'fulfilled') setRewards(r.value || { events: [], total: 0 });
+    // A Next Step input failed → do NOT clobber last-known-good state with empty;
+    // flag the retryable unavailable state instead.
+    const inputsFailed = [ci, jr, bk, comp].some((x) => x.status === 'rejected');
+    if (ci.status === 'fulfilled') setCheckins(ci.value?.checkins || []);
+    if (jr.status === 'fulfilled') setJourneys(jr.value?.journeys || []);
+    if (bk.status === 'fulfilled') setMyBookings(bk.value?.bookings || []);
+    if (comp.status === 'fulfilled') setCompleteness(comp.value || null);
+    setDataError(inputsFailed);
+    setDashboardRefreshing(false);
+    return !inputsFailed;
   }, []);
   // Preserve the old name for the check-in modal callback.
   const reloadDaily = reloadDashboardState;
@@ -1458,28 +1518,24 @@ function DashboardPage({ user, go }) {
     let alive = true;
     (async () => {
       try {
-        const [l, r, c, ci] = await Promise.all([
+        // Non-resolver chrome (assessment card, contributions). Check-ins,
+        // journeys, bookings and completeness — the Next Step resolver inputs —
+        // are owned solely by reloadDashboardState so their load failures are
+        // tracked in ONE place (dataError) rather than silently emptied here.
+        const [l, c] = await Promise.all([
           api.getLatestAssessment().catch(() => null),
-          api.getRewards().catch(() => ({ events: [], total: 0 })),
           api.getContributions().catch(() => []),
-          api.getCheckins().catch(() => ({ checkins: [] })),
         ]);
         if (!alive) return;
-        setLatest(l); setRewards(r || { events: [], total: 0 });
-        setContribs(Array.isArray(c) ? c : []); setCheckins(ci?.checkins || []);
+        setLatest(l);
+        setContribs(Array.isArray(c) ? c : []);
       } finally { alive && setLoading(false); }
     })();
     loadConsents();
+    // Single authoritative load of every Next Step resolver input (sets dataError).
+    reloadDashboardState();
     return () => { alive = false; };
-  }, []);
-
-  useEffect(() => {
-    let alive = true;
-    api.getMyJourneys()
-      .then((r) => { if (alive) setJourneys(r?.journeys || []); })
-      .catch(() => { if (alive) setJourneys([]); });
-    return () => { alive = false; };
-  }, []);
+  }, [reloadDashboardState]);
 
   useEffect(() => {
     let alive = true;
@@ -1496,18 +1552,9 @@ function DashboardPage({ user, go }) {
     return () => { alive = false; };
   }, []);
 
-  useEffect(() => {
-    let alive = true;
-    Promise.all([
-      api.getPassportCompleteness().catch(() => null),
-      api.getMyBookings().catch(() => ({ bookings: [] })),
-    ]).then(([comp, bk]) => {
-      if (!alive) return;
-      setCompleteness(comp || null);
-      setMyBookings(bk?.bookings || []);
-    });
-    return () => { alive = false; };
-  }, []);
+  // (completeness + bookings are loaded by reloadDashboardState — the single
+  // authoritative Next Step loader that also tracks dataError — so there is no
+  // separate silent-empty fetch here.)
 
   // Phase 2 — recompute "Your Next Step" the instant work is completed anywhere:
   // a check-in (solaris:checkin, dispatched from every check-in surface) or a
@@ -1635,6 +1682,7 @@ function DashboardPage({ user, go }) {
           recs={recs} loading={recsLoading} go={go} user={user} vitality={vitality} focus={focus}
           checkins={checkins} completeness={completeness} journeys={journeys} bookings={myBookings}
           onOpenJourney={() => setJourneyOpen(true)}
+          dataError={dataError} onRetry={reloadDashboardState} refreshing={dashboardRefreshing}
         />
 
         {/* Active journey */}
@@ -1770,14 +1818,7 @@ function DashboardPage({ user, go }) {
         onClose={() => setJourneyOpen(false)}
         profile={appProfile || {}}
         locale={locale || 'en'}
-        onApprove={(block) => {
-          // Save on this device (AppContext) AND seed the shared Growth pipeline
-          // idempotently; the seed falls back silently pre-cutover / offline.
-          setApprovedJourney?.(block);
-          setJourneyOpen(false);
-          seedApprovedPersonalizedPlan(block);
-          go('growth');
-        }}
+        onApprove={(block) => runApprovePersonalizedJourney({ block, setApprovedJourney, setJourneyOpen, go })}
       />
     </div>
   );
@@ -1807,6 +1848,7 @@ function pickJourney(focus) {
 const NEXT_ACTION_ICONS = {
   checkin: Zap, assessment: Activity, passport: ShieldCheck, growth: Compass,
   journal: BookOpen, media: Headphones, booking: CalendarClock, journey: Sparkles,
+  retry: RefreshCw,
 };
 
 // Map a raw provider row (api.getProviders) to the curated card shape.
@@ -1832,6 +1874,7 @@ function providerCardFrom(p) {
 function LucaRecommends({
   recs, loading, go, user, vitality = 0, focus = [],
   checkins = [], completeness = null, journeys = [], bookings = [], onOpenJourney,
+  dataError = false, onRetry, refreshing = false,
 }) {
   const { startRetake, approvedJourney } = useApp() || {};
   const { t } = useLocale() || {};
@@ -1875,12 +1918,15 @@ function LucaRecommends({
 
   // ── Card 1: "Your Next Step" (green) — resolved by the ONE centralized resolver ──
   const action = resolveNextAction({
-    vitality, completeness, checkins, journeys, approvedJourney, bookings, now: new Date(),
+    vitality, completeness, checkins, journeys, approvedJourney, bookings, dataError, now: new Date(),
   });
   const NsIcon = NEXT_ACTION_ICONS[action.icon] || Zap;
   const runNextStep = () => {
     const d = action.destination || {};
     switch (d.type) {
+      case 'retry':
+        onRetry?.();
+        break;
       case 'checkin':
         window.dispatchEvent(new CustomEvent('solaris:navigate', { detail: { tab: 'health', action: 'checkin' } }));
         break;
@@ -1933,15 +1979,16 @@ function LucaRecommends({
         <div className="card flat" data-testid="luca-next-step" style={{ padding: 16, background: 'linear-gradient(165deg,#0E5C57,#0A413D)', color: '#E7F8F3', border: 'none', display: 'flex', flexDirection: 'column' }}>
           <div className="row gap-2" style={{ alignItems: 'center' }}>
             <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(159,231,214,.16)', display: 'grid', placeItems: 'center', flex: 'none' }}><NsIcon size={17} color="#9FE7D6" /></div>
-            <div className="tiny" style={{ color: 'rgba(231,248,243,.75)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 700 }}>{action.eyebrow}</div>
+            <div className="tiny" style={{ color: 'rgba(231,248,243,.75)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 700 }}>{tl('nextStep.' + action.key + '.eyebrow', action.eyebrow)}</div>
           </div>
-          <div className="dp f7" style={{ fontSize: 15.5, marginTop: 11 }}>{action.title}</div>
-          <div style={{ fontSize: 13, lineHeight: 1.55, color: 'rgba(231,248,243,.92)', marginTop: 6, flex: 1 }}>{action.explanation}</div>
+          <div className="dp f7" style={{ fontSize: 15.5, marginTop: 11 }}>{tl('nextStep.' + action.key + '.title', action.title)}</div>
+          <div style={{ fontSize: 13, lineHeight: 1.55, color: 'rgba(231,248,243,.92)', marginTop: 6, flex: 1 }}>{tl('nextStep.' + action.key + '.explanation', action.explanation)}</div>
           <button
             onClick={runNextStep}
-            style={{ marginTop: 13, alignSelf: 'flex-start', padding: '8px 16px', borderRadius: 10, cursor: 'pointer', border: '1px solid rgba(159,231,214,.35)', background: 'rgba(159,231,214,.14)', color: '#E7F8F3', fontSize: 13, fontWeight: 600, display: 'inline-flex', gap: 6, alignItems: 'center' }}
+            disabled={refreshing}
+            style={{ marginTop: 13, alignSelf: 'flex-start', padding: '8px 16px', borderRadius: 10, cursor: refreshing ? 'default' : 'pointer', opacity: refreshing ? 0.7 : 1, border: '1px solid rgba(159,231,214,.35)', background: 'rgba(159,231,214,.14)', color: '#E7F8F3', fontSize: 13, fontWeight: 600, display: 'inline-flex', gap: 6, alignItems: 'center' }}
           >
-            {action.cta} <ArrowRight size={14} />
+            {tl('nextStep.' + action.key + '.cta', action.cta)} <ArrowRight size={14} />
           </button>
         </div>
 
@@ -3398,7 +3445,7 @@ function CoachPage({ user, go }) {
         onClose={() => setJourneyOpen(false)}
         profile={appProfile}
         locale={locale}
-        onApprove={(block) => { setApprovedJourney?.(block); setJourneyOpen(false); seedApprovedPersonalizedPlan(block); go('growth'); }}
+        onApprove={(block) => runApprovePersonalizedJourney({ block, setApprovedJourney, setJourneyOpen, go })}
       />
 
       {/* Right sidebar */}
@@ -3663,36 +3710,65 @@ function HabitTracker({ habits, ticked, onToggle, onAdd, onDelete }) {
    refresh, but is NOT synced to any server — the card states that plainly and
    preserves the record of the member's own approval. Dismiss deletes the
    device-local copy for this account. */
-function ApprovedJourneyCard({ journey, onDismiss }) {
+function ApprovedJourneyCard({ journey, onDismiss, todosPresent = false, onRetrySeed, retrying = false }) {
+  const { t } = useLocale();
+  const tl = (k, fallback) => { const v = t ? t(k) : null; return v && v !== k ? v : fallback; };
   if (!journey) return null;
   const when = journey.approvedAt
     ? new Date(journey.approvedAt).toLocaleString()
     : (journey.savedAt ? new Date(journey.savedAt).toLocaleString() : null);
+  // K1.4 §7 — a plan is "synced" only when its steps are confirmed present in
+  // the server-backed To-do list. We only say "see your To-do list below" when
+  // that is actually true; otherwise we surface a retryable state instead.
+  const synced = journey.seeded === true && todosPresent;
+  const stepCount = (journey.steps || []).length;
   return (
     <Card className="lg" data-testid="approved-journey-card"
       style={{ border: '1px solid var(--brand,#06403B)', background: 'rgba(6,64,59,.04)' }}>
       <div className="between" style={{ alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
         <div>
-          <SectionHead eyebrow="You approved this journey" title={journey.title} />
+          <SectionHead eyebrow={tl('journey.approved.eyebrow', 'You approved this journey')} title={journey.title} />
           <div className="tiny muted" style={{ marginTop: -6 }}>
-            Saved on this device · not synced to any server. You approved it{when ? ` on ${when}` : ''}.
+            {synced
+              ? `Added to your To-do list. You approved it${when ? ` on ${when}` : ''}.`
+              : `Saved on this device. You approved it${when ? ` on ${when}` : ''}.`}
           </div>
         </div>
         <button type="button" onClick={onDismiss} aria-label="Dismiss approved journey"
           className="tiny" style={{ border: '1px solid var(--line)', background: '#fff', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', flex: 'none' }}>
-          Dismiss
+          {tl('journey.approved.dismiss', 'Dismiss')}
         </button>
       </div>
-      {/* §4 — a COMPACT summary, not a large static bullet list. The actionable
-          steps live in the To-do list below (Today / This week / This month). */}
-      <div className="tiny muted" style={{ margin: '8px 0 2px' }}>
-        {(journey.steps || []).length} focus step{(journey.steps || []).length === 1 ? '' : 's'}
-        {journey.cadence && journey.cadence !== 'personalized' ? ` · ${journey.cadence} rhythm` : ' · your own rhythm'}
-        {' '}— see your To-do list below.
-      </div>
-      <div className="tiny muted2">
-        {journey.source ? `${journey.source} · ` : ''}Nothing runs automatically — each step is yours to start.
-      </div>
+      {/* §7 — a COMPACT summary, not a large static bullet list. When synced, the
+          actionable steps live in the To-do list below (Today / This week / This
+          month). When NOT synced we never claim a To-do list that isn't there —
+          we offer a retry instead. */}
+      {synced ? (
+        <>
+          <div className="tiny muted" style={{ margin: '8px 0 2px' }} data-testid="approved-journey-synced">
+            {stepCount} focus step{stepCount === 1 ? '' : 's'}
+            {journey.cadence && journey.cadence !== 'personalized' ? ` · ${journey.cadence} rhythm` : ' · your own rhythm'}
+            {' '}— see your To-do list below.
+          </div>
+          <div className="tiny muted2">
+            {journey.source ? `${journey.source} · ` : ''}Nothing runs automatically — each step is yours to start.
+          </div>
+        </>
+      ) : (
+        <div style={{ margin: '10px 0 2px' }} data-testid="approved-journey-unsynced">
+          <div className="tiny muted" style={{ marginBottom: 8 }}>
+            {stepCount} focus step{stepCount === 1 ? '' : 's'} approved. We couldn’t add them to your
+            To-do list yet — you can try again.
+          </div>
+          {onRetrySeed && (
+            <button type="button" onClick={onRetrySeed} disabled={retrying}
+              className="tiny f7"
+              style={{ display: 'inline-flex', gap: 6, alignItems: 'center', border: '1px solid var(--brand,#06403B)', background: '#fff', color: 'var(--brand,#06403B)', borderRadius: 8, padding: '7px 14px', cursor: retrying ? 'default' : 'pointer', opacity: retrying ? 0.7 : 1 }}>
+              <RefreshCw size={13} /> {retrying ? tl('journey.approved.retrying', 'Adding…') : tl('journey.approved.retry', 'Add to my To-do list')}
+            </button>
+          )}
+        </div>
+      )}
     </Card>
   );
 }
@@ -3717,6 +3793,8 @@ function JournalPage({ user, go, forcedView, hideToggle }) {
   const [todos, setTodos] = useState([]);
   const [habits, setHabits] = useState([]);
   const [ticked, setTicked] = useState({});
+  const [retryingSeed, setRetryingSeed] = useState(false);
+  const todoListRef = useRef(null);
 
   const loadGrowth = useCallback(async () => {
     const today = new Date().toISOString().slice(0, 10);
@@ -3743,6 +3821,43 @@ function JournalPage({ user, go, forcedView, hideToggle }) {
     })();
     return () => { alive = false; };
   }, [loadGrowth]);
+
+  // K1.4 §7 step 6 — after a personalized journey is approved & seeded, the
+  // Dashboard navigates here and fires solaris:focus-todos. Scroll the To-do
+  // list into view and move focus to it so the member sees their new steps.
+  useEffect(() => {
+    const focusTodos = () => {
+      const el = todoListRef.current;
+      if (!el) return;
+      try { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch { el.scrollIntoView(); }
+      el.setAttribute('tabindex', '-1');
+      try { el.focus({ preventScroll: true }); } catch { /* older browsers */ }
+    };
+    window.addEventListener('solaris:focus-todos', focusTodos);
+    return () => window.removeEventListener('solaris:focus-todos', focusTodos);
+  }, []);
+
+  // Retry the server seed for a draft that was retained after a failed approval
+  // (contract §7 retryable error). On success the To-do list refetches so the
+  // approved-journey card flips to its synced state.
+  const retrySeedPlan = useCallback(async () => {
+    if (!approvedJourney || retryingSeed) return;
+    setRetryingSeed(true);
+    const t = toast.loading('Adding your steps to your To-do list…');
+    try {
+      const res = await seedApprovedPersonalizedPlan(approvedJourney);
+      if (res.ok) {
+        setApprovedJourney?.({ ...approvedJourney, seeded: true, seededAt: new Date().toISOString() });
+        await loadGrowth();
+        toast.success('Steps added to your To-do list', { id: t });
+        setTimeout(() => window.dispatchEvent(new CustomEvent('solaris:focus-todos')), 200);
+      } else {
+        toast.error('Still couldn’t sync your steps. Please try again in a moment.', { id: t });
+      }
+    } finally {
+      setRetryingSeed(false);
+    }
+  }, [approvedJourney, retryingSeed, setApprovedJourney, loadGrowth]);
 
   // ── To-Do handlers ──
   const toggleTodo = async (t) => {
@@ -3833,6 +3948,9 @@ function JournalPage({ user, go, forcedView, hideToggle }) {
 
   const firstName = user?.firstName || 'friend';
   const journeyType = todos.find((t) => t.journey_type)?.journey_type || null;
+  // Are the approved personalized-journey steps actually present in the server
+  // To-do list? Used so the approved-journey card only says "see below" truthfully.
+  const personalizedTodosPresent = todos.some((t) => t.journey_type === PERSONALIZED_JOURNEY_TYPE);
 
   return (
     <div className="col" style={{ gap: 20 }}>
@@ -3872,8 +3990,15 @@ function JournalPage({ user, go, forcedView, hideToggle }) {
           </div>
         ) : (
           <>
-          <ApprovedJourneyCard journey={approvedJourney} onDismiss={() => setApprovedJourney?.(null)} />
+          <ApprovedJourneyCard
+            journey={approvedJourney}
+            onDismiss={() => setApprovedJourney?.(null)}
+            todosPresent={personalizedTodosPresent}
+            onRetrySeed={retrySeedPlan}
+            retrying={retryingSeed}
+          />
           <div className="grid-2-1" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.3fr) minmax(0,1fr)', gap: 20, alignItems: 'start' }}>
+            <div ref={todoListRef} style={{ outline: 'none' }}>
             <GrowthTodos
               todos={todos}
               journeyType={journeyType}
@@ -3883,6 +4008,7 @@ function JournalPage({ user, go, forcedView, hideToggle }) {
               onDelete={removeTodo}
               go={go}
             />
+            </div>
             <HabitTracker
               habits={habits}
               ticked={ticked}
@@ -6729,49 +6855,13 @@ const LOCALE_NAMES = { en: 'English', es: 'Español (vista previa)' };
 // viewport at every phone width (360–430). Tokenized width, ≥16px edge
 // clearance, dynamic-viewport max-height with internal scroll, safe-area
 // spacing, ≥48px rows, focus trap, Escape/outside-tap close, and focus return.
-const LANG_FOCUSABLE = 'button:not([disabled]),[tabindex]:not([tabindex="-1"])';
 function LanguageToggle() {
   const { locale, setLocale, t } = useLocale();
   const tl = (k, fallback) => { const v = t ? t(k) : null; return v && v !== k ? v : fallback; };
   const langLabel = tl('lang.label', 'Language');
   const [open, setOpen] = useState(false);
   const btnRef = useRef(null);
-  const panelRef = useRef(null);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const prevFocus = document.activeElement;
-    // Move focus into the panel.
-    const panel = panelRef.current;
-    const focusables = panel ? panel.querySelectorAll(LANG_FOCUSABLE) : [];
-    if (focusables.length) focusables[0].focus(); else if (panel) panel.focus();
-
-    const onDocPointer = (e) => {
-      if (panelRef.current && panelRef.current.contains(e.target)) return;
-      if (btnRef.current && btnRef.current.contains(e.target)) return;
-      setOpen(false);
-    };
-    const onKey = (e) => {
-      if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); return; }
-      if (e.key !== 'Tab' || !panel) return;
-      const nodes = Array.from(panel.querySelectorAll(LANG_FOCUSABLE)).filter((n) => n.offsetParent !== null);
-      if (!nodes.length) return;
-      const first = nodes[0]; const last = nodes[nodes.length - 1];
-      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-    };
-    document.addEventListener('mousedown', onDocPointer);
-    document.addEventListener('touchstart', onDocPointer);
-    window.addEventListener('keydown', onKey, true);
-    return () => {
-      document.removeEventListener('mousedown', onDocPointer);
-      document.removeEventListener('touchstart', onDocPointer);
-      window.removeEventListener('keydown', onKey, true);
-      // Focus return.
-      if (prevFocus && typeof prevFocus.focus === 'function') prevFocus.focus();
-      else if (btnRef.current) btnRef.current.focus();
-    };
-  }, [open]);
+  const close = useCallback(() => setOpen(false), []);
 
   const choose = (loc) => { setLocale(loc); setOpen(false); };
 
@@ -6791,55 +6881,30 @@ function LanguageToggle() {
         <Globe size={18} />
         <span aria-hidden="true" style={{ position: 'absolute', bottom: 3, right: 3, fontSize: 8, fontWeight: 800, letterSpacing: 0.3, color: 'var(--ink)' }}>{LOCALE_LABELS[locale] || locale.toUpperCase()}</span>
       </button>
-      {open && typeof document !== 'undefined' && document.body && createPortal(
-        <div
-          className="lang-pop-scrim"
-          onClick={() => setOpen(false)}
-          style={{ position: 'fixed', inset: 0, zIndex: 6200, background: 'transparent' }}
-        >
-          <div
-            ref={panelRef}
-            role="menu"
-            aria-label={langLabel}
-            data-testid="language-popover"
-            tabIndex={-1}
-            onClick={(e) => e.stopPropagation()}
-            className="lang-pop"
-            style={{
-              position: 'fixed',
-              top: 'calc(env(safe-area-inset-top, 0px) + 64px)',
-              right: 'max(16px, env(safe-area-inset-right, 0px))',
-              width: 'min(320px, calc(100vw - 32px))',
-              maxHeight: 'min(70dvh, calc(100dvh - 96px - env(safe-area-inset-bottom, 0px)))',
-              overflowY: 'auto',
-              WebkitOverflowScrolling: 'touch',
-              background: '#fff',
-              border: '1px solid var(--line,#e3ece8)',
-              borderRadius: 16,
-              boxShadow: '0 18px 44px rgba(10,43,41,.22)',
-              padding: 8,
-              paddingBottom: 'calc(8px + env(safe-area-inset-bottom, 0px))',
-            }}
+      <TopbarPopover
+        id="language"
+        open={open}
+        onClose={close}
+        ariaLabel={langLabel}
+        testId="language-popover"
+        triggerRef={btnRef}
+      >
+        {enabledLocales().map((loc) => (
+          <button
+            key={loc}
+            role="menuitemradio"
+            aria-checked={locale === loc}
+            type="button"
+            onClick={() => choose(loc)}
+            style={{ width: '100%', textAlign: 'left', minHeight: 48, padding: '12px 12px', borderRadius: 10, cursor: 'pointer', background: locale === loc ? 'var(--surface-2,#eafbf4)' : 'transparent', border: 'none', color: 'var(--ink)', fontSize: 14, fontWeight: locale === loc ? 700 : 500, display: 'flex', alignItems: 'center', gap: 8 }}
           >
-            {enabledLocales().map((loc) => (
-              <button
-                key={loc}
-                role="menuitemradio"
-                aria-checked={locale === loc}
-                type="button"
-                onClick={() => choose(loc)}
-                style={{ width: '100%', textAlign: 'left', minHeight: 48, padding: '12px 12px', borderRadius: 10, cursor: 'pointer', background: locale === loc ? 'var(--surface-2,#eafbf4)' : 'transparent', border: 'none', color: 'var(--ink)', fontSize: 14, fontWeight: locale === loc ? 700 : 500, display: 'flex', alignItems: 'center', gap: 8 }}
-              >
-                <Globe size={16} className="t-teal" style={{ flex: 'none' }} /> <span style={{ minWidth: 0, whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{LOCALE_NAMES[loc] || loc}</span>
-                {locale === loc && <BadgeCheck size={15} className="t-teal" style={{ marginLeft: 'auto', flex: 'none' }} />}
-              </button>
-            ))}
-            {/* §C — Spanish preview disclosure wraps normally (never a narrow second column). */}
-            <div style={{ marginTop: 6 }}><SpanishPreviewDisclosure /></div>
-          </div>
-        </div>,
-        document.body
-      )}
+            <Globe size={16} className="t-teal" style={{ flex: 'none' }} /> <span style={{ minWidth: 0, whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{LOCALE_NAMES[loc] || loc}</span>
+            {locale === loc && <BadgeCheck size={15} className="t-teal" style={{ marginLeft: 'auto', flex: 'none' }} />}
+          </button>
+        ))}
+        {/* §C — Spanish preview disclosure wraps normally (never a narrow second column). */}
+        <div style={{ marginTop: 6 }}><SpanishPreviewDisclosure /></div>
+      </TopbarPopover>
     </div>
   );
 }
@@ -6848,7 +6913,9 @@ function ProfileMenu({ user, displayName, go, logout }) {
   const { t } = useLocale() || {};
   const tl = (k, fallback) => { const v = t ? t(k) : null; return v && v !== k ? v : fallback; };
   const [open, setOpen] = useState(false);
-  const rootRef = useRef(null);
+  const btnRef = useRef(null);
+  const close = useCallback(() => setOpen(false), []);
+  const accountLabel = tl('menu.account', 'Account');
   const items = [
     { key: 'profile', label: tl('menu.myProfile', 'My Profile'), icon: UserCog, onSelect: () => go('account', 'profile') },
     { key: 'settings', label: tl('menu.settings', 'Settings'), icon: Settings, onSelect: () => go('account', 'preferences') },
@@ -6856,29 +6923,16 @@ function ProfileMenu({ user, displayName, go, logout }) {
     { key: 'signout', label: tl('action.signOut', 'Sign out'), icon: LogOut, danger: true, onSelect: () => logout?.() },
   ];
 
-  useEffect(() => {
-    if (!open) return undefined;
-    const onDocClick = (e) => { if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false); };
-    const onKey = (e) => { if (e.key === 'Escape') { setOpen(false); } };
-    document.addEventListener('mousedown', onDocClick);
-    document.addEventListener('touchstart', onDocClick);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDocClick);
-      document.removeEventListener('touchstart', onDocClick);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [open]);
-
   const choose = (it) => { setOpen(false); it.onSelect(); };
 
   return (
-    <div ref={rootRef} style={{ position: 'relative' }}>
+    <div style={{ position: 'relative' }}>
       <button
+        ref={btnRef}
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label="Account menu"
+        aria-label={tl('menu.accountMenu', 'Account menu')}
         onClick={() => setOpen((v) => !v)}
         style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', borderRadius: '50%', lineHeight: 0 }}
       >
@@ -6886,31 +6940,36 @@ function ProfileMenu({ user, displayName, go, logout }) {
           ? <img src={user.avatarUrl} alt="" style={{ width: 39, height: 39, borderRadius: '50%', objectFit: 'cover' }} />
           : <Avatar name={displayName} size={39} />}
       </button>
-      {open && (
-        <div role="menu" aria-label="Account" style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', minWidth: 216, background: '#fff', border: '1px solid var(--line,#e3ece8)', borderRadius: 14, boxShadow: '0 12px 34px rgba(10,43,41,.18)', padding: 8, zIndex: 60 }}>
-          <div style={{ padding: '8px 12px 10px', borderBottom: '1px solid var(--line,#e3ece8)', marginBottom: 6 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</div>
-            <div className="tiny muted" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.email}</div>
-          </div>
-          {items.map((it) => {
-            const Icon = it.icon;
-            return (
-              <button
-                key={it.key}
-                role="menuitem"
-                type="button"
-                onClick={() => choose(it)}
-                className="row"
-                style={{ width: '100%', textAlign: 'left', gap: 10, alignItems: 'center', padding: '10px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'transparent', color: it.danger ? '#b4432f' : 'var(--ink)', fontSize: 13.5, fontWeight: 600 }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = '#f1f5f3'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-              >
-                <Icon size={16} strokeWidth={2} /> {it.label}
-              </button>
-            );
-          })}
+      <TopbarPopover
+        id="account"
+        open={open}
+        onClose={close}
+        ariaLabel={accountLabel}
+        testId="account-popover"
+        triggerRef={btnRef}
+      >
+        <div style={{ padding: '8px 12px 10px', borderBottom: '1px solid var(--line,#e3ece8)', marginBottom: 6 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</div>
+          <div className="tiny muted" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.email}</div>
         </div>
-      )}
+        {items.map((it) => {
+          const Icon = it.icon;
+          return (
+            <button
+              key={it.key}
+              role="menuitem"
+              type="button"
+              onClick={() => choose(it)}
+              className="row"
+              style={{ width: '100%', textAlign: 'left', gap: 10, alignItems: 'center', minHeight: 44, padding: '10px 12px', borderRadius: 10, border: 'none', cursor: 'pointer', background: 'transparent', color: it.danger ? '#b4432f' : 'var(--ink)', fontSize: 13.5, fontWeight: 600 }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#f1f5f3'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+            >
+              <Icon size={16} strokeWidth={2} style={{ flex: 'none' }} /> <span style={{ minWidth: 0, whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{it.label}</span>
+            </button>
+          );
+        })}
+      </TopbarPopover>
     </div>
   );
 }
@@ -7290,7 +7349,7 @@ export default function LucaPassport() {
         <aside className={`sidebar ${drawer ? 'open' : ''}`}>
           <div className="brand">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <img src="/solaris-logo.png" alt="Solaris" style={{ width: 42, height: 42, objectFit: 'contain', filter: 'drop-shadow(0 0 8px rgba(47,190,159,0.5))' }} />
+              <img src="/solaris-logo-v2.png" alt="Solaris" style={{ width: 42, height: 42, objectFit: 'contain', filter: 'drop-shadow(0 0 8px rgba(47,190,159,0.5))' }} />
               <div>
                 <div className="brand-name" style={{ fontSize: 15 }}>SOLARIS</div>
                 <div className="brand-sub" style={{ color: portal.accent }}>{portal.sub}</div>

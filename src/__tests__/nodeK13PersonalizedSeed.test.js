@@ -69,14 +69,17 @@ describe('wiring — approval seeds the server AND keeps the device-local copy',
     expect(api).toMatch(/seedJourneyPlan\(body\)\s*\{[^}]*\/journey\/todos\/seed-plan[^}]*method:\s*'POST'/);
   });
 
-  it('LucaPassport wires seedApprovedPersonalizedPlan at BOTH onApprove sites, after setApprovedJourney', () => {
+  it('LucaPassport wires the truthful approval flow at BOTH onApprove sites (K1.4 §7)', () => {
     const src = read('../components/LucaPassport.jsx');
-    // helper defined once, falls back silently
+    // helper defined once; seeds via the stable endpoint payload
     expect(src).toMatch(/async function seedApprovedPersonalizedPlan\(block\)/);
     expect(src).toMatch(/api\.seedJourneyPlan\(\{\s*journeyType: PERSONALIZED_JOURNEY_TYPE, steps\s*\}\)/);
-    // both call sites keep the device-local save (setApprovedJourney) then seed
-    const calls = src.match(/setApprovedJourney\?\.\(block\);[\s\S]*?seedApprovedPersonalizedPlan\(block\)/g) || [];
+    // K1.4: both onApprove sites delegate to the ONE shared truthful handler
+    // (approve → seed → refetch → verify → success), not a fire-and-forget seed.
+    const calls = src.match(/onApprove=\{\(block\) => runApprovePersonalizedJourney\(\{ block, setApprovedJourney, setJourneyOpen, go \}\)\}/g) || [];
     expect(calls.length).toBe(2);
+    // the shared handler only claims success after a verified refetch
+    expect(src).toMatch(/async function runApprovePersonalizedJourney/);
   });
 
   it('backend seed-plan endpoint is idempotent + allowlist-validated + no migration', () => {

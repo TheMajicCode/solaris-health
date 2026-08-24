@@ -30,15 +30,18 @@ describe('RC1 item5 — Growth surfaces the approved draft', () => {
     expect(CTX_SRC).toMatch(/localStorage\.removeItem/);    // dismiss/delete removes it
   });
 
-  it('LucaPassport navigates to Growth and stores the approved journey', () => {
+  it('LucaPassport navigates to Growth and stores the approved journey (K1.4 truthful flow)', () => {
     expect(PASSPORT_SRC).toMatch(/onApprove=\{\(block\)/);
-    expect(PASSPORT_SRC).toMatch(/setApprovedJourney\?\.\(block\)/);
-    expect(PASSPORT_SRC).toMatch(/go\('growth'\)/);
+    // K1.4 §7 — approval now runs the shared truthful handler, which stores the
+    // draft (spread with seeded flag) and navigates to Growth on success.
+    expect(PASSPORT_SRC).toMatch(/runApprovePersonalizedJourney\(\{ block, setApprovedJourney, setJourneyOpen, go \}\)/);
+    expect(PASSPORT_SRC).toMatch(/setApprovedJourney\?\.\(\{ \.\.\.block, seeded: true/);
+    expect(PASSPORT_SRC).toMatch(/go\?\.\('growth'\)/);
   });
 
   it('ApprovedJourneyCard exists and is rendered in the Growth view', () => {
     expect(PASSPORT_SRC).toMatch(/function ApprovedJourneyCard/);
     expect(PASSPORT_SRC).toMatch(/data-testid="approved-journey-card"/);
-    expect(PASSPORT_SRC).toMatch(/<ApprovedJourneyCard journey=\{approvedJourney\}/);
+    expect(PASSPORT_SRC).toMatch(/<ApprovedJourneyCard[\s\S]*?journey=\{approvedJourney\}/);
   });
 });
