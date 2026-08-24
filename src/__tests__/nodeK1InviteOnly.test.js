@@ -1,10 +1,17 @@
 /**
- * NODE K1 — §G invite-only Beta boundary (frontend welcome/access screen).
+ * NODE K1.1 — §3 invite-only Beta boundary (frontend welcome/access screen).
  *
- * Source-contract assertions on src/flows/Auth.jsx — consistent with the other
- * nodeK1 source-contract tests. They prove the welcome screen shows the invite-
- * only boundary and links to the waitlist via ENV configuration only (never a
- * hardcoded private/temporary URL), and that the CTA is omitted when unconfigured.
+ * Source-contract assertions on src/flows/Auth.jsx. As of K1.1 the invite-only
+ * boundary and waitlist URL are NO LONGER read from a build-time env constant.
+ * They come from the public /api/config endpoint (api.getPublicConfig) so the
+ * welcome screen and the server /register 403 gate share one runtime source of
+ * truth. These assertions prove:
+ *   - the welcome screen fetches public config and derives inviteOnly/waitlistUrl,
+ *   - the "Beta · Invite only" badge renders only when inviteOnly is true,
+ *   - the "Join the waitlist" CTA renders only when inviteOnly AND a validated
+ *     absolute http(s) URL are present (never a hardcoded private/temp URL),
+ *   - public account creation is hidden when inviteOnly is true,
+ *   - no hardcoded absolute URL leaks into the waitlist CTA.
  */
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
@@ -12,24 +19,44 @@ import path from 'node:path';
 
 const SRC = fs.readFileSync(path.resolve(__dirname, '../flows/Auth.jsx'), 'utf8');
 
-describe('§G invite-only Beta boundary — Auth.jsx welcome screen', () => {
-  it('displays a "Beta · Invite only" badge', () => {
-    expect(SRC).toMatch(/Beta ·\s*Invite only/);
-    expect(SRC).toMatch(/ob-beta-badge/);
+describe('§3 invite-only Beta boundary — Auth.jsx welcome screen (config-driven)', () => {
+  it('fetches public config at runtime and derives inviteOnly / waitlistUrl', () => {
+    // Runtime config, not a build-time env constant.
+    expect(SRC).toMatch(/api\.getPublicConfig/);
+    expect(SRC).toMatch(/const \[publicConfig, setPublicConfig\] = useState\(/);
+    expect(SRC).toMatch(/const inviteOnly = publicConfig\.inviteOnly/);
+    expect(SRC).toMatch(/const waitlistUrl = publicConfig\.waitlistUrl/);
+    // The old build-time env constant must be gone.
+    expect(SRC).not.toMatch(/import\.meta\.env\.VITE_WAITLIST_URL/);
   });
 
-  it('derives the waitlist URL from VITE_WAITLIST_URL env config (no hardcoded URL)', () => {
-    expect(SRC).toMatch(/const WAITLIST_URL[\s\S]*import\.meta\.env\.VITE_WAITLIST_URL/);
-    // Only absolute http(s) URLs from config are accepted.
+  it('defaults to invite-only:true (fail-safe) before/around config load', () => {
+    expect(SRC).toMatch(/useState\(\{\s*inviteOnly:\s*true/);
+    // Missing/false inviteOnly from config is treated as invite-only.
+    expect(SRC).toMatch(/inviteOnly:\s*cfg\.inviteOnly\s*!==\s*false/);
+  });
+
+  it('only accepts an absolute http(s) waitlist URL from config', () => {
     expect(SRC).toMatch(/\^https\?:\\\/\\\//);
   });
 
-  it('renders "Join the waitlist" as an external link ONLY when a URL is configured', () => {
-    // Guarded render: {WAITLIST_URL && (<a ... href={WAITLIST_URL} ...>)}
-    expect(SRC).toMatch(/\{WAITLIST_URL &&/);
-    expect(SRC).toMatch(/href=\{WAITLIST_URL\}/);
+  it('displays a "Beta · Invite only" badge only when invite-only is on', () => {
+    expect(SRC).toMatch(/\{inviteOnly && \(/);
+    expect(SRC).toMatch(/ob-beta-badge/);
+    expect(SRC).toMatch(/Beta ·\s*Invite only/);
+  });
+
+  it('renders "Join the waitlist" ONLY when invite-only AND a URL are present', () => {
+    // Guarded render: {inviteOnly && waitlistUrl && (<a ... href={waitlistUrl} ...>)}
+    expect(SRC).toMatch(/\{inviteOnly && waitlistUrl &&/);
+    expect(SRC).toMatch(/href=\{waitlistUrl\}/);
     expect(SRC).toMatch(/Join the waitlist/);
     expect(SRC).toMatch(/target="_blank"[\s\S]*rel="noopener noreferrer"/);
+  });
+
+  it('hides public account creation when invite-only is on', () => {
+    expect(SRC).toMatch(/\{!inviteOnly && \(/);
+    expect(SRC).toMatch(/Create a Solaris account/);
   });
 
   it('states the invite-only boundary and keeps sign-in available for invited members', () => {
@@ -38,7 +65,6 @@ describe('§G invite-only Beta boundary — Auth.jsx welcome screen', () => {
   });
 
   it('does NOT hardcode any absolute solaris/marketing URL in the waitlist CTA', () => {
-    // The anchor must use the env-derived constant, not a literal https URL.
     const anchor = SRC.match(/<a className="ob-waitlist"[\s\S]*?<\/a>/);
     expect(anchor).toBeTruthy();
     expect(anchor[0]).not.toMatch(/https?:\/\//);

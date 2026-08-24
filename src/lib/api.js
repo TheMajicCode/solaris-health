@@ -43,6 +43,13 @@ class ApiClient {
     return res.json();
   }
 
+  // ---- Public config (K1.1 §3) ----
+  // Non-sensitive, no-auth-needed client config. Single source of truth for the
+  // invite-only boundary so the welcome screen and the /register gate agree.
+  async getPublicConfig() {
+    return this.request('/config', { method: 'GET' });
+  }
+
   // ---- Auth ----
   async login(email, password) {
     const data = await this.request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });

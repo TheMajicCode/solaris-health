@@ -217,11 +217,35 @@ router.get('/conversations', authMiddleware, requireMessagingRole, async (req, r
         'SELECT COUNT(*)::int AS n FROM messages WHERE conversation_id=$1 AND sender_id<>$2 AND read_at IS NULL',
         [c.id, meId]);
 
+      // K1.1 §2 — booking↔conversation relationship, derived ENTIRELY server-side
+      // from the authenticated participants of THIS conversation. We match the
+      // member's own bookings to the provider profiles OWNED BY this conversation's
+      // practitioner (provider_profiles.user_id = c.practitioner_id). This is a
+      // stable server-derived ID join — never a practitioner/business NAME match and
+      // never a provider id supplied by the browser. Because the pair (patient_id,
+      // practitioner_id) is unique to the conversation, two practitioners who happen
+      // to share an identical display or business name can never cross-link, and a
+      // provider whose business name differs from the practitioner's name still links
+      // correctly (the link is on user_id, not on any name). No plaintext synthetic
+      // booking message is ever written into the encrypted messages table.
+      const bookingLink = await db.query(
+        `SELECT b.id, b.provider_id
+           FROM bookings b
+           JOIN provider_profiles p ON p.id = b.provider_id
+          WHERE b.patient_id = $1 AND p.user_id = $2`,
+        [c.patient_id, c.practitioner_id]);
+      const bookingIds = bookingLink.rows.map((r) => r.id);
+      const bookingProviderIds = [...new Set(bookingLink.rows.map((r) => r.provider_id))];
+
       out.push({
         id: c.id,
         otherId, otherName: otherName || 'Member', otherAvatar, otherRole,
         unread: unread.rows[0].n,
         updatedAt: c.updated_at,
+        // K1.1 §2 — stable, server-derived booking relationship signals.
+        hasBooking: bookingIds.length > 0,
+        bookingIds,
+        bookingProviderIds,
         lastMessage: last.rows[0] ? {
           id: last.rows[0].id,
           fromMe: last.rows[0].sender_id === meId,

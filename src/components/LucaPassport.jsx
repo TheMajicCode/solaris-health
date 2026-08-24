@@ -1769,6 +1769,8 @@ function LucaRecommends({
   checkins = [], completeness = null, journeys = [], bookings = [], onOpenJourney,
 }) {
   const { startRetake, approvedJourney } = useApp() || {};
+  const { t } = useLocale() || {};
+  const tl = (k, fallback) => { const v = t ? t(k) : null; return v && v !== k ? v : fallback; };
 
   // ── A2: alternate-provider pool. ONE purpose-specific fetch (a rotating pool
   // of eligible providers) — NOT a duplicate of api.getLucaRecommendations(),
@@ -1860,7 +1862,7 @@ function LucaRecommends({
 
   return (
     <Card>
-      <SectionHead eyebrow="Personalized for you" title="LUCA Recommends" action={<Pill tone="mint" icon={Sparkles}>LUCA</Pill>} />
+      <SectionHead eyebrow={tl('dash.personalizedForYou', 'Personalized for you')} title={tl('dash.lucaRecommends', 'LUCA Recommends')} action={<Pill tone="mint" icon={Sparkles}>LUCA</Pill>} />
       <div className="grid rec-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         {/* Card 1 — Your Next Step (resolver-driven) */}
         <div className="card flat" data-testid="luca-next-step" style={{ padding: 16, background: 'linear-gradient(165deg,#0E5C57,#0A413D)', color: '#E7F8F3', border: 'none', display: 'flex', flexDirection: 'column' }}>
@@ -1883,7 +1885,7 @@ function LucaRecommends({
           <div className="between" style={{ gap: 8, alignItems: 'flex-start' }}>
             <div className="row gap-2" style={{ alignItems: 'center' }}>
               <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(240,210,140,.18)', display: 'grid', placeItems: 'center', flex: 'none' }}><Compass size={17} color="#F0D28C" /></div>
-              <div className="tiny" style={{ color: 'rgba(251,243,223,.78)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 700 }}>Curated Journey for You</div>
+              <div className="tiny" style={{ color: 'rgba(251,243,223,.78)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 700 }}>{tl('dash.curatedJourney', 'Curated Journey for You')}</div>
             </div>
             {canFindAlternate && (
               <button
@@ -2869,7 +2871,8 @@ const LUCA_ACTION_ICONS = { compass: Compass, store: Store, sparkles: Sparkles, 
 
 function CoachPage({ user, go }) {
   const { lucaMessages: messages, setLucaMessages: setMessages, lucaLoaded, loadLucaHistory, startRetake, setPendingProviderId, setPendingCurate, approvedJourney, setApprovedJourney, profile: appProfile } = useApp();
-  const { locale } = useLocale() || {};
+  const { locale, t } = useLocale() || {};
+  const tl = (k, fallback) => { const v = t ? t(k) : null; return v && v !== k ? v : fallback; };
   const { playFromLibrary } = useAudio();
   const [input, setInput] = useState('');
   // §D — remember the collapsed state for the current browser session only.
@@ -3105,8 +3108,8 @@ function CoachPage({ user, go }) {
             onClick={toggleCollapsed}
             aria-expanded={!collapsed}
             aria-controls="luca-panel-body"
-            title={collapsed ? 'Expand LUCA' : 'Collapse LUCA'}
-            aria-label={collapsed ? 'Expand LUCA' : 'Collapse LUCA'}
+            title={collapsed ? `${tl('action.expand', 'Expand')} LUCA` : `${tl('action.collapse', 'Collapse')} LUCA`}
+            aria-label={collapsed ? `${tl('action.expand', 'Expand')} LUCA` : `${tl('action.collapse', 'Collapse')} LUCA`}
             style={{
               flex: 'none', width: 44, height: 44, display: 'grid', placeItems: 'center',
               background: 'transparent', border: '1px solid var(--line,#e3ece8)', borderRadius: 12,
@@ -3122,7 +3125,7 @@ function CoachPage({ user, go }) {
             <span className="tiny muted" style={{ flex: 1, minWidth: 120 }}>
               LUCA is collapsed — your conversation is saved{messages.length ? ` (${messages.length} message${messages.length === 1 ? '' : 's'})` : ''}.
             </span>
-            <button type="button" onClick={toggleCollapsed} className="suggest-chip" style={{ minHeight: 44 }}>Expand</button>
+            <button type="button" onClick={toggleCollapsed} className="suggest-chip" style={{ minHeight: 44 }}>{tl('action.expand', 'Expand')}</button>
           </div>
         ) : (
         <>
@@ -3470,13 +3473,17 @@ function HabitTracker({ habits, ticked, onToggle, onAdd, onDelete }) {
   );
 }
 
-/* RC1 item5 — the exact Journey draft a member approved from LUCA suggestions,
-   surfaced here in Communications → Growth. This is a LOCAL, simulated enrollment:
-   it lives only in memory for this session and is NOT saved to any server. The
-   card states that plainly and preserves the record of the member's own approval. */
+/* RC1 item5 / K1.1 §4 — the exact Journey draft a member approved from the
+   Personalized Journey wizard, surfaced here in Communications → Growth. It is
+   SAVED ON THIS DEVICE (localStorage, namespaced by user id) so it survives a
+   refresh, but is NOT synced to any server — the card states that plainly and
+   preserves the record of the member's own approval. Dismiss deletes the
+   device-local copy for this account. */
 function ApprovedJourneyCard({ journey, onDismiss }) {
   if (!journey) return null;
-  const when = journey.approvedAt ? new Date(journey.approvedAt).toLocaleString() : null;
+  const when = journey.approvedAt
+    ? new Date(journey.approvedAt).toLocaleString()
+    : (journey.savedAt ? new Date(journey.savedAt).toLocaleString() : null);
   return (
     <Card className="lg" data-testid="approved-journey-card"
       style={{ border: '1px solid var(--brand,#06403B)', background: 'rgba(6,64,59,.04)' }}>
@@ -3484,7 +3491,7 @@ function ApprovedJourneyCard({ journey, onDismiss }) {
         <div>
           <SectionHead eyebrow="You approved this journey" title={journey.title} />
           <div className="tiny muted" style={{ marginTop: -6 }}>
-            Local preview · Simulated — not saved to any server. You approved it{when ? ` on ${when}` : ''}.
+            Saved on this device · not synced to any server. You approved it{when ? ` on ${when}` : ''}.
           </div>
         </div>
         <button type="button" onClick={onDismiss} aria-label="Dismiss approved journey"
@@ -6766,8 +6773,28 @@ function AdminSystemPage() {
 }
 
 /* ============================== MAIN SHELL ============================== */
+// Bottom-nav id → locale key. Missing ids fall back to the hardcoded label,
+// so unmapped destinations keep their reviewed English until translated.
+const BOTTOM_NAV_LABEL_KEYS = {
+  explore: 'nav.explore',
+  health: 'nav.health',
+  coach: 'nav.coach',
+  communications: 'nav.communications',
+  wallet: 'nav.economic',
+  'prac-clients': 'nav.clients',
+  'prac-bookings': 'nav.bookings',
+  'prac-messages': 'nav.messages',
+  more: 'nav.more',
+};
+
 export default function LucaPassport() {
   const { user, logout, refreshUser, setPendingProviderId, setPendingCurate } = useApp();
+  const { t } = useLocale();
+  const navLabel = (it) => {
+    const key = BOTTOM_NAV_LABEL_KEYS[it.id];
+    const translated = key ? t(key) : null;
+    return translated && translated !== key ? translated : it.label;
+  };
   const realRole = user?.role || 'patient';
   const baseEffectiveRole = normalizeSolarisRole(realRole);
   const isProvider = user?.isProvider === true;
@@ -7180,7 +7207,7 @@ export default function LucaPassport() {
                   onClick={() => go(it.id)}
                 >
                   <span className="m-bn-orb"><Sparkles size={24} strokeWidth={2.2} /></span>
-                  <span className="m-bn-lbl">{it.label}</span>
+                  <span className="m-bn-lbl">{navLabel(it)}</span>
                 </button>
               );
             }
@@ -7196,7 +7223,7 @@ export default function LucaPassport() {
                   onClick={() => setMoreOpen(true)}
                 >
                   <it.icon size={20} strokeWidth={2} />
-                  <span>{it.label}</span>
+                  <span>{navLabel(it)}</span>
                 </button>
               );
             }
@@ -7211,7 +7238,7 @@ export default function LucaPassport() {
                 onClick={() => go(it.id)}
               >
                 <it.icon size={20} strokeWidth={2} />
-                <span>{it.label}</span>
+                <span>{navLabel(it)}</span>
               </button>
             );
           })}

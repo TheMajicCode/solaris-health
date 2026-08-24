@@ -70,6 +70,9 @@ vi.mock('../lib/api.js', () => ({
     saveProfile: H.saveProfile, connectWallet: H.connectWallet,
     identityBindChallenge: H.identityBindChallenge,
     bindIdentityKey: H.bindIdentityKey, ackOnboardingScreen: H.ackOnboardingScreen,
+    // K1.1 §3 — Auth.jsx fetches the public config; these onboarding tests
+    // exercise the open (inviteOnly:false) account-creation flow.
+    getPublicConfig: () => Promise.resolve({ inviteOnly: false, spanishPreview: false, waitlistUrl: '' }),
   },
 }));
 
@@ -106,11 +109,13 @@ beforeEach(() => {
 });
 
 describe('Welcome screen', () => {
-  it('shows the three exact entry options', () => {
+  it('shows the three exact entry options', async () => {
     render(<Auth />);
     expect(screen.getByText('Sign in with email and password')).toBeInTheDocument();
     expect(screen.getByText('Sign in with identity key')).toBeInTheDocument();
-    expect(screen.getByText('Create a Solaris account')).toBeInTheDocument();
+    // K1.1 §3 — account creation appears once the public config resolves to
+    // inviteOnly:false (default is the fail-safe invite-only boundary).
+    expect(await screen.findByText('Create a Solaris account')).toBeInTheDocument();
   });
 
   it('identity-key sign-in offers an existing key, create-then-generate, and legacy restore — never an identity-only account', () => {
@@ -125,7 +130,7 @@ describe('Welcome screen', () => {
 // Create the email/password account, then advance to Screen 1 (identity setup).
 async function createAccountToScreen1() {
   render(<Auth />);
-  fireEvent.click(screen.getByText('Create a Solaris account'));
+  fireEvent.click(await screen.findByText('Create a Solaris account'));
   fireEvent.change(screen.getByLabelText('First name'), { target: { value: 'Ada' } });
   fireEvent.change(screen.getByLabelText('Last name'), { target: { value: 'Lovelace' } });
   fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'ada@example.test' } });

@@ -22,11 +22,57 @@ export function AppProvider({ children }) {
   // Communications → Messages surface to open EXACTLY once. Kept in memory only
   // (never localStorage/sessionStorage); cleared after it is consumed and on logout.
   const [pendingConversation, setPendingConversation] = useState(null);
-  // RC1 item5 — a Journey draft the member explicitly approved from LUCA suggestions.
-  // Local/simulated only: kept in memory (never localStorage/server); surfaced in
-  // Communications → Growth so the member sees the exact draft they approved.
-  // No server-persistence is claimed or performed here.
-  const [approvedJourney, setApprovedJourney] = useState(null);
+  // RC1 item5 / K1.1 §4 — a Journey draft the member explicitly approved from the
+  // Personalized Journey wizard. Surfaced in Communications → Growth so the member
+  // sees the exact draft they approved. In K1.1 this now SURVIVES REFRESH via
+  // device-local storage (localStorage) NAMESPACED BY the authenticated user id —
+  // no server persistence, no migration, no new API. It is labeled "Saved on this
+  // device" in the UI and is never presented as multi-device or server-synced.
+  const [approvedJourney, setApprovedJourneyState] = useState(null);
+
+  // Device-local key is namespaced by user id so one account can NEVER see another
+  // account's draft on a shared browser.
+  const journeyStorageKey = (uid) => `solaris.approvedJourney.${uid}`;
+
+  // Public setter used by the approve flow AND by dismiss/delete. Writes the draft
+  // to device-local storage for the CURRENT user (adding a device marker), or, when
+  // called with null (explicit dismiss/delete), removes the stored draft. Never
+  // persists without a known user id (cannot namespace safely).
+  const setApprovedJourney = useCallback((block) => {
+    setApprovedJourneyState(block);
+    try {
+      const uid = user?.id;
+      if (!uid) return;
+      const key = journeyStorageKey(uid);
+      if (block) {
+        const toStore = {
+          ...block,
+          savedOnDevice: true,
+          savedAt: block.savedAt || Date.now(),
+          ownerUserId: uid,
+        };
+        localStorage.setItem(key, JSON.stringify(toStore));
+      } else {
+        localStorage.removeItem(key);
+      }
+    } catch { /* storage unavailable — degrade to in-memory only */ }
+  }, [user]);
+
+  // Restore the device-local approved Journey draft after a refresh, scoped to the
+  // authenticated user. Runs once the user becomes known. Defense-in-depth: only
+  // accept a stored draft whose recorded owner matches the current user id.
+  useEffect(() => {
+    const uid = user?.id;
+    if (!uid) return;
+    try {
+      const raw = localStorage.getItem(journeyStorageKey(uid));
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed && (parsed.ownerUserId == null || String(parsed.ownerUserId) === String(uid))) {
+        setApprovedJourneyState(parsed);
+      }
+    } catch { /* ignore malformed/unavailable storage */ }
+  }, [user]);
 
   // ── Shared LUCA conversation (used by the LUCA Coach surface) ──
   const [lucaMessages, setLucaMessages] = useState(() => {
@@ -133,7 +179,11 @@ export function AppProvider({ children }) {
     setUser(null); setProfile(null); setTab('home'); setAuthView('intro'); setDemoRole(null);
     setNostrBanner({ show: false, npub: '' });
     setPendingConversation(null); // §4 — never persist a pending secure conversation across logout
-    setApprovedJourney(null); // RC1 item5 — approved Journey draft is local/session only
+    // K1.1 §4 — clear the approved Journey draft from MEMORY on logout, but LEAVE
+    // the device-local copy intact (it is namespaced by user id, so it stays
+    // private to this account and is restored when the same member signs back in).
+    // Use the raw state setter so we do NOT delete the stored draft here.
+    setApprovedJourneyState(null);
     setLucaMessages([]); setLucaLoaded(false);
     setCurrentTrack(null); setIsPlaying(false); setAudioQueue([]);
     try { sessionStorage.removeItem('luca_messages'); } catch {}

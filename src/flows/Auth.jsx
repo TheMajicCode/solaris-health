@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../state/AppContext.jsx';
 import { Button } from '../components/ui.jsx';
 import { api } from '../lib/api.js';
@@ -39,15 +39,10 @@ import {
  * gates on a REQUIRED minimum-profile save before the React user is activated.
  * ──────────────────────────────────────────────────────────────────────────── */
 
-// §G — Invite-only Beta boundary. The public marketing site owns the email
-// waitlist; the app only LINKS to it. The destination is supplied through build
-// configuration (VITE_WAITLIST_URL) — never a hardcoded private/temporary URL.
-// When unset (e.g. local dev), the waitlist CTA is simply omitted rather than
-// pointing at a placeholder. Only absolute http(s) URLs are accepted.
-const WAITLIST_URL = (() => {
-  const raw = (import.meta.env.VITE_WAITLIST_URL || '').trim();
-  return /^https?:\/\//i.test(raw) ? raw : '';
-})();
+// §G / K1.1 §3 — the invite-only boundary and waitlist URL now come from the
+// backend public config (GET /api/config) at runtime, NOT from a build-time env,
+// so the welcome screen and the server /register gate share one source of truth.
+// See the Auth component's publicConfig fetch below.
 
 // Beta-safe copy blocks (spec §2A) — used verbatim; do NOT paraphrase or broaden.
 const SCREEN1 = {
@@ -246,6 +241,32 @@ export default function Auth() {
   // Wizard stage machine.
   const [stage, setStage] = useState('welcome');
   const [error, setError] = useState('');
+  // K1.1 §3 — public config is the single source of truth for the invite-only
+  // boundary. Default to invite-only:true so the closed-Beta boundary is shown
+  // even before the fetch resolves (fail-safe: never expose public signup by a
+  // slow/failed request). The server /register 403 gate is the real enforcement.
+  const [publicConfig, setPublicConfig] = useState({ inviteOnly: true, spanishPreview: false, waitlistUrl: '' });
+  useEffect(() => {
+    let alive = true;
+    // Guard the call itself (not just the promise) so a missing/absent method
+    // can never throw during render — the fail-safe invite-only default stands.
+    if (typeof api.getPublicConfig !== 'function') return () => { alive = false; };
+    Promise.resolve()
+      .then(() => api.getPublicConfig())
+      .then((cfg) => {
+        if (!alive || !cfg) return;
+        const raw = typeof cfg.waitlistUrl === 'string' ? cfg.waitlistUrl.trim() : '';
+        setPublicConfig({
+          inviteOnly: cfg.inviteOnly !== false, // treat missing as invite-only (fail-safe)
+          spanishPreview: cfg.spanishPreview === true,
+          waitlistUrl: /^https?:\/\//i.test(raw) ? raw : '',
+        });
+      })
+      .catch(() => { /* keep fail-safe defaults */ });
+    return () => { alive = false; };
+  }, []);
+  const inviteOnly = publicConfig.inviteOnly;
+  const waitlistUrl = publicConfig.waitlistUrl;
   const [busy, setBusy] = useState(false);
   const [ikInfo, setIkInfo] = useState(false);
 
@@ -549,10 +570,14 @@ export default function Auth() {
               <img src="/solaris-logo.png" alt="Solaris Holistic Health" className="ob-logo" />
               <p className="wordmark ob-wordmark">SOLARIS</p>
               <p className="ob-tag">Holistic Health</p>
-              {/* §G — invite-only Beta boundary, shown up front on the access screen. */}
-              <span className="ob-beta-badge">
-                <Lock size={12} /> Beta · Invite only
-              </span>
+              {/* §G / K1.1 §3 — invite-only Beta boundary. Rendered ONLY when the
+                  public config reports invite-only, so the badge and the server
+                  /register gate can never disagree. */}
+              {inviteOnly && (
+                <span className="ob-beta-badge">
+                  <Lock size={12} /> Beta · Invite only
+                </span>
+              )}
             </div>
             <p className="ob-lede">Choose how you'd like to begin your sovereign health journey.</p>
 
@@ -567,18 +592,26 @@ export default function Auth() {
                 <Info size={13} />
               </span>
             </button>
-            <button className="ob-secondary" onClick={startEmailCreate}>
-              <UserPlus size={17} /> Create a Solaris account
-            </button>
+            {/* K1.1 §3 — public account creation is hidden while invite-only is
+                on (matches the server /register 403). When invite-only is off the
+                app makes no invite-only claim and account creation remains. */}
+            {!inviteOnly && (
+              <button className="ob-secondary" onClick={startEmailCreate}>
+                <UserPlus size={17} /> Create a Solaris account
+              </button>
+            )}
 
-            {/* §G — invited members sign in above; everyone else joins the public
-                waitlist on the marketing site (this app never collects waitlist
-                emails). The link renders only when a real URL is configured. */}
-            <p className="ob-invite-note">
-              Solaris is in invite-only Beta. Invited members can sign in above.
-            </p>
-            {WAITLIST_URL && (
-              <a className="ob-waitlist" href={WAITLIST_URL} target="_blank" rel="noopener noreferrer">
+            {/* §G / K1.1 §3 — invited members sign in above; everyone else joins
+                the public waitlist on the marketing site (this app never collects
+                waitlist emails). Shown only in invite-only mode, and only when the
+                config supplies a real, validated public URL. */}
+            {inviteOnly && (
+              <p className="ob-invite-note">
+                Solaris is in invite-only Beta. Invited members can sign in above.
+              </p>
+            )}
+            {inviteOnly && waitlistUrl && (
+              <a className="ob-waitlist" href={waitlistUrl} target="_blank" rel="noopener noreferrer">
                 <Mail size={15} /> Join the waitlist <ArrowRight size={14} />
               </a>
             )}

@@ -21,6 +21,12 @@ export default {
   'nav.bookings': 'Bookings',
   'nav.messages': 'Messages',
   'nav.more': 'More',
+  'nav.dashboard': 'Dashboard',
+  'nav.health': 'Health',
+  'nav.coach': 'LUCA',
+  'nav.economic': 'Economic',
+  'nav.journal': 'Journal',
+  'nav.media': 'Media',
 
   // ── Common actions ──
   'action.book': 'Book Appointment',
@@ -33,6 +39,18 @@ export default {
   'action.continue': 'Continue',
   'action.back': 'Back',
   'action.close': 'Close',
+  'action.expand': 'Expand',
+  'action.collapse': 'Collapse',
+
+  // ── Messages filters (Communications) ──
+  'msg.filterAll': 'All',
+  'msg.filterBookings': 'Bookings',
+  'msg.filterUnread': 'Unread',
+
+  // ── Dashboard · LUCA recommendation cards ──
+  'dash.lucaRecommends': 'LUCA Recommends',
+  'dash.personalizedForYou': 'Personalized for you',
+  'dash.curatedJourney': 'Curated Journey for You',
 
   // ── Language switcher ──
   'lang.label': 'Language',

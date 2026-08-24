@@ -6,6 +6,7 @@ require('dotenv').config();
 
 const db = require('./db');
 const authRoutes = require('./routes/auth');
+const configRoutes = require('./routes/config');
 const usersRoutes = require('./routes/users');
 const credentialsRoutes = require('./routes/credentials');
 const agentsRoutes = require('./routes/agents');
@@ -335,6 +336,7 @@ app.use('/api/journal', journalRoutes);
 app.use('/api/audio', audioRoutes);
 app.use('/api/health-documents', healthDocumentsRoutes);
 app.use('/api/public', publicRoutes); // public practitioner directory (no auth)
+app.use('/api/config', configRoutes); // K1.1 §3 public non-sensitive client config (no auth, no secrets)
 app.use('/api/intake', intakeRoutes); // new-patient intake forms + patient inbox
 app.use('/api/intelligence', intelligenceRoutes); // Intelligence section (spec A3): natural/artificial/enhanced + source exclusions
 

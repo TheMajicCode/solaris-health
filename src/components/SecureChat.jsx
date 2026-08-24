@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api.js';
 import { useApp } from '../state/AppContext.jsx';
+import { useLocale } from '../lib/i18n/LocaleContext.jsx';
 import { loadOrCreateIdentity, cryptoAvailable } from '../lib/encryption.js';
 import MessageThread from './MessageThread.jsx';
 import {
@@ -195,9 +196,13 @@ function BookingContextCard({ ctx, pastOpen, onTogglePast, onViewBooking }) {
   );
 }
 
+const MESSAGE_FILTER_LABEL_KEYS = { all: 'msg.filterAll', bookings: 'msg.filterBookings', unread: 'msg.filterUnread' };
+
 export default function SecureChat({ user, onUnread, go }) {
   const myId = user.userId || user.id;
   const { pendingConversation, setPendingConversation } = useApp() || {};
+  const { t } = useLocale() || {};
+  const filterLabel = (f) => { const k = MESSAGE_FILTER_LABEL_KEYS[f.id]; const v = k && t ? t(k) : null; return v && v !== k ? v : f.label; };
   const [identity, setIdentity] = useState(null);
   const [identityErr, setIdentityErr] = useState('');
   const [conversations, setConversations] = useState([]);
@@ -408,7 +413,7 @@ export default function SecureChat({ user, onUnread, go }) {
                 aria-pressed={filterMode === f.id}
                 onClick={() => setFilterMode(f.id)}
               >
-                {f.label}
+                {filterLabel(f)}
               </button>
             ))}
           </div>

@@ -1,5 +1,6 @@
 /**
- * NODE K1 §F — unified Messages: compact filters + booking-context derivation.
+ * NODE K1 §F / K1.1 §2 — unified Messages: compact filters + booking-context
+ * derivation by STABLE SERVER-DERIVED IDS ONLY (no name/substring matching).
  * Pure-unit coverage for src/lib/messageFilters.js.
  */
 import { describe, it, expect } from 'vitest';
@@ -14,7 +15,8 @@ import {
   summarizeBookingContext,
 } from '../lib/messageFilters.js';
 
-const conv = (o) => ({ id: 'c1', otherName: 'Dr. Maya Okoro', unread: 0, ...o });
+// Conversations now carry the server-derived `bookingIds` / `hasBooking` fields.
+const conv = (o) => ({ id: 'c1', otherName: 'Dr. Maya Okoro', unread: 0, bookingIds: [], ...o });
 const booking = (o) => ({ id: 'b1', business_name: 'Dr. Maya Okoro', service_name: 'Consult', status: 'confirmed', booking_date: '2026-09-01', start_time: '10:00:00', ...o });
 
 describe('§F compact message filters', () => {
@@ -25,74 +27,90 @@ describe('§F compact message filters', () => {
 
   it('All returns everything; Unread filters unread>0', () => {
     const list = [conv({ id: 'a', unread: 0 }), conv({ id: 'b', unread: 3 })];
-    expect(applyMessageFilter(list, 'all', []).length).toBe(2);
-    const unread = applyMessageFilter(list, 'unread', []);
+    expect(applyMessageFilter(list, 'all').length).toBe(2);
+    const unread = applyMessageFilter(list, 'unread');
     expect(unread.map((c) => c.id)).toEqual(['b']);
   });
 
-  it('Bookings filters to conversations that have an associated booking', () => {
+  it('Bookings filters to conversations whose server-derived bookingIds are non-empty', () => {
     const list = [
-      conv({ id: 'a', otherName: 'Dr. Maya Okoro' }),
-      conv({ id: 'b', otherName: 'Nurse Ade Cole' }),
+      conv({ id: 'a', bookingIds: ['b1'] }),
+      conv({ id: 'b', bookingIds: [] }),
     ];
-    const bookings = [booking({ business_name: 'Dr. Maya Okoro' })];
-    const res = applyMessageFilter(list, 'bookings', bookings);
+    const res = applyMessageFilter(list, 'bookings');
     expect(res.map((c) => c.id)).toEqual(['a']);
   });
 
-  it('honours an explicit server-provided booking flag (post-cutover)', () => {
-    const list = [conv({ id: 'x', otherName: 'Unmatched Name', hasBooking: true })];
-    expect(conversationHasBooking(list[0], [])).toBe(true);
-    expect(applyMessageFilter(list, 'bookings', []).map((c) => c.id)).toEqual(['x']);
+  it('honours an explicit server-provided hasBooking flag', () => {
+    const list = [conv({ id: 'x', bookingIds: [], hasBooking: true })];
+    expect(conversationHasBooking(list[0])).toBe(true);
+    expect(applyMessageFilter(list, 'bookings').map((c) => c.id)).toEqual(['x']);
+  });
+
+  it('a conversation with no bookingIds and no flag is NOT a booking conversation', () => {
+    expect(conversationHasBooking(conv({ bookingIds: [] }))).toBe(false);
   });
 });
 
-describe('§F booking ↔ conversation matching', () => {
-  it('matches on exact provider id when present', () => {
-    const c = conv({ providerId: 'prof-9', otherName: 'x' });
-    const b = booking({ provider_id: 'prof-9', business_name: 'totally different' });
+describe('§F booking ↔ conversation matching (ID-only)', () => {
+  it('matches iff the booking id is in the conversation server-derived bookingIds', () => {
+    const c = conv({ bookingIds: ['b1', 'b2'] });
+    expect(bookingMatchesConversation(c, booking({ id: 'b1' }))).toBe(true);
+    expect(bookingMatchesConversation(c, booking({ id: 'b2' }))).toBe(true);
+    expect(bookingMatchesConversation(c, booking({ id: 'b3' }))).toBe(false);
+  });
+
+  it('NEVER matches by name — identical names, unrelated ids do not link', () => {
+    const c = conv({ otherName: 'Dr. Maya Okoro', bookingIds: ['b9'] });
+    // Same display name, but the booking id is not in the server list.
+    const b = booking({ id: 'b1', business_name: 'Dr. Maya Okoro' });
+    expect(bookingMatchesConversation(c, b)).toBe(false);
+  });
+
+  it('a provider whose business name differs from the practitioner still links by id', () => {
+    const c = conv({ otherName: 'Dr. Ana Ruiz', bookingIds: ['bx'] });
+    const b = booking({ id: 'bx', business_name: 'Sunrise Wellness Clinic' });
     expect(bookingMatchesConversation(c, b)).toBe(true);
   });
 
-  it('best-effort name match when no id link exists', () => {
-    expect(bookingMatchesConversation(conv({ otherName: 'Dr. Maya Okoro' }), booking())).toBe(true);
-    expect(bookingMatchesConversation(conv({ otherName: 'Someone Else' }), booking())).toBe(false);
-  });
-
   it('returns all matched bookings newest first', () => {
+    const c = conv({ bookingIds: ['old', 'new'] });
     const bookings = [
       booking({ id: 'old', booking_date: '2026-01-01' }),
       booking({ id: 'new', booking_date: '2026-12-01' }),
+      booking({ id: 'unrelated', booking_date: '2026-06-01' }),
     ];
-    const res = bookingsForConversation(conv(), bookings);
+    const res = bookingsForConversation(c, bookings);
     expect(res.map((b) => b.id)).toEqual(['new', 'old']);
   });
 });
 
 describe('§F booking-context summary', () => {
   it('prefers the soonest open booking as current and collapses the rest', () => {
+    const c = conv({ bookingIds: ['done', 'soon', 'later'] });
     const bookings = [
       booking({ id: 'done', status: 'completed', booking_date: '2026-01-01' }),
       booking({ id: 'soon', status: 'confirmed', booking_date: '2026-09-01' }),
       booking({ id: 'later', status: 'pending', booking_date: '2026-11-01' }),
     ];
-    const ctx = summarizeBookingContext(conv(), bookings);
+    const ctx = summarizeBookingContext(c, bookings);
     expect(ctx.current.id).toBe('soon');
     expect(ctx.total).toBe(3);
     expect(ctx.past.map((b) => b.id).sort()).toEqual(['done', 'later']);
   });
 
   it('falls back to most recent when no open bookings', () => {
+    const c = conv({ bookingIds: ['a', 'b'] });
     const bookings = [
       booking({ id: 'a', status: 'completed', booking_date: '2026-01-01' }),
       booking({ id: 'b', status: 'cancelled', booking_date: '2026-05-01' }),
     ];
-    const ctx = summarizeBookingContext(conv(), bookings);
+    const ctx = summarizeBookingContext(c, bookings);
     expect(ctx.current.id).toBe('b');
   });
 
-  it('returns empty context when nothing matches', () => {
-    const ctx = summarizeBookingContext(conv({ otherName: 'No Match' }), [booking()]);
+  it('returns empty context when nothing matches by id', () => {
+    const ctx = summarizeBookingContext(conv({ bookingIds: [] }), [booking()]);
     expect(ctx.current).toBeNull();
     expect(ctx.total).toBe(0);
   });
