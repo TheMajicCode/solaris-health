@@ -263,3 +263,37 @@ Nine items closing production-readiness gaps from a live-demo walkthrough
   truncates Solaris tables and only *looks up* Alejandro, so a naive rebuilt-seed
   `up` **wipes him**. Deploy by rebuilding only `frontend`+`backend`
   (`up -d frontend backend`), leaving `postgres`/`seed` untouched.
+
+
+
+## Node K1.4.1 — Live-phone corrections · branch `agent/abacus-beta-v1-phone-regressions-k1-4-1`
+
+Focused correction of K1.4. One scoped commit `ec11802c` off base `12d564e5`.
+Frontend deployed to **Preview only**; Demo, Stable, and the shared backend
+were left byte-for-byte unchanged.
+
+### Defects corrected (A–G)
+- **A** Next-Step reads the real Growth to-do pipeline (no placeholder copy).
+- **B** Personalized journey falls back to a **device-local** To-do store when
+  `/api/journeys/seed-plan` is absent — **no migration, no reseed** (endpoint
+  stays 404 on Preview, verified).
+- **C** Personalized steps emit only safe, non-destructive actions.
+- **D** Branding: emblem-only splash, favicon not misrepresented, SW `v18 → v19`.
+- **E** Signed-in Spanish: Next-Step CTA, approved-journey card, Growth to-dos,
+  Habit tracker localized; en/es parity enforced; safety keys stay
+  `REVIEW_PENDING`. Docs updated (`docs/beta-v1/SPANISH-REVIEW-NEEDED.md`).
+- **F** 13 runtime tests F1–F13 added (27 in the K141 file). Full suite
+  **590 passed / 81 files** (K1.4 floor 562; nothing lowered or deleted).
+- **G** Live Preview verified: `/` 200, `/api/health` 200, seed-plan 404,
+  SPA fallback 200; authenticated live screenshots captured at 360–430 px.
+
+### Deploy method
+- Immutable release dir `/opt/solaris-beta-preview/releases/ec11802c…/dist` +
+  atomic swap of `/opt/solaris-beta-preview/current`; `nginx -t` + reload.
+- Demo/Stable symlinks + bundle hashes unchanged; shared backend PID unchanged.
+
+### Gotcha
+- Do **not** commit or `rm` `.abacus.donotdelete` (stays modified in the tree).
+- Preview shares the Demo DB + synthetic Express backend on 127.0.0.1:5055 —
+  never migrate/reseed/mutate rows there; the device-local To-do store is the
+  correct path when `seed-plan` 404s.
