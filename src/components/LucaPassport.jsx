@@ -49,6 +49,8 @@ import { TODO_CADENCE, cadenceForTodo, todoActionMeta } from '../lib/todoGroupin
 import { LUCA_ACTIONS, buildLucaResponse, safeMessageResponse, isValidLucaAction } from '../lib/lucaActions.js';
 import { SharingDefaultsCard } from './SharingControls.jsx';
 import { personalizedSeedSteps, PERSONALIZED_JOURNEY_TYPE } from '../lib/personalizedSeed.js';
+import { loadDeviceTodos, saveDeviceTodos, toggleDeviceTodo, buildLocalTodosFromJourney } from '../lib/deviceTodos.js';
+import { normalizeTodos, mergeTodos, sortTodosDeterministic } from '../lib/todoPipeline.js';
 import ProviderBookings from './provider/ProviderBookings.jsx';
 import ProviderApprovals from './admin/ProviderApprovals.jsx';
 import MyBookings from './booking/MyBookings.jsx';
@@ -1460,8 +1462,13 @@ function DashboardPage({ user, go }) {
   const [completeness, setCompleteness] = useState(null);
   const [myBookings, setMyBookings] = useState([]);
   const [journeyOpen, setJourneyOpen] = useState(false);
-  const { profile: appProfile, setApprovedJourney } = useApp() || {};
+  // K1.4.1 §A — the member's Growth To-dos (server rows merged with device-local
+  // personalized rows). This is a Next Step resolver input so the green card
+  // FOLLOWS the real To-do list.
+  const [todos, setTodos] = useState([]);
+  const { profile: appProfile, setApprovedJourney, approvedJourney } = useApp() || {};
   const { locale } = useLocale() || {};
+  const uid = user?.id ?? null;
 
   const loadConsents = async () => {
     try {
@@ -1492,17 +1499,36 @@ function DashboardPage({ user, go }) {
     // empty array (which the resolver would misread as "no check-in today").
     // Rewards is best-effort chrome, NOT a Next Step input, so it never trips
     // the unavailable state.
-    const [r, ci, jr, bk, comp] = await Promise.allSettled([
+    const [r, ci, jr, bk, comp, td] = await Promise.allSettled([
       api.getRewards(),
       api.getCheckins(),
       api.getMyJourneys(),
       api.getMyBookings(),
       api.getPassportCompleteness(),
+      api.getTodos(),
     ]);
     if (r.status === 'fulfilled') setRewards(r.value || { events: [], total: 0 });
     // A Next Step input failed → do NOT clobber last-known-good state with empty;
     // flag the retryable unavailable state instead.
-    const inputsFailed = [ci, jr, bk, comp].some((x) => x.status === 'rejected');
+    const coreFailed = [ci, jr, bk, comp].some((x) => x.status === 'rejected');
+
+    // K1.4.1 §A — merge server To-do rows with the USER-SCOPED device-local
+    // personalized rows in ONE place (normalized to a single shape). A To-do
+    // load failure counts as a resolver-input failure UNLESS a valid device-local
+    // fallback exists (then the member still has actionable rows and we do NOT
+    // trip the retryable "couldn't load" state on their account).
+    const deviceRows = loadDeviceTodos(uid);
+    let todosFailed = false;
+    if (td.status === 'fulfilled') {
+      const serverRows = normalizeTodos(td.value?.todos || td.value || []);
+      setTodos(mergeTodos(serverRows, deviceRows));
+    } else if (deviceRows.length) {
+      setTodos(mergeTodos([], deviceRows)); // device-local fallback keeps rows
+    } else {
+      todosFailed = true; // no server rows AND no device fallback → unavailable
+    }
+
+    const inputsFailed = coreFailed || todosFailed;
     if (ci.status === 'fulfilled') setCheckins(ci.value?.checkins || []);
     if (jr.status === 'fulfilled') setJourneys(jr.value?.journeys || []);
     if (bk.status === 'fulfilled') setMyBookings(bk.value?.bookings || []);
@@ -1510,7 +1536,7 @@ function DashboardPage({ user, go }) {
     setDataError(inputsFailed);
     setDashboardRefreshing(false);
     return !inputsFailed;
-  }, []);
+  }, [uid]);
   // Preserve the old name for the check-in modal callback.
   const reloadDaily = reloadDashboardState;
 
@@ -1680,7 +1706,7 @@ function DashboardPage({ user, go }) {
         {/* LUCA Recommends */}
         <LucaRecommends
           recs={recs} loading={recsLoading} go={go} user={user} vitality={vitality} focus={focus}
-          checkins={checkins} completeness={completeness} journeys={journeys} bookings={myBookings}
+          checkins={checkins} completeness={completeness} journeys={journeys} bookings={myBookings} todos={todos}
           onOpenJourney={() => setJourneyOpen(true)}
           dataError={dataError} onRetry={reloadDashboardState} refreshing={dashboardRefreshing}
         />
@@ -1873,7 +1899,7 @@ function providerCardFrom(p) {
 
 function LucaRecommends({
   recs, loading, go, user, vitality = 0, focus = [],
-  checkins = [], completeness = null, journeys = [], bookings = [], onOpenJourney,
+  checkins = [], completeness = null, journeys = [], bookings = [], todos = [], onOpenJourney,
   dataError = false, onRetry, refreshing = false,
 }) {
   const { startRetake, approvedJourney } = useApp() || {};
@@ -1918,7 +1944,7 @@ function LucaRecommends({
 
   // ── Card 1: "Your Next Step" (green) — resolved by the ONE centralized resolver ──
   const action = resolveNextAction({
-    vitality, completeness, checkins, journeys, approvedJourney, bookings, dataError, now: new Date(),
+    vitality, completeness, checkins, journeys, approvedJourney, todos, bookings, dataError, now: new Date(),
   });
   const NsIcon = NEXT_ACTION_ICONS[action.icon] || Zap;
   const runNextStep = () => {
@@ -1988,7 +2014,7 @@ function LucaRecommends({
             disabled={refreshing}
             style={{ marginTop: 13, alignSelf: 'flex-start', padding: '8px 16px', borderRadius: 10, cursor: refreshing ? 'default' : 'pointer', opacity: refreshing ? 0.7 : 1, border: '1px solid rgba(159,231,214,.35)', background: 'rgba(159,231,214,.14)', color: '#E7F8F3', fontSize: 13, fontWeight: 600, display: 'inline-flex', gap: 6, alignItems: 'center' }}
           >
-            {tl('nextStep.' + action.key + '.cta', action.cta)} <ArrowRight size={14} />
+            {action.ctaKey ? tl(action.ctaKey, action.cta) : tl('nextStep.' + action.key + '.cta', action.cta)} <ArrowRight size={14} />
           </button>
         </div>
 
@@ -3537,7 +3563,21 @@ function todoCTA(t) {
 }
 
 /* Guided-journey To-Do list — the member's personal plan. */
+// Maps a To-do CTA meta key to the shared cta.* i18n key (K1.4.1 §E) so the
+// Growth list buttons localize the same way the Next Step card does.
+const TODO_CTA_I18N = {
+  start_checkin: 'cta.checkin',
+  play_audio: 'cta.play',
+  open_listing: 'cta.view',
+  open_booking: 'cta.viewBooking',
+  navigate: 'cta.go',
+  open_journal: 'cta.openJournal',
+};
+const CADENCE_I18N = { today: 'journey.todosToday', week: 'journey.todosWeek', month: 'journey.todosMonth' };
+
 function GrowthTodos({ todos, journeyType, onToggle, onRun, onAdd, onDelete, go }) {
+  const { t } = useLocale() || {};
+  const tl = (k, fallback) => { const v = t ? t(k) : null; return v && v !== k ? v : fallback; };
   const [title, setTitle] = useState('');
   const [dim, setDim] = useState('mind');
   const done = todos.filter((t) => t.done).length;
@@ -3557,7 +3597,7 @@ function GrowthTodos({ todos, journeyType, onToggle, onRun, onAdd, onDelete, go 
       <div key={t.id} className="list-row" style={{ padding: '11px 0', opacity: t.done ? 0.62 : 1, borderBottom: '1px solid var(--line,#EDF2F0)' }}>
         <button
           onClick={() => onToggle(t)}
-          title={t.done ? 'Mark not done' : 'Mark done'}
+          title={t.done ? tl('growth.markNotDone', 'Mark not done') : tl('growth.markDone', 'Mark done')}
           style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 0, flex: 'none', display: 'grid', placeItems: 'center' }}
         >
           {t.done
@@ -3574,10 +3614,10 @@ function GrowthTodos({ todos, journeyType, onToggle, onRun, onAdd, onDelete, go 
         <div className="row" style={{ gap: 4, flex: 'none', alignItems: 'center' }}>
           {cta && !t.done && (
             <button className="checkin-cta" style={{ padding: '6px 11px', fontSize: 12 }} onClick={() => onRun(t)}>
-              <CtaIcon size={13} strokeWidth={2.4} /> {cta.label}
+              <CtaIcon size={13} strokeWidth={2.4} /> {tl(TODO_CTA_I18N[t.action_type] || '', cta.label)}
             </button>
           )}
-          <button className="icon-btn" title="Remove" onClick={() => onDelete(t)}
+          <button className="icon-btn" title={tl('growth.remove', 'Remove')} onClick={() => onDelete(t)}
             style={{ border: 'none', background: 'transparent', color: 'var(--muted,#8AA09C)', cursor: 'pointer', padding: 4 }}>
             <Trash2 size={14} />
           </button>
@@ -3589,16 +3629,16 @@ function GrowthTodos({ todos, journeyType, onToggle, onRun, onAdd, onDelete, go 
   return (
     <Card className="lg">
       <SectionHead
-        eyebrow="Your plan"
-        title="To-do list"
-        action={todos.length ? <Pill tone={done === todos.length ? 'gold' : 'mint'} icon={CheckCircle2}>{done}/{todos.length} done</Pill> : null}
+        eyebrow={tl('growth.planEyebrow', 'Your plan')}
+        title={tl('growth.todoTitle', 'To-do list')}
+        action={todos.length ? <Pill tone={done === todos.length ? 'gold' : 'mint'} icon={CheckCircle2}>{tl('growth.doneCount', '{done}/{total} done').replace('{done}', done).replace('{total}', todos.length)}</Pill> : null}
       />
       {/* Compact journey summary/progress header (§4) — replaces the large
           static bullet card as the primary experience. */}
       {journeyType ? (
         <div style={{ marginTop: -6, marginBottom: 14 }}>
           <div className="tiny muted" style={{ marginBottom: 6 }}>
-            Curated from your {String(journeyType).replace(/_/g, ' ')} journey — check each off as you go.
+            {tl('growth.curatedFrom', 'Curated from your {journey} journey — check each off as you go.').replace('{journey}', String(journeyType).replace(/_/g, ' '))}
           </div>
           {todos.length > 0 && (
             <div aria-hidden="true" style={{ height: 6, borderRadius: 999, background: 'var(--line,#EDF2F0)', overflow: 'hidden' }}>
@@ -3608,19 +3648,19 @@ function GrowthTodos({ todos, journeyType, onToggle, onRun, onAdd, onDelete, go 
         </div>
       ) : (
         <div className="tiny muted" style={{ marginTop: -6, marginBottom: 12 }}>
-          Add your own goals, or begin a guided journey in Explore to fill this with a curated plan.
+          {tl('growth.emptyHint', 'Add your own goals, or begin a guided journey in Explore to fill this with a curated plan.')}
         </div>
       )}
 
       {todos.length === 0 ? (
-        <Empty icon={Compass} title="No tasks yet" sub="Begin a guided journey in Explore, or add your first goal below." />
+        <Empty icon={Compass} title={tl('growth.emptyTitle', 'No tasks yet')} sub={tl('growth.emptySub', 'Begin a guided journey in Explore, or add your first goal below.')} />
       ) : (
         <div className="col" style={{ gap: 16 }}>
           {TODO_CADENCE.map(({ key, label }) => (
             groups[key].length > 0 && (
               <div key={key}>
                 <div className="tiny f7" style={{ textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--muted,#8AA09C)', fontWeight: 800, marginBottom: 4 }}>
-                  {label} <span style={{ opacity: .7 }}>· {groups[key].filter((t) => t.done).length}/{groups[key].length}</span>
+                  {tl(CADENCE_I18N[key] || '', label)} <span style={{ opacity: .7 }}>· {groups[key].filter((td) => td.done).length}/{groups[key].length}</span>
                 </div>
                 <div className="col" style={{ gap: 2 }}>
                   {groups[key].map(renderRow)}
@@ -3638,7 +3678,7 @@ function GrowthTodos({ todos, journeyType, onToggle, onRun, onAdd, onDelete, go 
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') add(); }}
-            placeholder="Add your own goal…"
+            placeholder={tl('growth.addGoalPlaceholder', 'Add your own goal…')}
             style={{ flex: 1, minWidth: 0, borderRadius: 10, border: '1.5px solid var(--line,#E6EDEA)', padding: '9px 12px', fontFamily: 'inherit', fontSize: 13.5, color: 'var(--ink)', background: '#fff', outline: 'none' }}
           />
         </div>
@@ -3650,7 +3690,7 @@ function GrowthTodos({ todos, journeyType, onToggle, onRun, onAdd, onDelete, go 
               <d.icon size={15} />
             </button>
           ))}
-          <Btn variant="primary" icon={Plus} onClick={add} disabled={!title.trim()}>Add</Btn>
+          <Btn variant="primary" icon={Plus} onClick={add} disabled={!title.trim()}>{tl('growth.add', 'Add')}</Btn>
         </div>
       </div>
     </Card>
@@ -3659,18 +3699,20 @@ function GrowthTodos({ todos, journeyType, onToggle, onRun, onAdd, onDelete, go 
 
 /* Daily habit tracker — today's habits with a tap-to-tick. */
 function HabitTracker({ habits, ticked, onToggle, onAdd, onDelete }) {
+  const { t } = useLocale() || {};
+  const tl = (k, fallback) => { const v = t ? t(k) : null; return v && v !== k ? v : fallback; };
   const [name, setName] = useState('');
   const doneCount = habits.filter((h) => ticked[h.id]).length;
   const add = () => { const v = name.trim(); if (!v) return; onAdd(v); setName(''); };
   return (
     <Card>
       <SectionHead
-        eyebrow="Daily habits"
-        title="Habit tracker"
-        action={habits.length ? <Pill tone={doneCount === habits.length ? 'gold' : 'mint'} icon={Sparkles}>{doneCount}/{habits.length} today</Pill> : null}
+        eyebrow={tl('habit.eyebrow', 'Daily habits')}
+        title={tl('habit.title', 'Habit tracker')}
+        action={habits.length ? <Pill tone={doneCount === habits.length ? 'gold' : 'mint'} icon={Sparkles}>{tl('habit.todayCount', '{done}/{total} today').replace('{done}', doneCount).replace('{total}', habits.length)}</Pill> : null}
       />
       {habits.length === 0 ? (
-        <Empty icon={Leaf} title="No habits yet" sub="Add up to 5 daily habits — or begin a journey to seed them automatically." />
+        <Empty icon={Leaf} title={tl('habit.emptyTitle', 'No habits yet')} sub={tl('habit.emptySub', 'Add up to 5 daily habits — or begin a journey to seed them automatically.')} />
       ) : (
         <div className="ci-habits" style={{ marginTop: 4 }}>
           {habits.map((h) => (
@@ -3680,7 +3722,7 @@ function HabitTracker({ habits, ticked, onToggle, onAdd, onDelete }) {
                 <span style={{ fontSize: 16 }}>{h.icon || '🌱'}</span>
                 <span className="ci-hname">{h.name}</span>
               </button>
-              <button className="icon-btn" title="Remove habit" onClick={() => onDelete(h)}
+              <button className="icon-btn" title={tl('habit.removeHabit', 'Remove habit')} onClick={() => onDelete(h)}
                 style={{ border: 'none', background: 'transparent', color: 'var(--muted,#8AA09C)', cursor: 'pointer', padding: 4 }}>
                 <Trash2 size={14} />
               </button>
@@ -3694,10 +3736,10 @@ function HabitTracker({ habits, ticked, onToggle, onAdd, onDelete }) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') add(); }}
-            placeholder="Add a daily habit…"
+            placeholder={tl('habit.addPlaceholder', 'Add a daily habit…')}
             style={{ flex: 1, borderRadius: 10, border: '1.5px solid var(--line,#E6EDEA)', padding: '9px 12px', fontFamily: 'inherit', fontSize: 13.5, color: 'var(--ink)', background: '#fff', outline: 'none' }}
           />
-          <Btn variant="primary" icon={Plus} onClick={add} disabled={!name.trim()}>Add</Btn>
+          <Btn variant="primary" icon={Plus} onClick={add} disabled={!name.trim()}>{tl('growth.add', 'Add')}</Btn>
         </div>
       )}
     </Card>
@@ -3710,7 +3752,7 @@ function HabitTracker({ habits, ticked, onToggle, onAdd, onDelete }) {
    refresh, but is NOT synced to any server — the card states that plainly and
    preserves the record of the member's own approval. Dismiss deletes the
    device-local copy for this account. */
-function ApprovedJourneyCard({ journey, onDismiss, todosPresent = false, onRetrySeed, retrying = false }) {
+function ApprovedJourneyCard({ journey, onDismiss, todosPresent = false, localTodosPresent = false, onRetrySeed, retrying = false }) {
   const { t } = useLocale();
   const tl = (k, fallback) => { const v = t ? t(k) : null; return v && v !== k ? v : fallback; };
   if (!journey) return null;
@@ -3722,6 +3764,11 @@ function ApprovedJourneyCard({ journey, onDismiss, todosPresent = false, onRetry
   // that is actually true; otherwise we surface a retryable state instead.
   const synced = journey.seeded === true && todosPresent;
   const stepCount = (journey.steps || []).length;
+  const stepsLabel = tl('journey.approved.stepsCount', '{n} focus step{s}')
+    .replace('{n}', stepCount).replace('{s}', stepCount === 1 ? '' : 's');
+  const rhythmLabel = journey.cadence && journey.cadence !== 'personalized'
+    ? tl('journey.approved.cadenceRhythm', ' · {cadence} rhythm').replace('{cadence}', journey.cadence)
+    : tl('journey.approved.ownRhythm', ' · your own rhythm');
   return (
     <Card className="lg" data-testid="approved-journey-card"
       style={{ border: '1px solid var(--brand,#06403B)', background: 'rgba(6,64,59,.04)' }}>
@@ -3729,12 +3776,13 @@ function ApprovedJourneyCard({ journey, onDismiss, todosPresent = false, onRetry
         <div>
           <SectionHead eyebrow={tl('journey.approved.eyebrow', 'You approved this journey')} title={journey.title} />
           <div className="tiny muted" style={{ marginTop: -6 }}>
-            {synced
-              ? `Added to your To-do list. You approved it${when ? ` on ${when}` : ''}.`
-              : `Saved on this device. You approved it${when ? ` on ${when}` : ''}.`}
+            {(synced
+              ? tl('journey.approved.syncedMeta', 'Added to your To-do list. You approved it{when}.')
+              : tl('journey.approved.localMeta', 'Saved on this device. You approved it{when}.')
+            ).replace('{when}', when ? `${tl('journey.approved.onDate', ' on ')}${when}` : '')}
           </div>
         </div>
-        <button type="button" onClick={onDismiss} aria-label="Dismiss approved journey"
+        <button type="button" onClick={onDismiss} aria-label={tl('journey.approved.dismissAria', 'Dismiss approved journey')}
           className="tiny" style={{ border: '1px solid var(--line)', background: '#fff', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', flex: 'none' }}>
           {tl('journey.approved.dismiss', 'Dismiss')}
         </button>
@@ -3746,26 +3794,44 @@ function ApprovedJourneyCard({ journey, onDismiss, todosPresent = false, onRetry
       {synced ? (
         <>
           <div className="tiny muted" style={{ margin: '8px 0 2px' }} data-testid="approved-journey-synced">
-            {stepCount} focus step{stepCount === 1 ? '' : 's'}
-            {journey.cadence && journey.cadence !== 'personalized' ? ` · ${journey.cadence} rhythm` : ' · your own rhythm'}
-            {' '}— see your To-do list below.
+            {stepsLabel}{rhythmLabel}{' '}{tl('journey.approved.stepsSuffix', '— see your To-do list below.')}
           </div>
           <div className="tiny muted2">
-            {journey.source ? `${journey.source} · ` : ''}Nothing runs automatically — each step is yours to start.
+            {journey.source ? `${journey.source} · ` : ''}{tl('journey.approved.autonomy', 'Nothing runs automatically — each step is yours to start.')}
           </div>
         </>
       ) : (
         <div style={{ margin: '10px 0 2px' }} data-testid="approved-journey-unsynced">
-          <div className="tiny muted" style={{ marginBottom: 8 }}>
-            {stepCount} focus step{stepCount === 1 ? '' : 's'} approved. We couldn’t add them to your
-            To-do list yet — you can try again.
-          </div>
-          {onRetrySeed && (
-            <button type="button" onClick={onRetrySeed} disabled={retrying}
-              className="tiny f7"
-              style={{ display: 'inline-flex', gap: 6, alignItems: 'center', border: '1px solid var(--brand,#06403B)', background: '#fff', color: 'var(--brand,#06403B)', borderRadius: 8, padding: '7px 14px', cursor: retrying ? 'default' : 'pointer', opacity: retrying ? 0.7 : 1 }}>
-              <RefreshCw size={13} /> {retrying ? tl('journey.approved.retrying', 'Adding…') : tl('journey.approved.retry', 'Add to my To-do list')}
-            </button>
+          {localTodosPresent ? (
+            // K1.4.1 §B — the approved steps ARE real, actionable device-local
+            // To-dos rendered in the list below. This is a truthful success state
+            // ("Saved on this device"), NOT a failure. We offer an OPTIONAL, quiet
+            // "sync to your account" affordance — never an alarming error.
+            <>
+              <div className="tiny muted" style={{ marginBottom: 8 }} data-testid="approved-journey-local">
+                {stepsLabel} {tl('journey.approved.savedOnDevice', 'saved on this device')} — {tl('journey.approved.seeBelow', 'see your To-do list below.')}
+              </div>
+              {onRetrySeed && (
+                <button type="button" onClick={onRetrySeed} disabled={retrying}
+                  className="tiny f7"
+                  style={{ display: 'inline-flex', gap: 6, alignItems: 'center', border: '1px solid var(--line)', background: '#fff', color: 'var(--muted,#5C716E)', borderRadius: 8, padding: '7px 14px', cursor: retrying ? 'default' : 'pointer', opacity: retrying ? 0.7 : 1 }}>
+                  <RefreshCw size={13} /> {retrying ? tl('journey.approved.syncing', 'Syncing…') : tl('journey.approved.sync', 'Sync to my account')}
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="tiny muted" style={{ marginBottom: 8 }}>
+                {stepsLabel} {tl('journey.approved.fallbackTail', "approved. We couldn't add them to your To-do list yet — you can try again.")}
+              </div>
+              {onRetrySeed && (
+                <button type="button" onClick={onRetrySeed} disabled={retrying}
+                  className="tiny f7"
+                  style={{ display: 'inline-flex', gap: 6, alignItems: 'center', border: '1px solid var(--brand,#06403B)', background: '#fff', color: 'var(--brand,#06403B)', borderRadius: 8, padding: '7px 14px', cursor: retrying ? 'default' : 'pointer', opacity: retrying ? 0.7 : 1 }}>
+                  <RefreshCw size={13} /> {retrying ? tl('journey.approved.retrying', 'Adding…') : tl('journey.approved.retry', 'Add to my To-do list')}
+                </button>
+              )}
+            </>
           )}
         </div>
       )}
@@ -3796,6 +3862,7 @@ function JournalPage({ user, go, forcedView, hideToggle }) {
   const [retryingSeed, setRetryingSeed] = useState(false);
   const todoListRef = useRef(null);
 
+  const uid = user?.id ?? null;
   const loadGrowth = useCallback(async () => {
     const today = new Date().toISOString().slice(0, 10);
     const [td, h, tk] = await Promise.all([
@@ -3803,12 +3870,17 @@ function JournalPage({ user, go, forcedView, hideToggle }) {
       api.getHabits().catch(() => ({ habits: [] })),
       api.getHabitTicks(today, today).catch(() => ({ ticks: [] })),
     ]);
-    setTodos(td?.todos || []);
+    // K1.4.1 §A/§B — render server rows and USER-SCOPED device-local personalized
+    // rows through the SAME Growth pipeline: normalize, merge (dedupe by step_key,
+    // server wins), and sort deterministically.
+    const serverRows = normalizeTodos(td?.todos || []);
+    const deviceRows = loadDeviceTodos(uid);
+    setTodos(sortTodosDeterministic(mergeTodos(serverRows, deviceRows)));
     setHabits(h?.habits || []);
     const pre = {};
     (tk?.ticks || []).forEach((x) => { pre[x.habit_id] = true; });
     setTicked(pre);
-  }, []);
+  }, [uid]);
 
   useEffect(() => {
     let alive = true;
@@ -3862,6 +3934,14 @@ function JournalPage({ user, go, forcedView, hideToggle }) {
   // ── To-Do handlers ──
   const toggleTodo = async (t) => {
     setTodos((xs) => xs.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x)));
+    // K1.4.1 §B — a device-local personalized To-do persists its completion to
+    // the device store (no server round-trip); it must NOT call api.toggleTodo
+    // (the row has no server id). Server rows keep the existing behavior.
+    if (t.source === 'device') {
+      try { toggleDeviceTodo(uid, t.id); } catch { /* storage unavailable */ }
+      window.dispatchEvent(new CustomEvent('solaris:progress', { detail: { source: 'todo' } }));
+      return;
+    }
     try {
       await api.toggleTodo(t.id);
       // Phase 2 — a completed/uncompleted todo changes journey progress; tell the
@@ -3890,6 +3970,11 @@ function JournalPage({ user, go, forcedView, hideToggle }) {
         // Bookings surface reads the pending id and opens that thread/detail.
         if (target) window.dispatchEvent(new CustomEvent('solaris:navigate', { detail: { tab: 'bookings', bookingId: String(target) } }));
         else go && go('bookings');
+        break;
+      case 'open_journal':
+        // K1.4.1 §C — reflection step opens the member-owned Journal (Reflect)
+        // surface. Target-less and always valid.
+        go && go('journal');
         break;
       case 'navigate':
         if (target && target !== 'journal') go && go(target);
@@ -3951,6 +4036,18 @@ function JournalPage({ user, go, forcedView, hideToggle }) {
   // Are the approved personalized-journey steps actually present in the server
   // To-do list? Used so the approved-journey card only says "see below" truthfully.
   const personalizedTodosPresent = todos.some((t) => t.journey_type === PERSONALIZED_JOURNEY_TYPE);
+  // K1.4.1 §B — are the approved steps present as REAL device-local rows (rendered
+  // in the To-do list below)? When true, the card truthfully says "Saved on this
+  // device" and points to the list — never a red "couldn't add them" failure for
+  // the optional server sync.
+  const personalizedLocalPresent = todos.some(
+    (t) => t.journey_type === PERSONALIZED_JOURNEY_TYPE && t.source === 'device',
+  );
+  // "synced" (server-backed) requires server rows specifically — a device row
+  // must NOT flip the card into the synced state.
+  const personalizedServerPresent = todos.some(
+    (t) => t.journey_type === PERSONALIZED_JOURNEY_TYPE && t.source !== 'device',
+  );
 
   return (
     <div className="col" style={{ gap: 20 }}>
@@ -3993,7 +4090,8 @@ function JournalPage({ user, go, forcedView, hideToggle }) {
           <ApprovedJourneyCard
             journey={approvedJourney}
             onDismiss={() => setApprovedJourney?.(null)}
-            todosPresent={personalizedTodosPresent}
+            todosPresent={personalizedServerPresent}
+            localTodosPresent={personalizedLocalPresent}
             onRetrySeed={retrySeedPlan}
             retrying={retryingSeed}
           />
@@ -7349,7 +7447,7 @@ export default function LucaPassport() {
         <aside className={`sidebar ${drawer ? 'open' : ''}`}>
           <div className="brand">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <img src="/solaris-logo-v2.png" alt="Solaris" style={{ width: 42, height: 42, objectFit: 'contain', filter: 'drop-shadow(0 0 8px rgba(47,190,159,0.5))' }} />
+              <img src="/solaris-emblem-v2.png" alt="Solaris" style={{ width: 42, height: 42, objectFit: 'contain', filter: 'drop-shadow(0 0 8px rgba(47,190,159,0.5))' }} />
               <div>
                 <div className="brand-name" style={{ fontSize: 15 }}>SOLARIS</div>
                 <div className="brand-sub" style={{ color: portal.accent }}>{portal.sub}</div>

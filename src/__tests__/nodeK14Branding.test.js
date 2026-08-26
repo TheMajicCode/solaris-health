@@ -2,7 +2,7 @@
 // These assertions go beyond the K1.3 structural checks: they prove the shipped
 // marks are HIGH RESOLUTION (real pixel dimensions read from the PNG IHDR), that
 // the maskable icon is a full-bleed deep-teal field with NO white circle, and
-// that every reference uses the new versioned (-v2) filenames behind cache v18.
+// that every reference uses the new versioned (-v2) filenames behind cache v19.
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -42,14 +42,14 @@ function topLeftRGBA(path) {
   return { r: raw[1], g: raw[2], b: raw[3], a: raw[4] };
 }
 
-describe('K1.4 §5 — versioned filenames + cache v18', () => {
+describe('K1.4 §5 — versioned filenames + cache v19', () => {
   const sw = readFileSync(P('public/sw.js'), 'utf8');
   const manifest = JSON.parse(readFileSync(P('public/manifest.json'), 'utf8'));
   const html = readFileSync(P('index.html'), 'utf8');
 
   it('service worker cache is v18 (never still v17)', () => {
-    expect(sw).toMatch(/CACHE_NAME\s*=\s*'solaris-v18'/);
-    expect(sw).not.toMatch(/'solaris-v17'/);
+    expect(sw).toMatch(/CACHE_NAME\s*=\s*'solaris-v19'/);
+    expect(sw).not.toMatch(/'solaris-v18'/);
   });
 
   it('manifest references only versioned -v2 icons', () => {

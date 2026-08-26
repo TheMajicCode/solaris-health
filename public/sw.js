@@ -24,7 +24,7 @@
 // `maskable` icons with a safe logo zone and no white circle, high-resolution
 // splash/onboarding mark). Same rule: only obsolete Solaris caches are deleted
 // on activate - never auth/local data.
-const CACHE_NAME = 'solaris-v18';
+const CACHE_NAME = 'solaris-v19';
 const SHELL_URL = '/index.html';
 
 // Branding assets to precache so the installed icon, splash, favicon and
@@ -41,6 +41,7 @@ const PRECACHE_URLS = [
   '/icons/apple-touch-icon-v2.png',
   '/icons/media-artwork-512-v2.png',
   '/icons/splash-logo-1024-v2.png',
+  '/solaris-emblem-v2.png',
 ];
 
 self.addEventListener('install', (event) => {

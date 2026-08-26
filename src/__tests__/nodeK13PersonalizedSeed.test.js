@@ -33,13 +33,25 @@ describe('personalizedSeedSteps — draft → idempotent seed payload', () => {
     expect(a.every((k) => /^personalized_(daily|weekly|monthly)_\d+$/.test(k))).toBe(true);
   });
 
-  it('skips "Skipped …" placeholder steps and carries no action metadata (no PHI, non-actionable)', () => {
+  it('skips "Skipped …" placeholder steps', () => {
     const off = buildJourneyDraft({ focusAreas: ['Mind'], rhythm: { daily: false, weekly: true, monthly: true } });
     const steps = personalizedSeedSteps(off);
     expect(steps.some((s) => /^skipped/i.test(s.title))).toBe(false);
+  });
+
+  // K1.4.1 §C — personalized steps may now carry a SAFE action, but ONLY one
+  // with a real, always-valid destination. The single safely-derivable action
+  // from prose is a reflection → the member-owned Journal (`open_journal`, which
+  // needs NO target). Any other actionable type MUST NOT appear (we never invent
+  // a practitioner / service / booking / media target), and no step may carry a
+  // fabricated action_target.
+  it('carries only safe actions — reflection → open_journal, never a fabricated target', () => {
+    const steps = personalizedSeedSteps(draft);
+    const ALLOWED = new Set([null, 'open_journal']);
     for (const s of steps) {
-      expect(s.action_type).toBeNull();
-      expect(s.action_target).toBeNull();
+      expect(ALLOWED.has(s.action_type)).toBe(true);
+      // No personalized prose step ever fabricates a destination id.
+      expect(s.action_target ?? null).toBeNull();
       expect(s.dimension).toBeNull();
     }
   });

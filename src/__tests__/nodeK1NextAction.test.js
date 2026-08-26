@@ -40,14 +40,16 @@ describe('Node K1 §A1 — resolveNextAction priority ladder', () => {
     expect(a.destination).toMatchObject({ type: 'section', tab: 'health', section: 'health_doc' });
   });
 
-  it('P3: active server journey next step -> communications/growth', () => {
+  // K1.4.1 §A renumbered the ladder: an unfinished To-do is priority 3 and a
+  // journey milestone WITHOUT a To-do representing it is priority 4.
+  it('P4: active server journey milestone (no To-do) -> communications/growth', () => {
     const a = resolveNextAction({
       vitality: 50,
       checkins: [{ checkin_date: '2026-08-23' }],
       journeys: [{ status: 'active', nextMilestone: { label: 'Week 2 continue' } }],
       now: TODAY,
     });
-    expect(a.priority).toBe(3);
+    expect(a.priority).toBe(4);
     expect(a.destination).toMatchObject({ type: 'communications', section: 'growth' });
   });
 

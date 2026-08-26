@@ -38,9 +38,14 @@ export function cadenceForTodo(t) {
   }
 }
 
-// The allowlisted action types a Growth step may carry (§4). Anything else
-// renders as a plain (non-actionable) checklist item — never a dead button.
-export const TODO_ACTION_TYPES = ['start_checkin', 'play_audio', 'open_listing', 'open_booking', 'navigate'];
+// The allowlisted action types a Growth step may carry (§4 + K1.4.1 §C). Anything
+// else renders as a plain (non-actionable) checklist item — never a dead button.
+//
+// `open_journal` (K1.4.1 §C) is the ONE action safely derivable from a prose
+// personalized step: it opens the member-owned Journal surface and needs NO
+// target id, so it is always valid. (A bare `navigate` to 'journal' still
+// returns null so the K1.3 grouping contract is unchanged.)
+export const TODO_ACTION_TYPES = ['start_checkin', 'play_audio', 'open_listing', 'open_booking', 'navigate', 'open_journal'];
 
 // Returns { key, label } for the step's CTA, or null when the step is not
 // actionable (or a bare navigate to the surface we are already on).
@@ -52,6 +57,7 @@ export function todoActionMeta(t) {
     case 'play_audio': return tgt ? { key: 'play_audio', label: 'Play' } : null;
     case 'open_listing': return tgt ? { key: 'open_listing', label: 'View' } : null;
     case 'open_booking': return { key: 'open_booking', label: 'View booking' };
+    case 'open_journal': return { key: 'open_journal', label: 'Open Journal' };
     case 'navigate': return (tgt && tgt !== 'journal') ? { key: 'navigate', label: 'Go' } : null;
     default: return null;
   }

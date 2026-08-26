@@ -39,11 +39,11 @@ describe('Node K1.3 §Phase 7 — manifest icon purposes', () => {
   });
 });
 
-describe('Node K1.3 §Phase 7 — service worker v18', () => {
+describe('Node K1.3 §Phase 7 — service worker v19', () => {
   const sw = readFileSync(P('public/sw.js'), 'utf8');
-  it('bumps the Solaris cache to v18', () => {
-    expect(sw).toMatch(/CACHE_NAME\s*=\s*'solaris-v18'/);
-    expect(sw).not.toMatch(/'solaris-v17'/);
+  it('bumps the Solaris cache to v19', () => {
+    expect(sw).toMatch(/CACHE_NAME\s*=\s*'solaris-v19'/);
+    expect(sw).not.toMatch(/'solaris-v18'/);
   });
   it('precaches the new branding assets', () => {
     expect(sw).toContain('/icons/icon-maskable-192-v2.png');

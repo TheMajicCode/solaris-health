@@ -173,6 +173,18 @@ export default {
   'nextStep.fallback.title': 'Design your path',
   'nextStep.fallback.explanation': 'Let LUCA draft a personalized journey shaped around your goals — you approve every step.',
   'nextStep.fallback.cta': 'Personalized Journey',
+  // K1.4.1 §A — the green card now follows the real Growth To-do list. Its title
+  // is the To-do's own text (dynamic), so only the eyebrow is a static string;
+  // the CTA verb is a shared cta.* key chosen by destination (below).
+  'nextStep.journey_todo.eyebrow': 'Your Next Step',
+  // Shared CTA verbs for the Next Step button (destination-driven, K1.4.1 §A/§C).
+  'cta.checkin': 'Check in',
+  'cta.openJournal': 'Open Journal',
+  'cta.play': 'Play',
+  'cta.view': 'View',
+  'cta.viewBooking': 'View booking',
+  'cta.go': 'Go',
+  'cta.openGrowth': 'Open Growth',
 
   // ── Personalized Journey approval → To-dos (K1.4 Defect 3) ──
   'journey.approved.syncedTitle': 'Added to your To-do list',
@@ -183,9 +195,44 @@ export default {
   'journey.approved.retrying': 'Adding…',
   'journey.approved.eyebrow': 'You approved this journey',
   'journey.approved.dismiss': 'Dismiss',
+  'journey.approved.savedOnDevice': 'saved on this device',
+  'journey.approved.seeBelow': 'see your To-do list below.',
+  'journey.approved.sync': 'Sync to my account',
+  'journey.approved.syncing': 'Syncing...',
+  'journey.approved.syncedMeta': 'Added to your To-do list. You approved it{when}.',
+  'journey.approved.localMeta': 'Saved on this device. You approved it{when}.',
+  'journey.approved.stepsSuffix': '— see your To-do list below.',
+  'journey.approved.autonomy': 'Nothing runs automatically — each step is yours to start.',
+  'journey.approved.dismissAria': 'Dismiss approved journey',
+  'journey.approved.onDate': ' on ',
+  'journey.approved.stepsCount': '{n} focus step{s}',
+  'journey.approved.ownRhythm': ' · your own rhythm',
+  'journey.approved.cadenceRhythm': ' · {cadence} rhythm',
+  'journey.approved.fallbackTail': "approved. We couldn't add them to your To-do list yet — you can try again.",
   'journey.todosToday': 'Today',
   'journey.todosWeek': 'This week',
   'journey.todosMonth': 'This month',
+
+  // ── Growth To-do list & habit tracker (K1.4.1 §E signed-in Spanish) ──
+  'growth.planEyebrow': 'Your plan',
+  'growth.todoTitle': 'To-do list',
+  'growth.doneCount': '{done}/{total} done',
+  'growth.markDone': 'Mark done',
+  'growth.markNotDone': 'Mark not done',
+  'growth.remove': 'Remove',
+  'growth.curatedFrom': 'Curated from your {journey} journey — check each off as you go.',
+  'growth.emptyHint': 'Add your own goals, or begin a guided journey in Explore to fill this with a curated plan.',
+  'growth.emptyTitle': 'No tasks yet',
+  'growth.emptySub': 'Begin a guided journey in Explore, or add your first goal below.',
+  'growth.addGoalPlaceholder': 'Add your own goal…',
+  'growth.add': 'Add',
+  'habit.eyebrow': 'Daily habits',
+  'habit.title': 'Habit tracker',
+  'habit.todayCount': '{done}/{total} today',
+  'habit.emptyTitle': 'No habits yet',
+  'habit.emptySub': 'Add up to 5 daily habits — or begin a journey to seed them automatically.',
+  'habit.removeHabit': 'Remove habit',
+  'habit.addPlaceholder': 'Add a daily habit…',
 
   // ── Portal switching (Node E5) ──
   'portal.switchToPractitioner': 'Switch to Practitioner portal',

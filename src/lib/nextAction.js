@@ -19,6 +19,9 @@
 // `icon` is a string key resolved to a lucide component by the renderer.
 // `destination` is a typed navigation intent the shell knows how to execute.
 
+import { firstUnfinishedJourneyTodo } from './todoPipeline.js';
+import { todoActionMeta } from './todoGrouping.js';
+
 // ---- helpers ---------------------------------------------------------------
 
 // Local calendar day key (YYYY-MM-DD) for a date-like value.
@@ -38,10 +41,15 @@ export function dayKey(d) {
 export function isCheckinDue({ intakeComplete, checkins = [], now = new Date() } = {}) {
   if (!intakeComplete) return false;
   const todayKey = dayKey(now);
-  const last = checkins && checkins.length ? checkins[0] : null;
-  if (!last) return true; // onboarded but has never checked in
-  const lastKey = dayKey(last.checkin_date || last.created_at || last.date);
-  return lastKey !== todayKey;
+  const list = Array.isArray(checkins) ? checkins : [];
+  if (!list.length) return true; // onboarded but has never checked in
+  // Scan ALL check-ins for one dated today — never assume checkins[0] is the
+  // newest (the API list may be unsorted or oldest-first). A check-in exists for
+  // today if ANY row's local calendar day matches.
+  const checkedInToday = list.some(
+    (c) => dayKey(c?.checkin_date || c?.created_at || c?.date) === todayKey,
+  );
+  return !checkedInToday;
 }
 
 // Booking states that require an EXPLICIT member action (e.g. a practitioner
@@ -84,6 +92,37 @@ export function activeJourneyWithStep({ journeys = [], approvedJourney = null } 
   return null;
 }
 
+// Map a Growth To-do to the EXACT destination its CTA opens, plus a matching
+// title/cta/icon for the "Your Next Step" card (contract priority 3). Steps with
+// no safe action route to the Growth list (where the checkbox lives) — never a
+// dead button or a bare root tab.
+export function todoDestination(todo) {
+  const meta = todoActionMeta(todo);
+  const type = todo?.action_type;
+  const tgt = todo?.action_target || null;
+  const title = todo?.title || 'Your next step';
+  if (meta) {
+    switch (type) {
+      case 'start_checkin':
+        return { title: 'Check in with yourself', cta: 'Check in', ctaKey: 'cta.checkin', icon: 'checkin', destination: { type: 'checkin' } };
+      case 'open_journal':
+        return { title, cta: 'Open Journal', ctaKey: 'cta.openJournal', icon: 'journal', destination: { type: 'communications', section: 'journal' } };
+      case 'play_audio':
+        return { title, cta: 'Play', ctaKey: 'cta.play', icon: 'media', destination: { type: 'communications', section: 'media', target: tgt } };
+      case 'open_listing':
+        return { title, cta: 'View', ctaKey: 'cta.view', icon: 'growth', destination: { type: 'explore', target: tgt } };
+      case 'open_booking':
+        return { title, cta: 'View booking', ctaKey: 'cta.viewBooking', icon: 'booking', destination: { type: 'booking', bookingId: tgt } };
+      case 'navigate':
+        return { title, cta: 'Go', ctaKey: 'cta.go', icon: 'growth', destination: { type: 'section', tab: tgt } };
+      default:
+        break;
+    }
+  }
+  // Non-actionable (checkbox-only) step → open the Growth list to complete it.
+  return { title, cta: 'Open Growth', ctaKey: 'cta.openGrowth', icon: 'growth', destination: { type: 'communications', section: 'growth' } };
+}
+
 // ---- the resolver ----------------------------------------------------------
 
 /**
@@ -102,6 +141,7 @@ export function resolveNextAction(ctx = {}) {
     checkins = [],
     journeys = [],
     approvedJourney = null,
+    todos = [],
     bookings = [],
     now = new Date(),
     dataError = false,
@@ -177,7 +217,31 @@ export function resolveNextAction(ctx = {}) {
     };
   }
 
-  // ── Priority 3 & 4 — Accepted journey with an incomplete next step ────────
+  // ── Priority 3 — First unfinished actionable Growth To-do ────────────────
+  // The green card now FOLLOWS the member's real Growth To-do list (server rows
+  // merged with device-local personalized rows). The first unfinished journey
+  // To-do, in deterministic order, is the next step — and its CTA opens the
+  // EXACT screen that To-do points to (Journal / Media / Growth / booking …),
+  // never a bare root tab.
+  const nextTodo = firstUnfinishedJourneyTodo(todos);
+  if (nextTodo) {
+    const d = todoDestination(nextTodo);
+    return {
+      priority: 3,
+      key: 'journey_todo',
+      eyebrow: 'Your Next Step',
+      title: d.title,
+      explanation: nextTodo.detail || 'Continue the next step of your journey.',
+      cta: d.cta,
+      ctaKey: d.ctaKey || null,
+      icon: d.icon,
+      stepKey: nextTodo.step_key || null,
+      destination: d.destination,
+    };
+  }
+
+  // ── Priority 4 — Accepted journey milestone (ONLY when no unfinished To-do
+  //    row represents it — priority 3 returns above whenever one does) ────────
   const aj = activeJourneyWithStep({ journeys, approvedJourney });
   if (aj) {
     const sub = classifyMilestone(aj.milestone); // priority 4 classification
@@ -201,7 +265,7 @@ export function resolveNextAction(ctx = {}) {
       };
     }
     return {
-      priority: 3,
+      priority: 4,
       key: 'journey_continue',
       eyebrow: 'Your Next Step',
       title: 'Continue your journey',

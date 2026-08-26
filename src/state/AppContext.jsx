@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '../lib/api.js';
 import { signChallenge, rememberKeyForSession, forgetSessionKey } from '../lib/identity-key.js';
+import { buildLocalTodosFromJourney, loadDeviceTodos, saveDeviceTodos, deviceTodosKey } from '../lib/deviceTodos.js';
 
 const AppContext = createContext(null);
 export const useApp = () => useContext(AppContext);
@@ -61,8 +62,24 @@ export function AppProvider({ children }) {
           ownerUserId: uid,
         };
         localStorage.setItem(key, JSON.stringify(toStore));
+        // K1.4.1 §B — immediately materialize the approved journey into the
+        // USER-SCOPED device-local To-do store so the SAME Growth pipeline and
+        // the Dashboard "Your Next Step" resolver have real, actionable rows even
+        // while the optional seed-plan endpoint is a 404. Existing completion
+        // state is preserved across a re-approve (merge by step_key on `done`).
+        const fresh = buildLocalTodosFromJourney(block, uid);
+        if (fresh.length) {
+          const prev = loadDeviceTodos(uid);
+          const doneByKey = new Map(prev.map((t) => [t.step_key, !!t.done]));
+          const merged = fresh.map((t) => (
+            doneByKey.has(t.step_key) ? { ...t, done: doneByKey.get(t.step_key) } : t
+          ));
+          saveDeviceTodos(uid, merged);
+        }
       } else {
         localStorage.removeItem(key);
+        // Dismiss/delete also clears the device-local To-dos for this account.
+        try { localStorage.removeItem(deviceTodosKey(uid)); } catch { /* ignore */ }
       }
     } catch { /* storage unavailable — degrade to in-memory only */ }
   }, [user]);
