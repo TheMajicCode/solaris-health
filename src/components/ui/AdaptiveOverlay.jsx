@@ -91,6 +91,46 @@ export default function AdaptiveOverlay({
     };
   }, [open, onClose, dismissable]);
 
+  // Keyboard-safety (shared by Daily Check-in and Daily Signals). When the
+  // on-screen keyboard opens on mobile it shrinks the visual viewport; without
+  // this the sticky footer (Save) and the focused field can hide behind it.
+  //   (a) Track window.visualViewport and cap the panel to its height so the
+  //       footer stays visible above the keyboard.
+  //   (b) On focusin, scroll the focused input into the centre of the panel.
+  // Guarded for environments without visualViewport (e.g. jsdom).
+  useEffect(() => {
+    if (!open) return undefined;
+    const panel = panelRef.current;
+    if (!panel) return undefined;
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+
+    const applyViewport = () => {
+      if (!vv) return;
+      // Only constrain on the mobile bottom-sheet breakpoint; the desktop dialog
+      // is centred and already caps itself with max-height.
+      if (window.innerWidth >= 640) { panel.style.maxHeight = ''; return; }
+      panel.style.maxHeight = `${Math.round(vv.height)}px`;
+    };
+
+    const onFocusIn = (e) => {
+      const t = e.target;
+      if (!t || !/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+      // Defer so the keyboard has begun to open and the viewport has resized.
+      setTimeout(() => {
+        try { t.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch { /* older browsers */ }
+      }, 120);
+    };
+
+    applyViewport();
+    if (vv) { vv.addEventListener('resize', applyViewport); vv.addEventListener('scroll', applyViewport); }
+    panel.addEventListener('focusin', onFocusIn);
+    return () => {
+      if (vv) { vv.removeEventListener('resize', applyViewport); vv.removeEventListener('scroll', applyViewport); }
+      panel.removeEventListener('focusin', onFocusIn);
+      if (panel) panel.style.maxHeight = '';
+    };
+  }, [open]);
+
   if (!open) return null;
 
   return createPortal(

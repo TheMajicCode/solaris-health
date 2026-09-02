@@ -52,6 +52,23 @@ export function isCheckinDue({ intakeComplete, checkins = [], now = new Date() }
   return !checkedInToday;
 }
 
+// §8 — THE ONE authoritative "has the member checked in today?" predicate.
+// Every Check-in CTA (Dashboard, Health, Growth and any other surface) must
+// derive its label/behaviour from this single function so they can never
+// disagree. It is keyed on the user's LOCAL calendar date + timezone (via
+// dayKey, which uses local Date accessors) and scans ALL check-ins — never
+// assuming checkins[0] is the newest. It is deliberately independent of intake:
+// "did I check in today?" is a pure fact about the check-in list, whereas
+// isCheckinDue additionally gates on onboarding for the Next Step card.
+export function hasCheckedInToday(checkins = [], now = new Date()) {
+  const list = Array.isArray(checkins) ? checkins : [];
+  if (!list.length) return false;
+  const todayKey = dayKey(now);
+  return list.some(
+    (c) => dayKey(c?.checkin_date || c?.created_at || c?.date) === todayKey,
+  );
+}
+
 // Booking states that require an EXPLICIT member action (e.g. a practitioner
 // proposed a new time the member must confirm).
 const MEMBER_ACTION_BOOKING_STATES = new Set(['proposed', 'reschedule_proposed', 'action_required']);

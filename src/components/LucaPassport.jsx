@@ -43,7 +43,10 @@ import ProviderApplication from './provider/ProviderApplication.jsx';
 import MyPractice from './provider/MyPractice.jsx';
 import PersonalizedJourneySheet from './luca/PersonalizedJourneySheet.jsx';
 import TopbarPopover from './ui/TopbarPopover.jsx';
-import resolveNextAction from '../lib/nextAction.js';
+import resolveNextAction, { hasCheckedInToday } from '../lib/nextAction.js';
+import resolveNextSteps from '../lib/nextSteps.js';
+import { latestByMetric, formatSignal, isRecorded, NOT_LOGGED } from '../lib/dailySignals.js';
+import DailySignalsSheet from './health/DailySignalsSheet.jsx';
 import { pickAlternate, eligibleProviders } from '../lib/alternateProvider.js';
 import { curatedNavIntent } from '../lib/curatedDeepLink.js';
 import { TODO_CADENCE, cadenceForTodo, todoActionMeta } from '../lib/todoGrouping.js';
@@ -1551,6 +1554,64 @@ function DailyCheckinModal({ user, open, onClose, onSaved }) {
   );
 }
 
+/* ── §9 — execute a Next Steps destination (shared by every Check-in surface) ──
+   The post-check-in "Next Steps" CTA resolves to ONE deterministic destination
+   (see resolveNextSteps) and this executes it against the shell's navigation.
+   Kept beside runNextStep so the two use the same destination vocabulary. */
+function execNextStepsDestination(dest = {}, { go, onOpenJourney } = {}) {
+  switch (dest.type) {
+    case 'communications':
+      // Growth overview, or a specific task to open/scroll to (dest.target).
+      go('communications', dest.section || 'growth');
+      if (dest.target) {
+        window.dispatchEvent(new CustomEvent('solaris:open-todo', { detail: { stepKey: dest.stepKey || dest.target } }));
+      }
+      break;
+    case 'explore':
+      go('explore');
+      break;
+    case 'journey':
+      // Personalized Journey intake — open the wizard when the surface owns it
+      // (Dashboard), otherwise land on Growth where the same entry lives.
+      if (typeof onOpenJourney === 'function') onOpenJourney();
+      else go('communications', 'growth');
+      break;
+    case 'coach':
+      // LUCA Focus with a contextual goal question (consumed in CoachArea).
+      if (dest.prompt) window.dispatchEvent(new CustomEvent('solaris:luca-goal', { detail: { prompt: dest.prompt } }));
+      go('coach');
+      break;
+    default:
+      go('communications', 'growth');
+  }
+}
+
+/* ── §8 — the ONE Check-in CTA, reused on every surface ───────────────────────
+   Before today's check-in is complete it reads "Check in" and opens the Daily
+   Check-in. After completion EVERY instance flips to "Next Steps" (driven by the
+   single hasCheckedInToday predicate) — it must NEVER reopen the completed
+   check-in; it routes through resolveNextSteps instead. Reviewing a prior
+   check-in remains a separate, explicit action (the weekly strip / history). */
+function CheckinCta({ checkins = [], onOpenCheckin, go, onOpenJourney, nextStepsCtx = {}, className = 'checkin-cta', now = new Date() }) {
+  const done = hasCheckedInToday(checkins, now);
+  if (!done) {
+    return (
+      <button type="button" className={className} onClick={onOpenCheckin}>
+        <Plus size={16} strokeWidth={2.4} /> Check in
+      </button>
+    );
+  }
+  const runNextSteps = () => {
+    const { destination } = resolveNextSteps(nextStepsCtx);
+    execNextStepsDestination(destination, { go, onOpenJourney });
+  };
+  return (
+    <button type="button" className={className} onClick={runNextSteps} data-checkedin="1">
+      <ArrowRight size={16} strokeWidth={2.4} /> Next Steps
+    </button>
+  );
+}
+
 /* ============================== PATIENT — DASHBOARD ============================== */
 function DashboardPage({ user, go }) {
   const [latest, setLatest] = useState(null);
@@ -1572,6 +1633,11 @@ function DashboardPage({ user, go }) {
   const [completeness, setCompleteness] = useState(null);
   const [myBookings, setMyBookings] = useState([]);
   const [journeyOpen, setJourneyOpen] = useState(false);
+  // §10 — the SEPARATE Daily Signals logging sheet (never the Daily Check-in).
+  const [signalsOpen, setSignalsOpen] = useState(false);
+  // §11 — latest OBSERVED signal per metric, from the versioned device-local
+  // store, kept DISTINCT from the subjective check-in scores.
+  const [signals, setSignals] = useState({});
   // K1.4.1 §A — the member's Growth To-dos (server rows merged with device-local
   // personalized rows). This is a Next Step resolver input so the green card
   // FOLLOWS the real To-do list.
@@ -1579,6 +1645,16 @@ function DashboardPage({ user, go }) {
   const { profile: appProfile, setApprovedJourney, approvedJourney } = useApp() || {};
   const { locale } = useLocale() || {};
   const uid = user?.id ?? null;
+
+  // §11 — load observed signals for this user and refresh the instant one is
+  // saved (solaris:signals), so the card updates without a reload. Scoped by uid.
+  useEffect(() => {
+    if (!uid) { setSignals({}); return undefined; }
+    const reload = () => setSignals(latestByMetric(uid));
+    reload();
+    window.addEventListener('solaris:signals', reload);
+    return () => window.removeEventListener('solaris:signals', reload);
+  }, [uid]);
 
   const loadConsents = async () => {
     try {
@@ -1712,6 +1788,18 @@ function DashboardPage({ user, go }) {
   const vitality = latest?.response?.vitality_score ?? 0;
   const focus = latest?.response?.top_focus_areas_json || [];
   const today = checkins[0];
+  // §9 — inputs to the ONE post-check-in Next Steps resolver. Derived from data
+  // already on the Dashboard: goal/preference data is "sufficient" once the
+  // member has an assessment or focus areas, and a guided journey is "available"
+  // when there is a curated recommendation or focus areas to match one.
+  const nextStepsCtx = {
+    approvedJourney,
+    journeys,
+    todos,
+    goalDataSufficient: focus.length > 0 || vitality > 0,
+    goalInAvailableJourneys: Boolean(recs?.curatedJourney) || focus.length > 0,
+    goalText: focus[0]?.name || '',
+  };
   const spark = (rewards.events || []).slice(0, 12).reverse().reduce((acc, e, i) => {
     const prev = acc.length ? acc[acc.length - 1].v : 0;
     acc.push({ d: i, v: prev + (e.points || 0) });
@@ -1863,7 +1951,13 @@ function DashboardPage({ user, go }) {
               <div className="eyebrow">This week</div>
               <div className="card-title" style={{ marginTop: 3 }}>Your check-in rhythm</div>
             </div>
-            <button className="checkin-cta" onClick={() => setCheckinOpen(true)}><Plus size={16} strokeWidth={2.4} /> Check in</button>
+            <CheckinCta
+              checkins={checkins}
+              onOpenCheckin={() => setCheckinOpen(true)}
+              go={go}
+              onOpenJourney={() => setJourneyOpen(true)}
+              nextStepsCtx={nextStepsCtx}
+            />
           </div>
           <WeekStrip />
         </Card>
@@ -1884,17 +1978,22 @@ function DashboardPage({ user, go }) {
             )) : <Empty icon={Activity} title="No assessment yet" sub="Complete the Solaris Method to reveal your focus areas." />}
           </Card>
           <Card>
-            <SectionHead eyebrow="Latest check-in" title="Daily signals" action={<Btn variant="ghost sm" icon={Plus} onClick={() => setCheckinOpen(true)}>Log</Btn>} />
+            {/* §10 — the Log button opens the SEPARATE Daily Signals sheet, never the
+                Daily Check-in. §11 — observed signals come from the versioned local
+                store and never render raw null/undefined/NaN ("nullm"); missing → "—". */}
+            <SectionHead eyebrow="Observed signals" title="Daily signals" action={<Btn variant="ghost sm" icon={Plus} onClick={() => setSignalsOpen(true)}>Log</Btn>} />
             <div className="grid" style={{ gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-              <MiniStat icon={Moon} tone="teal" label="Sleep" value={today ? `${Number(today.sleep_hours).toFixed(1)}h` : '—'} />
-              <MiniStat icon={Droplet} tone="mint" label="Hydration" value={today ? `${today.hydration_glasses}` : '—'} />
-              <MiniStat icon={Footprints} tone="gold" label="Movement" value={today ? `${today.movement_minutes}m` : '—'} />
+              <MiniStat icon={Moon} tone="teal" label="Sleep" value={formatSignal(signals.sleep_hours?.value ?? (isRecorded(today?.sleep_hours) ? today.sleep_hours : null), { unit: 'h', digits: 1 })} />
+              <MiniStat icon={Droplet} tone="mint" label="Hydration" value={formatSignal(signals.hydration?.value ?? (isRecorded(today?.hydration_glasses) ? today.hydration_glasses : null))} />
+              <MiniStat icon={Footprints} tone="gold" label="Steps" value={formatSignal(signals.steps?.value ?? null)} />
             </div>
             <div className="divider" />
-            <div className="between small"><span className="muted">Energy</span><span className="f6">{today ? `${today.energy_score}/100` : '—'}</span></div>
-            <div style={{ marginTop: 8 }}><Progress v={today?.energy_score || 0} /></div>
-            <div className="between small" style={{ marginTop: 12 }}><span className="muted">Mood</span><span className="f6">{today ? `${today.mood_score}/100` : '—'}</span></div>
-            <div style={{ marginTop: 8 }}><Progress v={today?.mood_score || 0} gold /></div>
+            {/* §11 — subjective check-in scores kept DISTINCT from observed signals. */}
+            <div className="tiny muted" style={{ marginBottom: 8 }}>From your latest check-in</div>
+            <div className="between small"><span className="muted">Energy</span><span className="f6">{isRecorded(today?.energy_score) ? `${today.energy_score}/100` : NOT_LOGGED}</span></div>
+            <div style={{ marginTop: 8 }}><Progress v={isRecorded(today?.energy_score) ? today.energy_score : 0} /></div>
+            <div className="between small" style={{ marginTop: 12 }}><span className="muted">Mood</span><span className="f6">{isRecorded(today?.mood_score) ? `${today.mood_score}/100` : NOT_LOGGED}</span></div>
+            <div style={{ marginTop: 8 }}><Progress v={isRecorded(today?.mood_score) ? today.mood_score : 0} gold /></div>
           </Card>
         </div>
 
@@ -1949,6 +2048,7 @@ function DashboardPage({ user, go }) {
       </div>
 
       <DailyCheckinModal user={user} open={checkinOpen} onClose={() => setCheckinOpen(false)} onSaved={reloadDaily} />
+      <DailySignalsSheet open={signalsOpen} onClose={() => setSignalsOpen(false)} uid={uid} />
       <PersonalizedJourneySheet
         open={journeyOpen}
         onClose={() => setJourneyOpen(false)}
@@ -2555,7 +2655,7 @@ function GuidedJourneyTasks({ go, onOpenCheckin }) {
 }
 
 function HealthPage({ go }) {
-  const { user, startRetake } = useApp();
+  const { user, startRetake, approvedJourney } = useApp();
   const [data, setData] = useState(null);
   const [docs, setDocs] = useState([]);
   const [checkins, setCheckins] = useState([]);
@@ -2765,7 +2865,21 @@ function HealthPage({ go }) {
               <div className="eyebrow">Progress</div>
               <div className="card-title" style={{ marginTop: 3 }}>Recent check-ins</div>
             </div>
-            <button className="checkin-cta" onClick={() => setCheckinOpen(true)}><Plus size={16} strokeWidth={2.4} /> Check in</button>
+            {/* §8 — the SAME authoritative Check-in CTA as the Dashboard: flips to
+                "Next Steps" once today's check-in is complete, never reopening it. */}
+            <CheckinCta
+              checkins={checkins}
+              onOpenCheckin={() => setCheckinOpen(true)}
+              go={go}
+              nextStepsCtx={{
+                approvedJourney,
+                journeys: [],
+                todos: [],
+                goalDataSufficient: (data?.response?.top_focus_areas_json?.length || 0) > 0 || (data?.response?.vitality_score || 0) > 0,
+                goalInAvailableJourneys: (data?.response?.top_focus_areas_json?.length || 0) > 0,
+                goalText: data?.response?.top_focus_areas_json?.[0]?.name || '',
+              }}
+            />
           </div>
           <div style={{ marginBottom: 14 }}><WeekStrip /></div>
           {checkins.length ? checkins.slice(0, 8).map((c) => (
