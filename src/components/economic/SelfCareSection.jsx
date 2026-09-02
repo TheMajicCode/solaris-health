@@ -22,24 +22,46 @@ import ActionCard from './ActionCard.jsx';
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const fmtDate = (d) => { try { return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return ''; } };
 
+// Normalise the two event shapes into one: the canonical LOVE ledger
+// (getRewards → event_type / created_at) and the internal contributions record
+// (getMyContributions → kind / createdAt) both map to { id, kind, points, ts }.
+function normalizeEvent(ev) {
+  const rawKind = ev.kind || ev.event_type || 'contribution';
+  const rawDate = ev.createdAt || ev.created_at || ev.date;
+  const ts = rawDate ? new Date(rawDate).getTime() : NaN;
+  return { id: ev.id, kind: String(rawKind).replace(/_/g, ' '), points: Number(ev.points) || 0, ts };
+}
+
 export default function SelfCareSection({ user, onContinue, onEcosystem }) {
   const [events, setEvents] = useState([]);
-  const [lifetime, setLifetime] = useState(null);
+  // §7 — canonical LOVE total, the SAME source the Dashboard reads
+  // (getRewards().total). Kept separate from any per-event sum so the value
+  // shown here can never contradict the value shown on the Dashboard.
+  const [canonicalTotal, setCanonicalTotal] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let alive = true;
     (async () => {
-      try {
-        const r = await api.getMyContributions();
-        if (!alive) return;
-        setEvents(Array.isArray(r?.events) ? r.events : []);
-        if (r?.attestedPoints != null) setLifetime(Number(r.attestedPoints));
-      } catch {
-        if (alive) { setEvents([]); setLifetime(null); }
-      } finally {
-        if (alive) setLoading(false);
-      }
+      // Read the canonical rewards ledger first — it owns the authoritative LOVE
+      // total AND the real, dated reward events. The contributions record is a
+      // secondary source used only to enrich the activity list when present.
+      const [rewards, contributions] = await Promise.all([
+        api.getRewards().catch(() => null),
+        api.getMyContributions().catch(() => null),
+      ]);
+      if (!alive) return;
+      const total = rewards && rewards.total != null
+        ? Number(rewards.total)
+        : (contributions && contributions.attestedPoints != null ? Number(contributions.attestedPoints) : null);
+      setCanonicalTotal(Number.isFinite(total) ? total : null);
+      // Prefer the canonical rewards events (they match the total); fall back to
+      // the contributions events only when rewards carries none.
+      const rewardEvents = Array.isArray(rewards?.events) ? rewards.events : [];
+      const contribEvents = Array.isArray(contributions?.events) ? contributions.events : [];
+      const src = rewardEvents.length > 0 ? rewardEvents : contribEvents;
+      setEvents(src.map(normalizeEvent).filter((e) => e.id != null));
+      setLoading(false);
     })();
     return () => { alive = false; };
   }, []);
@@ -49,24 +71,29 @@ export default function SelfCareSection({ user, onContinue, onEcosystem }) {
   const [nowTs, setNowTs] = useState(() => Date.now());
   useEffect(() => { setNowTs(Date.now()); }, [events]);
 
-  // All metrics are DERIVED from the real events — never invented.
+  // Metrics are DERIVED from real events; the lifetime figure is the canonical
+  // LOVE total when we have it (never a divergent per-event re-sum).
   const metrics = useMemo(() => {
     const monthAgo = new Date(nowTs); monthAgo.setMonth(monthAgo.getMonth() - 1);
     const monthTs = monthAgo.getTime();
     let week = 0, month = 0;
     for (const ev of events) {
-      const t = new Date(ev.createdAt).getTime();
-      const pts = Number(ev.points) || 0;
-      if (Number.isFinite(t)) {
-        if (nowTs - t <= WEEK_MS) week += pts;
-        if (t >= monthTs) month += pts;
+      if (Number.isFinite(ev.ts)) {
+        if (nowTs - ev.ts <= WEEK_MS) week += ev.points;
+        if (ev.ts >= monthTs) month += ev.points;
       }
     }
-    const life = lifetime != null ? lifetime : events.reduce((s, e) => s + (Number(e.points) || 0), 0);
+    const summed = events.reduce((s, e) => s + e.points, 0);
+    const life = canonicalTotal != null ? canonicalTotal : summed;
     return { life, week, month, count: events.length };
-  }, [events, lifetime, nowTs]);
+  }, [events, canonicalTotal, nowTs]);
 
   const recent = useMemo(() => events.slice(0, 5), [events]);
+  // We have value to show whenever the canonical LOVE total is positive OR there
+  // is at least one real event — this is what removes the old contradiction
+  // where LOVE was visible elsewhere but "No self-care value recorded yet" here.
+  const hasValue = (canonicalTotal != null && canonicalTotal > 0) || events.length > 0;
+  const detailUnavailable = hasValue && events.length === 0;
 
   return (
     <div className="selfcare">
@@ -87,7 +114,7 @@ export default function SelfCareSection({ user, onContinue, onEcosystem }) {
 
       {loading ? (
         <div className="sc-loading"><Loader2 size={18} className="sc-spin" /> Loading your self-care record…</div>
-      ) : metrics.count === 0 ? (
+      ) : !hasValue ? (
         <div className="sc-empty">
           <Heart size={20} />
           <div className="sc-empty-t">No self-care value recorded yet</div>
@@ -98,7 +125,7 @@ export default function SelfCareSection({ user, onContinue, onEcosystem }) {
           <div className="sc-metrics">
             <div className="sc-metric">
               <span className="sc-metric-v">{metrics.life.toLocaleString()}</span>
-              <span className="sc-metric-l"><Heart size={12} /> Lifetime value</span>
+              <span className="sc-metric-l"><Heart size={12} /> Lifetime LOVE</span>
             </div>
             <div className="sc-metric">
               <span className="sc-metric-v">{metrics.week.toLocaleString()}</span>
@@ -114,27 +141,28 @@ export default function SelfCareSection({ user, onContinue, onEcosystem }) {
             </div>
           </div>
 
-          {recent.length > 0 && (
+          {detailUnavailable ? (
+            // Canonical LOVE exists but no per-event receipts are attributed to
+            // Self Care yet — show the total honestly and say the detail is missing.
+            <div className="sc-detail-note">
+              <ScrollText size={14} />
+              <span>Your recognized LOVE value is shown above. Detailed self-care activity isn’t available to break out yet.</span>
+            </div>
+          ) : recent.length > 0 && (
             <div className="sc-timeline">
               <div className="sc-timeline-h"><ScrollText size={14} /> Your value journey</div>
               {recent.map((ev) => (
                 <div className="sc-tl-row" key={ev.id}>
                   <span className="sc-tl-dot" />
-                  <span className="sc-tl-kind">{String(ev.kind || 'contribution').replace(/_/g, ' ')}</span>
-                  <span className="sc-tl-date">{fmtDate(ev.createdAt)}</span>
-                  <span className="sc-tl-pts">+{Number(ev.points) || 0}</span>
+                  <span className="sc-tl-kind">{ev.kind}</span>
+                  <span className="sc-tl-date">{Number.isFinite(ev.ts) ? fmtDate(ev.ts) : ''}</span>
+                  <span className="sc-tl-pts">+{ev.points}</span>
                 </div>
               ))}
             </div>
           )}
         </>
       )}
-
-      <p className="sc-explain">
-        Personal care compounds into collective strength: each verified self-care action is recognized as
-        value you created, and the same recognition helps the Solaris commons grow. You stay in control of
-        what you share.
-      </p>
 
       {/* The full, real contribution record (log + ledger + leaderboard) is kept
           intact below — the internal "contributions" surface, unchanged. */}
@@ -167,7 +195,9 @@ export default function SelfCareSection({ user, onContinue, onEcosystem }) {
         .luca .sc-empty-s{font-size:12px;color:var(--muted);line-height:1.5;max-width:320px;margin:0 auto}
         .luca .sc-loading{display:flex;align-items:center;justify-content:center;gap:8px;padding:26px;color:var(--muted);font-size:13px}
         .luca .sc-spin{animation:spin 1s linear infinite}
-        .luca .sc-explain{font-size:11.5px;color:var(--muted);line-height:1.55;background:var(--mint-soft,#e8f5f0);border-radius:12px;padding:12px 14px;margin:0 0 18px}
+        .luca .sc-detail-note{display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--muted);line-height:1.5;
+          background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:16px}
+        .luca .sc-detail-note svg{color:var(--teal);flex:none;margin-top:1px}
         .luca .sc-record{border-top:1px solid var(--line);padding-top:16px}
         .luca .sc-record-h{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:13.5px;color:var(--ink);margin-bottom:12px}
       `}</style>

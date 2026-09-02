@@ -12,11 +12,12 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Bell, Check, CheckCheck, X, PartyPopper, AlertTriangle, CalendarDays,
+  Bell, Check, CheckCheck, PartyPopper, AlertTriangle, CalendarDays,
   MessageSquare, Star, Info, Loader2, BellRing, Smartphone,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '../lib/api.js';
+import TopbarPopover from './ui/TopbarPopover.jsx';
 
 const FILTERS = [
   { id: 'all', label: 'All' },
@@ -107,6 +108,7 @@ export default function NotificationCenter({ onNavigate }) {
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(false);
   const wrapRef = useRef(null);
+  const bellRef = useRef(null); // §3 — restore focus here when the popover closes
   const seenRef = useRef(null); // Set of known notification ids (null until first load)
 
   /* Load notification list for the current filter. */
@@ -161,15 +163,9 @@ export default function NotificationCenter({ onNavigate }) {
   // Reload list when filter changes (while open).
   useEffect(() => { if (open) load(filter); }, [filter, open, load]);
 
-  // Close on outside click / Escape.
-  useEffect(() => {
-    if (!open) return undefined;
-    const onDoc = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
-    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
-    document.addEventListener('mousedown', onDoc);
-    document.addEventListener('keydown', onKey);
-    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
-  }, [open]);
+  // §3 — outside-click, Escape, Back/popstate close and focus restore to the
+  // bell are all handled by TopbarPopover (the panel renders in a body portal,
+  // so a transformed/overflow-hidden ancestor can never clip it).
 
   const toggle = () => {
     const next = !open;
@@ -251,13 +247,26 @@ export default function NotificationCenter({ onNavigate }) {
 
   return (
     <div className="nc" ref={wrapRef}>
-      <button className="nc-bell icon-btn" onClick={toggle} aria-label="Notifications">
+      <button ref={bellRef} className="nc-bell icon-btn" onClick={toggle} aria-label="Notifications" aria-haspopup="true" aria-expanded={open}>
         <Bell size={17} />
         {unread > 0 && <span className="nc-badge">{unread > 9 ? '9+' : unread}</span>}
       </button>
 
-      {open && (
-        <div className="nc-panel">
+      <TopbarPopover
+        id="notifications"
+        open={open}
+        onClose={() => setOpen(false)}
+        ariaLabel="Notifications"
+        testId="nc-popover"
+        triggerRef={bellRef}
+        panelStyle={{
+          width: 'min(360px, calc(100vw - 24px))',
+          right: 'max(12px, env(safe-area-inset-right, 0px))',
+          padding: 0,
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        }}
+      >
+        <div className="nc-pop">
           <div className="nc-head">
             <div className="nc-title">Notifications</div>
             {unread > 0 && (
@@ -342,7 +351,7 @@ export default function NotificationCenter({ onNavigate }) {
             </div>
           )}
         </div>
-      )}
+      </TopbarPopover>
       <style>{CSS}</style>
     </div>
   );
@@ -354,20 +363,23 @@ const CSS = `
 .luca .nc-badge{position:absolute;top:-3px;right:-3px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;
   background:var(--gold,#E3AC46);color:#3C2807;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;
   border:2px solid var(--surface,#fff);line-height:1}
-.luca .nc-panel{position:absolute;top:calc(100% + 10px);right:0;width:360px;max-width:calc(100vw - 32px);
-  background:var(--surface,#fff);border:1px solid var(--line);border-radius:16px;box-shadow:0 22px 50px -18px rgba(3,32,30,.4);
-  z-index:80;overflow:hidden;animation:ncIn .14s ease}
-@keyframes ncIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
-.luca .nc-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px}
+/* §3 — panel positioning, viewport clamping, scroll, focus trap and dismissal
+   are owned by TopbarPopover (a body portal). This wrapper only lays out the
+   panel's own content; the sticky header/filters stay visible while the list
+   below scrolls inside the portal's clamped, viewport-safe height. */
+.luca .nc-pop{display:flex;flex-direction:column;min-width:0}
+.luca .nc-head{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 10px;
+  position:sticky;top:0;background:var(--surface,#fff);z-index:2;border-radius:16px 16px 0 0}
 .luca .nc-title{font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:700;color:var(--ink)}
 .luca .nc-markall{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--teal-d);
   background:none;border:none;cursor:pointer}
 .luca .nc-markall:hover{text-decoration:underline}
-.luca .nc-filters{display:flex;gap:6px;padding:0 14px 10px;border-bottom:1px solid var(--line)}
+.luca .nc-filters{display:flex;gap:6px;padding:2px 14px 10px;border-bottom:1px solid var(--line);
+  position:sticky;top:44px;background:var(--surface,#fff);z-index:1}
 .luca .nc-filter{font-size:12px;font-weight:600;color:var(--muted);background:var(--surface-2);border:1px solid var(--line);
   border-radius:999px;padding:5px 11px;cursor:pointer}
 .luca .nc-filter.on{color:#fff;background:var(--teal-d,#06403B);border-color:var(--teal-d,#06403B)}
-.luca .nc-list{max-height:380px;overflow-y:auto;padding:6px}
+.luca .nc-list{padding:6px}
 .luca .nc-empty{display:flex;flex-direction:column;align-items:center;gap:8px;padding:34px 16px;color:var(--muted);font-size:13px;text-align:center}
 .luca .nc-spin{animation:ncspin 1s linear infinite}@keyframes ncspin{to{transform:rotate(360deg)}}
 .luca .nc-item{width:100%;display:flex;gap:10px;align-items:flex-start;text-align:left;padding:11px 10px;border:none;border-radius:11px;

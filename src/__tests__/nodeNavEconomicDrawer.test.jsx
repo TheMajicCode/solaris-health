@@ -40,6 +40,20 @@ const openDrawer = () => {
   return trigger;
 };
 const drawer = () => document.querySelector('.econ-drawer');
+// §5 redesign — sections are now a VERTICAL menu (phone) drilling into a detail
+// view, plus a persistent rail (tablet+). Both render in jsdom (CSS handles the
+// responsive show/hide), so we drive the menu buttons and read the rail's
+// active ("on") state to assert which section is selected.
+const menuLabels = () => Array.from(drawer().querySelectorAll('.econ-menu .econ-menu-lbl')).map((e) => e.textContent.trim());
+const clickSection = (name) => {
+  const btn = Array.from(drawer().querySelectorAll('.econ-menu-btn')).find((b) => b.textContent.trim().includes(name));
+  fireEvent.click(btn);
+  return btn;
+};
+const activeSection = () => {
+  const on = drawer().querySelector('.econ-railbtn.on');
+  return on ? on.textContent.trim() : null;
+};
 
 describe('§4 mobile bottom nav — order and route destinations', () => {
   it('routes Home -> dashboard and Health -> health passport surface', () => {
@@ -103,22 +117,37 @@ describe('§5 Economic Passport trigger + drawer open/close', () => {
   });
 });
 
-describe('§6 drawer IA — section order Wallet, Self Care, GPS, Network', () => {
-  it('presents the four sections in the required order', () => {
+describe('§5 drawer IA — vertical section list Wallet, Self Care, GPS, Network', () => {
+  it('presents the four sections as a vertical menu in the required order', () => {
     render(<LucaPassport />);
     openDrawer();
-    const tabs = within(drawer()).getAllByRole('tab');
-    expect(tabs.map((t) => t.textContent.trim())).toEqual(['Wallet', 'Self Care', 'GPS', 'Network']);
-    // Wallet is the default active section.
-    expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
+    expect(menuLabels()).toEqual(['Wallet', 'Self Care', 'GPS', 'Network']);
+    // Wallet is the default selected section (reflected in the tablet rail).
+    expect(activeSection()).toBe('Wallet');
+  });
+
+  it('drilling into a section shows the "Back to Economic Passport" affordance', () => {
+    render(<LucaPassport />);
+    openDrawer();
+    // Fresh open starts on the menu view.
+    expect(drawer().classList.contains('view-menu')).toBe(true);
+    clickSection('GPS');
+    // Choosing a section drills into the detail view.
+    expect(drawer().classList.contains('view-detail')).toBe(true);
+    // The back affordance is CSS-hidden on tablet, so select it directly.
+    const back = drawer().querySelector('.econ-back');
+    expect(back).toBeTruthy();
+    expect(back.textContent).toMatch(/back to economic passport/i);
+    fireEvent.click(back);
+    expect(drawer().classList.contains('view-menu')).toBe(true);
   });
 });
 
-describe('§8 Self Care -> Growth deep link and -> GPS transition', () => {
+describe('§7 Self Care -> Growth deep link and -> GPS transition', () => {
   it('"Continue self-care" closes the drawer and navigates to Growth', async () => {
     render(<LucaPassport />);
     openDrawer();
-    fireEvent.click(within(drawer()).getAllByRole('tab')[1]); // Self Care
+    clickSection('Self Care');
     const primary = await within(drawer()).findByRole('button', { name: /continue self-care/i });
     fireEvent.click(primary);
     await waitFor(() => expect(drawer()).toBeNull());
@@ -129,11 +158,10 @@ describe('§8 Self Care -> Growth deep link and -> GPS transition', () => {
   it('"See ecosystem impact" switches the drawer to the GPS section', async () => {
     render(<LucaPassport />);
     openDrawer();
-    fireEvent.click(within(drawer()).getAllByRole('tab')[1]); // Self Care
+    clickSection('Self Care');
     const secondary = await within(drawer()).findByRole('button', { name: /see ecosystem impact/i });
     fireEvent.click(secondary);
-    const tabs = within(drawer()).getAllByRole('tab');
-    expect(tabs[2]).toHaveAttribute('aria-selected', 'true'); // GPS now active
+    expect(activeSection()).toBe('GPS'); // GPS now selected
   });
 });
 
@@ -141,7 +169,7 @@ describe('§10 Network — BTC Map fallback + collapsed accordions', () => {
   it('always shows an "Open in BTC Map" fallback link and the BTC Map iframe', () => {
     render(<LucaPassport />);
     openDrawer();
-    fireEvent.click(within(drawer()).getAllByRole('tab')[3]); // Network
+    clickSection('Network');
     const open = within(drawer()).getByRole('link', { name: /open in btc map/i });
     expect(open).toHaveAttribute('href', 'https://btcmap.org/map');
     const iframe = drawer().querySelector('iframe.btcmap-frame');
@@ -153,7 +181,7 @@ describe('§10 Network — BTC Map fallback + collapsed accordions', () => {
   it('renders Communities and Ecosystem Apps accordions collapsed by default', () => {
     render(<LucaPassport />);
     openDrawer();
-    fireEvent.click(within(drawer()).getAllByRole('tab')[3]); // Network
+    clickSection('Network');
     const accHeads = drawer().querySelectorAll('.acc-head');
     expect(accHeads.length).toBe(2);
     accHeads.forEach((h) => expect(h.getAttribute('aria-expanded')).toBe('false'));

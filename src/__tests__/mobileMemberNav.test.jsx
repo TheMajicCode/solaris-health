@@ -47,23 +47,23 @@ describe('member mobile bottom navigation', () => {
     expect(labels).toEqual(['Home', 'Explore', 'LUCA Coach', 'Communications', 'Health Passport']);
     // Centre item is the raised LUCA orb, not a normal tab.
     expect(nav.querySelector('.m-bn-luca')).toBeTruthy();
-    // Economic is removed from the bottom nav (it moves to the top-right trigger).
+    // Economic is removed from the bottom nav (it moves to the far top-left trigger).
     expect(labels).not.toContain('Economic');
   });
 
-  it('has no top-left Home orb / wallet trigger; a root screen shows the Solaris brand mark instead', () => {
+  it('has no top-left Home orb and no leaf/plant brand mark (V2 §2 removes it entirely)', () => {
     render(<LucaPassport />);
     // The old top-left Home orb is gone.
     expect(document.querySelector('button.home-btn')).toBeNull();
-    // Root screens show the Solaris page-identity mark top-left.
-    const brand = document.querySelector('.brand-mark');
-    expect(brand).toBeTruthy();
-    expect(within(brand).getByText('Solaris')).toBeInTheDocument();
+    // §2 — the unexplained leaf/plant brand mark is removed completely; the
+    // far top-left control is the Economic Passport wallet trigger instead.
+    expect(document.querySelector('.brand-mark')).toBeNull();
   });
 
-  it('exposes the Economic Passport trigger top-right (reusing the orange orb tokens)', () => {
+  it('exposes the Economic Passport wallet trigger at the far top-left (reusing the orange orb tokens)', () => {
     render(<LucaPassport />);
-    const trigger = document.querySelector('button.econ-trigger[aria-label="Open Economic Passport"]');
+    // §2 — wallet trigger anchored far top-left, then the page title.
+    const trigger = document.querySelector('button.econ-trigger.econ-trigger-left[aria-label="Open Economic Passport"]');
     expect(trigger).toBeTruthy();
   });
 
