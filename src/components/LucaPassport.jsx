@@ -24,6 +24,7 @@ import {
   Repeat, Shuffle, Rewind, FastForward, Upload, ListMusic,
   CalendarClock, Volume2, VolumeX, Inbox, Mail, Copy, Fingerprint, Grid,
   ChevronDown, Smartphone, Home, Maximize2, Minimize2,
+  ArrowLeft, ExternalLink,
 } from 'lucide-react';
 import { useApp } from '../state/AppContext.jsx';
 import { useLocale } from '../lib/i18n/LocaleContext.jsx';
@@ -75,6 +76,8 @@ import WalletCard from './passport/WalletCard.jsx';
 import LevelBadge from './passport/LevelBadge.jsx';
 import ContributionLedger from './contributions/ContributionLedger.jsx';
 import SparkWalletScreen from './wallet/SparkWalletScreen.jsx';
+import SelfCareSection from './economic/SelfCareSection.jsx';
+import NetworkSection from './economic/NetworkSection.jsx';
 import AuraAdmin from './clinic/AuraAdmin.jsx';
 import AdaptiveOverlay from './ui/AdaptiveOverlay.jsx';
 import toast from 'react-hot-toast';
@@ -210,16 +213,101 @@ const CSS = `
 .topbar{display:flex;align-items:center;gap:12px;
   padding:calc(13px + env(safe-area-inset-top,0px)) 24px 13px;position:sticky;top:0;z-index:30;
   background:rgba(238,244,241,.82);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
-/* Home control — warm orange/gold gradient orb, persistent in the sticky header.
-   Role-aware target handled in JSX (members → member Dashboard, practitioners → practitioner home). */
-.luca .home-btn.home-orb{width:44px;height:44px;border-radius:13px;border:1px solid rgba(224,138,42,.55);
+/* Warm orange/gold gradient orb treatment. Originally the header Home control;
+   now the single source of truth REUSED by the Economic Passport trigger (§5)
+   so the two never drift apart. Both share this exact token set. */
+.luca .home-btn.home-orb,.luca .econ-trigger{width:44px;height:44px;border-radius:13px;border:1px solid rgba(224,138,42,.55);
   background:linear-gradient(145deg,#F6B34A 0%,#EE8A2A 52%,#D9781E 100%);color:#3A2408;
   box-shadow:0 4px 14px rgba(224,138,42,.42),0 1px 0 rgba(255,255,255,.35) inset;
   transition:transform .15s ease,box-shadow .18s ease}
-.luca .home-btn.home-orb:hover{background:linear-gradient(145deg,#F8BC5A 0%,#F0932F 52%,#E07E21 100%);color:#3A2408;
+.luca .home-btn.home-orb:hover,.luca .econ-trigger:hover{background:linear-gradient(145deg,#F8BC5A 0%,#F0932F 52%,#E07E21 100%);color:#3A2408;
   transform:translateY(-1px);box-shadow:0 6px 20px rgba(224,138,42,.52),0 1px 0 rgba(255,255,255,.4) inset}
-.luca .home-btn.home-orb:active{transform:translateY(0)}
-.luca .home-btn.home-orb:focus-visible{outline:3px solid rgba(224,138,42,.9);outline-offset:2px}
+.luca .home-btn.home-orb:active,.luca .econ-trigger:active{transform:translateY(0)}
+.luca .home-btn.home-orb:focus-visible,.luca .econ-trigger:focus-visible{outline:3px solid rgba(224,138,42,.9);outline-offset:2px}
+/* Contextual top-left cluster (§4): Solaris brand mark on root screens, a Back
+   affordance on nested screens. No redundant Home button. */
+.luca .brand-mark{display:none;align-items:center;gap:9px;flex:none;min-width:0}
+.luca .brand-mark .brand-glyph{width:34px;height:34px;border-radius:10px;flex:none;display:grid;place-items:center;
+  background:linear-gradient(145deg,#0E5C57,#13756C);color:#EAFBF6;box-shadow:0 2px 8px rgba(14,92,87,.28)}
+.luca .brand-mark .brand-word{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px;color:var(--ink);
+  letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.luca .back-btn{display:none;align-items:center;justify-content:center;flex:none}
+/* Economic Passport drawer (§5/§6) — full-height right sheet. */
+.luca .econ-scrim{position:fixed;inset:0;z-index:200050;background:rgba(9,26,24,.46);
+  -webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);animation:econFade .18s ease}
+.luca .econ-drawer{position:fixed;top:0;right:0;bottom:0;z-index:200060;display:flex;flex-direction:column;
+  width:min(94vw,420px);max-width:420px;background:var(--bg,#EEF4F1);box-shadow:-18px 0 48px rgba(9,26,24,.28);
+  border-left:1px solid var(--line);animation:econSlide .24s cubic-bezier(.22,.61,.36,1);
+  padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@keyframes econFade{from{opacity:0}to{opacity:1}}
+@keyframes econSlide{from{transform:translateX(100%)}to{transform:translateX(0)}}
+@media(prefers-reduced-motion:reduce){
+  .luca .econ-scrim,.luca .econ-drawer{animation:none}
+}
+.luca .econ-head{flex:none;padding:16px 16px 12px;border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(14,92,87,.06),transparent)}
+.luca .econ-head-top{display:flex;align-items:flex-start;gap:10px}
+.luca .econ-head-titles{flex:1;min-width:0}
+.luca .econ-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:18px;color:var(--ink);margin:0;line-height:1.2}
+.luca .econ-subtitle{font-size:12px;color:var(--muted);margin:3px 0 0;line-height:1.45}
+.luca .econ-close{flex:none;width:38px;height:38px;border-radius:11px;border:1px solid var(--line);background:var(--surface);
+  color:var(--ink);display:grid;place-items:center;cursor:pointer}
+.luca .econ-close:hover{background:var(--surface-2)}
+.luca .econ-close:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+/* Compact sticky section selector (normal phones). */
+.luca .econ-secsel{display:flex;gap:5px;margin-top:13px;overflow-x:auto;-webkit-overflow-scrolling:touch;
+  scrollbar-width:none;padding-bottom:2px}
+.luca .econ-secsel::-webkit-scrollbar{display:none}
+.luca .econ-secbtn{flex:none;display:inline-flex;align-items:center;gap:6px;min-height:38px;padding:8px 14px;border-radius:999px;
+  border:1px solid var(--line);background:var(--surface);color:var(--muted);font-weight:600;font-size:12.5px;cursor:pointer;white-space:nowrap}
+.luca .econ-secbtn.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.luca .econ-secbtn:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+.luca .econ-body{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 16px calc(20px + env(safe-area-inset-bottom,0px))}
+/* Larger phones / tablets: allow a narrow left icon+label rail (never at 360–390). */
+@media(min-width:560px){
+  .luca .econ-drawer{width:min(88vw,480px);max-width:480px}
+  .luca .econ-shell{display:flex;flex:1;min-height:0}
+  .luca .econ-rail{flex:none;width:118px;border-right:1px solid var(--line);background:var(--surface);
+    display:flex;flex-direction:column;gap:4px;padding:12px 8px;overflow-y:auto}
+  .luca .econ-secsel.as-rail{display:none}
+  .luca .econ-railbtn{display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px 6px;border-radius:12px;
+    border:1px solid transparent;background:transparent;color:var(--muted);font-weight:600;font-size:11.5px;cursor:pointer;min-height:56px}
+  .luca .econ-railbtn.on{background:var(--mint-soft);color:var(--teal-d);border-color:rgba(14,92,87,.22)}
+  .luca .econ-railbtn:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+}
+@media(max-width:559px){
+  .luca .econ-rail{display:none}
+}
+/* Shared contextual action card (§11). */
+.luca .act-card{border:1px solid var(--line);border-radius:14px;background:var(--surface);padding:14px;box-shadow:var(--shadow-sm);margin-bottom:14px}
+.luca .act-card-h{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.luca .act-card-h svg{color:var(--teal)}
+.luca .act-card-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14px;color:var(--ink)}
+.luca .act-card-reason{font-size:12.5px;color:var(--muted);line-height:1.5;margin:0 0 12px}
+.luca .act-card-actions{display:flex;flex-wrap:wrap;gap:8px}
+.luca .act-btn{display:inline-flex;align-items:center;gap:7px;min-height:44px;padding:10px 16px;border-radius:11px;
+  font-weight:600;font-size:13px;cursor:pointer;border:1px solid var(--line)}
+.luca .act-btn.primary{background:var(--teal);color:#fff;border-color:var(--teal)}
+.luca .act-btn.primary:hover{background:var(--teal-d)}
+.luca .act-btn.secondary{background:var(--surface);color:var(--ink)}
+.luca .act-btn.secondary:hover{background:var(--surface-2)}
+.luca .act-btn:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+.luca .act-card-meta{font-size:10.5px;color:var(--muted-2,#8aa09a);margin-top:10px;display:flex;align-items:center;gap:6px}
+/* Network (§10) — BTC Map embed + accordions. */
+.luca .btcmap-wrap{position:relative;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:var(--surface-2);margin-bottom:8px}
+.luca .btcmap-frame{width:100%;height:340px;border:0;display:block}
+.luca .btcmap-open{display:inline-flex;align-items:center;gap:7px;min-height:44px;padding:10px 15px;border-radius:11px;
+  border:1px solid var(--line);background:var(--surface);color:var(--teal-d);font-weight:600;font-size:13px;cursor:pointer;text-decoration:none;margin-bottom:16px}
+.luca .btcmap-open:hover{background:var(--surface-2)}
+.luca .btcmap-open:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+.luca .acc{border:1px solid var(--line);border-radius:12px;background:var(--surface);margin-bottom:10px;overflow:hidden}
+.luca .acc-head{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:48px;
+  padding:12px 14px;background:none;border:none;cursor:pointer;text-align:left;font-weight:700;font-size:13.5px;color:var(--ink)}
+.luca .acc-head:focus-visible{outline:3px solid var(--teal);outline-offset:-3px}
+.luca .acc-head .acc-chev{transition:transform .18s ease;color:var(--muted);flex:none}
+.luca .acc.open .acc-chev{transform:rotate(180deg)}
+.luca .acc-body{padding:0 14px 14px;font-size:12.5px;color:var(--muted);line-height:1.5}
+.luca .acc-empty{padding:6px 0 2px;color:var(--muted);font-size:12.5px;font-style:italic}
 
 /* Communications binder (§6) — two semantic folders side by side on desktop,
    stacked to a single column on phones. */
@@ -597,6 +685,9 @@ textarea.input-line{resize:vertical;min-height:64px}
      is server-derived — regular members never get this button. */
   .topbar .menu-btn.menu-btn-switch{display:flex}
   .luca .home-btn{display:flex}
+  /* §4 contextual top-left: brand mark on root screens, Back on nested ones. */
+  .luca .brand-mark{display:flex}
+  .luca .back-btn{display:flex}
   .luca .m-title{display:block;flex:1;min-width:0;font-family:var(--font-display);font-weight:700;
     font-size:16px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left}
   /* leave room for the fixed bottom nav so nothing hides behind it */
@@ -6582,6 +6673,167 @@ function CommunicationsArea({ user, go, sub, onUnread, onInboxUnread }) {
   );
 }
 
+/* ============================== ECONOMIC PASSPORT DRAWER (§5/§6) ==============================
+   A full-height right sheet opened from the top-right trigger. It is NOT a second
+   full app shell — it hosts the four Economic Passport sections (Wallet, Self
+   Care, GPS, Network) with a compact section selector. Behaviour: focus trap,
+   background scroll lock, close via button / overlay / Escape / browser Back,
+   focus restored to the trigger, section preserved for the session. Motion is
+   handled in CSS and honours prefers-reduced-motion. */
+const ECON_SECTIONS = [
+  { id: 'wallet', label: 'Wallet', icon: Wallet },
+  { id: 'contributions', label: 'Self Care', icon: Heart },
+  { id: 'gps', label: 'GPS', icon: EconomicPassportIcon },
+  { id: 'network', label: 'Network', icon: MapPin },
+];
+
+function EconomicDrawer({ open, section, setSection, onClose, user, go }) {
+  const panelRef = useRef(null);
+  const restoreRef = useRef(null);
+
+  // Remember the trigger so focus returns to it on close (§5).
+  useEffect(() => {
+    if (open) {
+      restoreRef.current = (typeof document !== 'undefined') ? document.activeElement : null;
+    } else if (restoreRef.current && restoreRef.current.focus) {
+      restoreRef.current.focus();
+      restoreRef.current = null;
+    }
+  }, [open]);
+
+  // Background scroll lock while the drawer is open.
+  useEffect(() => {
+    if (!open || typeof document === 'undefined') return undefined;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [open]);
+
+  // Move focus into the panel on open.
+  useEffect(() => {
+    if (!open) return;
+    const id = window.requestAnimationFrame(() => {
+      const el = panelRef.current;
+      if (!el) return;
+      const focusable = el.querySelector('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+      if (focusable && focusable.focus) focusable.focus(); else el.focus();
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [open]);
+
+  // Escape closes; Tab is trapped inside the panel. Browser Back also closes:
+  // we push a history entry on open and pop it on close.
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); onClose(); return; }
+      if (e.key !== 'Tab') return;
+      const el = panelRef.current;
+      if (!el) return;
+      const nodes = el.querySelectorAll('button, a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])');
+      const list = Array.prototype.filter.call(nodes, (n) => n.offsetParent !== null || n === document.activeElement);
+      if (list.length === 0) return;
+      const first = list[0];
+      const last = list[list.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [open, onClose]);
+
+  // Browser Back closes the drawer instead of leaving the screen.
+  useEffect(() => {
+    if (!open || typeof window === 'undefined') return undefined;
+    window.history.pushState({ econDrawer: true }, '');
+    const onPop = () => onClose();
+    window.addEventListener('popstate', onPop);
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      // If the entry we pushed is still on top, remove it silently.
+      if (window.history.state && window.history.state.econDrawer) window.history.back();
+    };
+  }, [open, onClose]);
+
+  if (!open || typeof document === 'undefined' || !document.body) return null;
+
+  const renderSection = () => {
+    if (section === 'wallet') return <ErrorBoundary><SparkWalletScreen /></ErrorBoundary>;
+    if (section === 'contributions') return (
+      <ErrorBoundary>
+        <SelfCareSection
+          user={user}
+          onContinue={() => { onClose(); go('growth'); }}
+          onEcosystem={() => setSection('gps')}
+        />
+      </ErrorBoundary>
+    );
+    if (section === 'network') return <ErrorBoundary><NetworkSection /></ErrorBoundary>;
+    return <ErrorBoundary><EconomicPassportPage user={user} /></ErrorBoundary>;
+  };
+
+  return createPortal(
+    <div className="luca">
+      <div className="econ-scrim" onClick={onClose} />
+      <aside
+        className="econ-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Economic Passport"
+        ref={panelRef}
+        tabIndex={-1}
+      >
+        <div className="econ-head">
+          <div className="econ-head-top">
+            <div className="econ-head-titles">
+              <h2 className="econ-title">Economic Passport</h2>
+              <p className="econ-subtitle">Your care, contribution and value—in your control.</p>
+            </div>
+            <button type="button" className="econ-close" onClick={onClose} aria-label="Close Economic Passport"><X size={18} /></button>
+          </div>
+          {/* Compact section selector (normal phones). A left rail replaces it on
+              larger phones/tablets via CSS — never a cramped rail at 360–390. */}
+          <div className="econ-secsel as-rail" role="tablist" aria-label="Economic Passport sections">
+            {ECON_SECTIONS.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                role="tab"
+                aria-selected={section === s.id}
+                className={`econ-secbtn ${section === s.id ? 'on' : ''}`}
+                onClick={() => setSection(s.id)}
+              >
+                <s.icon size={15} /> {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="econ-shell">
+          {/* Tablet+ left rail (hidden on small phones). */}
+          <nav className="econ-rail" aria-label="Economic Passport sections">
+            {ECON_SECTIONS.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                aria-current={section === s.id ? 'page' : undefined}
+                className={`econ-railbtn ${section === s.id ? 'on' : ''}`}
+                onClick={() => setSection(s.id)}
+              >
+                <s.icon size={18} /> {s.label}
+              </button>
+            ))}
+          </nav>
+          <div className="econ-body">
+            {renderSection()}
+          </div>
+        </div>
+      </aside>
+    </div>,
+    document.body,
+  );
+}
+
 function EconomicPassportArea({ user, go, sub }) {
   const active = SUBTABS.wallet.tabs.includes(sub) ? sub : SUBTABS.wallet.def;
   return (
@@ -6594,16 +6846,24 @@ function EconomicPassportArea({ user, go, sub }) {
         items={[
           { id: 'wallet', label: 'Wallet', icon: Wallet },
           { id: 'gps', label: 'GPS', icon: EconomicPassportIcon },
-          { id: 'contributions', label: 'Contributions', icon: Award },
+          { id: 'contributions', label: 'Self Care', icon: Heart },
           { id: 'network', label: 'Network', icon: MapPin },
         ]}
       />
       {active === 'wallet'
         ? <ErrorBoundary><SparkWalletScreen /></ErrorBoundary>
         : active === 'contributions'
-          ? <ErrorBoundary><ContributionLedger user={user} /></ErrorBoundary>
+          ? (
+            <ErrorBoundary>
+              <SelfCareSection
+                user={user}
+                onContinue={() => go('growth')}
+                onEcosystem={() => go('wallet', 'gps')}
+              />
+            </ErrorBoundary>
+          )
           : active === 'network'
-            ? <ErrorBoundary><GPSMapView /></ErrorBoundary>
+            ? <ErrorBoundary><NetworkSection /></ErrorBoundary>
             : <ErrorBoundary><EconomicPassportPage user={user} /></ErrorBoundary>}
     </div>
   );
@@ -7163,7 +7423,9 @@ export default function LucaPassport() {
   const { user, logout, refreshUser, setPendingProviderId, setPendingCurate } = useApp();
   const { t } = useLocale();
   const navLabel = (it) => {
-    const key = BOTTOM_NAV_LABEL_KEYS[it.id];
+    // An item may pin an explicit i18n key (e.g. the Home item routes to the
+    // 'dashboard' surface but must read "Home"/"Inicio", not "Dashboard").
+    const key = it.labelKey || BOTTOM_NAV_LABEL_KEYS[it.id];
     const translated = key ? t(key) : null;
     return translated && translated !== key ? translated : it.label;
   };
@@ -7202,6 +7464,14 @@ export default function LucaPassport() {
   const [appStatus, setAppStatus] = useState(null); // current user's latest application
   const [moreOpen, setMoreOpen] = useState(false); // practitioner "More" bottom sheet
   const [navHidden, setNavHidden] = useState(false); // mobile bottom nav hidden (full sheet / blocking overlay)
+  // §5/§6 — Economic Passport drawer. `econOpen` toggles the right sheet; the
+  // selected section is preserved across opens for the whole session.
+  const [econOpen, setEconOpen] = useState(false);
+  const [econSection, setEconSection] = useState('wallet');
+  // §4 — track in-app navigation depth so the contextual Back affordance can
+  // step through real history and otherwise fall back to a safe destination
+  // (never stranding a user who deep-linked straight into a nested screen).
+  const appNavCountRef = useRef(0);
 
   // Mobile bottom nav visibility — Explore's full-height results sheet and any
   // blocking overlay (booking / check-in) ask the shell to hide the bar via a
@@ -7229,8 +7499,27 @@ export default function LucaPassport() {
     const r = resolveNav(rawTab, rawSub);
     setRoute(r);
     writeUrlNav(r.tab, r.sub, canSwitchPortal ? portalViewRef.current : undefined);
+    appNavCountRef.current += 1;
     setDrawer(false);
+    setEconOpen(false);
   }, [canSwitchPortal]);
+
+  // §4 — contextual Back for nested screens. Steps through real in-app history
+  // when there is any; otherwise lands on the persona's home surface.
+  const goBack = useCallback(() => {
+    if (appNavCountRef.current > 0 && typeof window !== 'undefined' && window.history.length > 1) {
+      window.history.back();
+    } else {
+      go(defaultTabFor(effectiveRole));
+    }
+  }, [go, effectiveRole]);
+
+  // §5/§8 — open the Economic drawer directly to a given section (e.g. Self
+  // Care's "See ecosystem impact" jumps straight to GPS).
+  const openEcon = useCallback((section) => {
+    if (section) setEconSection(section);
+    setEconOpen(true);
+  }, []);
 
   // Switch between the Member and Practitioner portals on the same account.
   const switchPortal = useCallback((view) => {
@@ -7416,16 +7705,33 @@ export default function LucaPassport() {
   const meta = TAB_META[tab] || { title: 'Digital Sovereign Passport', sub: '' };
   const displayName = user?.fullName || [user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.email || 'Member';
 
+  // §4 — a screen is "root" when it is a primary destination sitting on its
+  // default sub-tab. Root screens show the Solaris mark top-left; deeper screens
+  // show a contextual Back. The Economic trigger (§5) is shown for the personal
+  // member/practitioner personas only (never the clinic_admin console).
+  const ECON_TRIGGER_ROLES = new Set(['patient', 'practitioner']);
+  const ROOT_TABS = new Set([
+    'dashboard', 'explore', 'coach', 'communications', 'health', 'wallet',
+    'prac-clients', 'prac-bookings', 'prac-messages', 'admin-members',
+  ]);
+  const subDefForTab = SUBTABS[tab]?.def || null;
+  const isRootScreen = ROOT_TABS.has(tab) && (!sub || sub === subDefForTab);
+  const showEconTrigger = ECON_TRIGGER_ROLES.has(effectiveRole);
+
   // Mobile bottom-nav model. Member gets exactly five destinations (LUCA raised
   // in the centre); the practitioner portal swaps in its own five with a "More"
   // sheet. clinic_admin keeps the sidebar/drawer only (no bottom bar).
   const showBotNav = effectiveRole === 'patient' || effectiveRole === 'practitioner';
+  // §4 — exact L→R order: Home, Explore, LUCA (raised centre), Communications,
+  // Health. Home routes to the member Dashboard; its id is 'dashboard' so the
+  // active state highlights on the Dashboard surface. Economic Passport is no
+  // longer a bottom-nav destination — it opens from the top-right trigger (§5).
   const memberNavItems = [
+    { id: 'dashboard', label: 'Home', ariaLabel: 'Home', labelKey: 'nav.home', icon: Home },
     { id: 'explore', label: 'Explore', icon: Compass },
-    { id: 'health', label: 'Health', icon: HeartPulse },
     { id: 'coach', label: 'LUCA', center: true },
     { id: 'communications', label: 'Communications', ariaLabel: 'Communications', icon: MessageSquare },
-    { id: 'wallet', label: 'Economic', icon: Wallet },
+    { id: 'health', label: 'Health', ariaLabel: 'Health Passport', icon: HeartPulse },
   ];
   const practitionerNavItems = [
     { id: 'prac-clients', label: 'Clients', icon: Users },
@@ -7535,12 +7841,26 @@ export default function LucaPassport() {
         <div className="main">
           <header className="topbar">
             <button className={`icon-btn menu-btn${canSwitchPortal ? ' menu-btn-switch' : ''}`} onClick={() => setDrawer(true)} aria-label="Open menu"><Menu size={18} /></button>
-            <button className="icon-btn home-btn home-orb" onClick={() => go(defaultTabFor(effectiveRole))} aria-label="Home"><Home size={19} /></button>
+            {/* §4 — contextual top-left: Solaris mark on root screens (no
+                redundant Home button), a Back affordance on nested screens. */}
+            {isRootScreen ? (
+              <div className="brand-mark" aria-hidden="true">
+                <span className="brand-glyph"><Sprout size={19} strokeWidth={2.2} /></span>
+                <span className="brand-word">Solaris</span>
+              </div>
+            ) : (
+              <button className="icon-btn back-btn" onClick={goBack} aria-label="Back"><ArrowLeft size={19} /></button>
+            )}
             <div className="m-title" aria-hidden="true">{meta.title}</div>
             <div className="search">
               <Search size={16} />
               <input placeholder="Search your passport, care, and value…" />
             </div>
+            {/* §5 — Economic Passport trigger (top-right). Reuses the shared warm
+                orb tokens; opens the full-height right drawer. */}
+            {showEconTrigger && (
+              <button className="icon-btn econ-trigger" onClick={() => openEcon()} aria-label="Open Economic Passport"><Wallet size={19} /></button>
+            )}
             <LanguageToggle />
             <NotificationCenter onNavigate={handleNotificationNavigate} />
             <ProfileMenu user={user} displayName={displayName} go={go} logout={logout} />
@@ -7559,6 +7879,18 @@ export default function LucaPassport() {
           </main>
         </div>
       </div>
+
+      {/* §5/§6 — Economic Passport drawer (full-height right sheet). */}
+      {showEconTrigger && (
+        <EconomicDrawer
+          open={econOpen}
+          section={econSection}
+          setSection={setEconSection}
+          onClose={() => setEconOpen(false)}
+          user={user}
+          go={go}
+        />
+      )}
 
       {/* Persistent mini-player — patient experience only (except the Media sub-tab, which has its own player) */}
       <MiniPlayer hidden={(tab === 'communications' && sub === 'media') || effectiveRole !== 'patient'} />

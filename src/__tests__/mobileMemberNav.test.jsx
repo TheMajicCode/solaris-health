@@ -43,18 +43,28 @@ describe('member mobile bottom navigation', () => {
     const items = within(nav).getAllByRole('button', { hidden: true });
     expect(items).toHaveLength(5);
     const labels = items.map((b) => b.getAttribute('aria-label'));
-    expect(labels).toEqual(['Explore', 'Health', 'LUCA Coach', 'Communications', 'Economic']);
+    // New contract order: Home, Explore, LUCA (centre elevated), Communications, Health.
+    expect(labels).toEqual(['Home', 'Explore', 'LUCA Coach', 'Communications', 'Health Passport']);
     // Centre item is the raised LUCA orb, not a normal tab.
     expect(nav.querySelector('.m-bn-luca')).toBeTruthy();
-    // Dashboard is reached from the top-left Home button, never the bottom nav.
-    expect(labels).not.toContain('Dashboard');
-    expect(labels).not.toContain('Home');
+    // Economic is removed from the bottom nav (it moves to the top-right trigger).
+    expect(labels).not.toContain('Economic');
   });
 
-  it('the top-left Home button exposes Dashboard access', () => {
+  it('has no top-left Home orb / wallet trigger; a root screen shows the Solaris brand mark instead', () => {
     render(<LucaPassport />);
-    // Icon-only button (accessible name via aria-label); query by class + label.
-    expect(document.querySelector('button.home-btn[aria-label="Home"]')).toBeTruthy();
+    // The old top-left Home orb is gone.
+    expect(document.querySelector('button.home-btn')).toBeNull();
+    // Root screens show the Solaris page-identity mark top-left.
+    const brand = document.querySelector('.brand-mark');
+    expect(brand).toBeTruthy();
+    expect(within(brand).getByText('Solaris')).toBeInTheDocument();
+  });
+
+  it('exposes the Economic Passport trigger top-right (reusing the orange orb tokens)', () => {
+    render(<LucaPassport />);
+    const trigger = document.querySelector('button.econ-trigger[aria-label="Open Economic Passport"]');
+    expect(trigger).toBeTruthy();
   });
 
   it('tapping a bottom-nav destination routes to it (aria-current reflects the active tab)', () => {
