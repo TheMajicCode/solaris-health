@@ -106,6 +106,22 @@ describe('K1.4 Defect 4 — TopbarPopover primitive', () => {
     expect(document.activeElement).toBe(item);
     cleanup();
   });
+
+  // Preview V3 defects 4 & 5 — SHARED VISUAL CONTRACT. The panel portals to
+  // document.body, OUTSIDE the app's `.luca` root, so Solaris tokens
+  // (--ink/--surface/--line/…) and every `.luca .*`-scoped style (Notifications'
+  // `.luca .nc-*` rules, the language/profile menu colours) only resolve if the
+  // portal root re-establishes the `.luca` scope. Assert it does.
+  it('re-establishes the `.luca` design-token scope at the portal root', () => {
+    render(<Harness testId="pop-luca" />);
+    const scrim = document.querySelector('.topbar-pop-scrim');
+    expect(scrim).toBeTruthy();
+    expect(scrim.classList.contains('luca')).toBe(true);
+    // The panel (and therefore all popover children) live inside that scope.
+    const panel = screen.getByTestId('pop-luca');
+    expect(panel.closest('.luca')).toBe(scrim);
+    cleanup();
+  });
 });
 
 describe('K1.4 Defect 4 — both topbar menus use the one primitive', () => {

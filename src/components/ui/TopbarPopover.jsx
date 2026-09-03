@@ -127,9 +127,19 @@ export default function TopbarPopover({
 
   if (!open || typeof document === 'undefined' || !document.body) return null;
 
+  // SHARED TOPBAR-POPOVER VISUAL CONTRACT (Preview V3, defects 4 & 5).
+  // The panel renders in a body portal, i.e. OUTSIDE the app's `.luca` root, so
+  // every Solaris design token (--ink/--surface/--line/--gold/--muted/…, defined
+  // only under `.luca`) and every component style scoped as `.luca .*` (e.g.
+  // NotificationCenter's injected `.luca .nc-*` rules, the language/profile menu
+  // colours) previously failed to resolve here — the panels came out faded, with
+  // default browser control borders. Re-establishing the `.luca` scope AT THE
+  // PORTAL ROOT makes the full token set + all scoped styles apply again, so all
+  // three consumers (Notifications, Language, Profile) inherit one opaque,
+  // on-brand, WCAG-AA surface without each re-declaring colours.
   return createPortal(
     <div
-      className="topbar-pop-scrim"
+      className="luca topbar-pop-scrim"
       onClick={() => onCloseRef.current && onCloseRef.current()}
       style={{ position: 'fixed', inset: 0, zIndex: TOPBAR_POPOVER_Z, background: 'rgba(10,43,41,.28)' }}
     >
