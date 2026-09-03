@@ -1,26 +1,31 @@
 /**
- * SelfCareSection — the "Self Care" surface inside the Economic Passport drawer.
+ * SelfCareSection — the "Self Care" full-screen surface in the Economic Passport.
  *
  * §8: "Self Care" is a UI/content alias for the internal Contributions record.
  * Route keys, analytics ids, the API field and the DB name all stay
- * `contributions`; only the label and framing change here. We surface ONLY real
- * data returned by the existing contributions API — lifetime value, value this
- * week / this month, completed self-care actions and a value-journey timeline —
- * and never manufacture LOVE totals or trends. When there is no history yet we
- * show an honest empty state.
+ * `contributions`; only the label and framing change here.
+ *
+ * Preview V3 (§6) — presentation-only slim-down. This surface now shows ONLY:
+ *   - the title + context,
+ *   - a concise LOVE balance summary (real data: lifetime / this week / this
+ *     month / actions; never manufactured), with an honest empty state, and
+ *   - one next-action card.
+ * The old record-style UI (the "Your value journey" timeline, the detail note
+ * and the full "Your contribution record" ledger) has been removed from this
+ * view. No data keys, analytics ids or APIs change — getRewards /
+ * getMyContributions are still the sources for the balance summary, and the
+ * ContributionLedger component is untouched (simply not rendered here).
  *
  * The primary action ("Continue self-care") deep-links to the exact Growth
  * surface where the device-local personalized-journey To-dos live; the secondary
- * ("See ecosystem impact") jumps to the drawer's GPS section.
+ * ("See ecosystem impact") jumps to the GPS section.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { Loader2, Heart, TrendingUp, CheckCircle2, Sprout, Globe, ScrollText } from 'lucide-react';
+import { Loader2, Heart, TrendingUp, CheckCircle2, Sprout, Globe } from 'lucide-react';
 import { api } from '../../lib/api.js';
-import ContributionLedger from '../contributions/ContributionLedger.jsx';
 import ActionCard from './ActionCard.jsx';
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-const fmtDate = (d) => { try { return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); } catch { return ''; } };
 
 // Normalise the two event shapes into one: the canonical LOVE ledger
 // (getRewards → event_type / created_at) and the internal contributions record
@@ -88,12 +93,10 @@ export default function SelfCareSection({ user, onContinue, onEcosystem }) {
     return { life, week, month, count: events.length };
   }, [events, canonicalTotal, nowTs]);
 
-  const recent = useMemo(() => events.slice(0, 5), [events]);
   // We have value to show whenever the canonical LOVE total is positive OR there
   // is at least one real event — this is what removes the old contradiction
   // where LOVE was visible elsewhere but "No self-care value recorded yet" here.
   const hasValue = (canonicalTotal != null && canonicalTotal > 0) || events.length > 0;
-  const detailUnavailable = hasValue && events.length === 0;
 
   return (
     <div className="selfcare">
@@ -121,55 +124,27 @@ export default function SelfCareSection({ user, onContinue, onEcosystem }) {
           <div className="sc-empty-s">As you complete self-care actions and contributions, your recognized value will appear here — nothing is estimated or pre-filled.</div>
         </div>
       ) : (
-        <>
-          <div className="sc-metrics">
-            <div className="sc-metric">
-              <span className="sc-metric-v">{metrics.life.toLocaleString()}</span>
-              <span className="sc-metric-l"><Heart size={12} /> Lifetime LOVE</span>
-            </div>
-            <div className="sc-metric">
-              <span className="sc-metric-v">{metrics.week.toLocaleString()}</span>
-              <span className="sc-metric-l"><TrendingUp size={12} /> This week</span>
-            </div>
-            <div className="sc-metric">
-              <span className="sc-metric-v">{metrics.month.toLocaleString()}</span>
-              <span className="sc-metric-l"><TrendingUp size={12} /> This month</span>
-            </div>
-            <div className="sc-metric">
-              <span className="sc-metric-v">{metrics.count.toLocaleString()}</span>
-              <span className="sc-metric-l"><CheckCircle2 size={12} /> Actions</span>
-            </div>
+        // §6 — concise LOVE balance summary only (real data). No record-style
+        // timeline, detail note or ledger on this presentation surface.
+        <div className="sc-metrics">
+          <div className="sc-metric">
+            <span className="sc-metric-v">{metrics.life.toLocaleString()}</span>
+            <span className="sc-metric-l"><Heart size={12} /> Lifetime LOVE</span>
           </div>
-
-          {detailUnavailable ? (
-            // Canonical LOVE exists but no per-event receipts are attributed to
-            // Self Care yet — show the total honestly and say the detail is missing.
-            <div className="sc-detail-note">
-              <ScrollText size={14} />
-              <span>Your recognized LOVE value is shown above. Detailed self-care activity isn’t available to break out yet.</span>
-            </div>
-          ) : recent.length > 0 && (
-            <div className="sc-timeline">
-              <div className="sc-timeline-h"><ScrollText size={14} /> Your value journey</div>
-              {recent.map((ev) => (
-                <div className="sc-tl-row" key={ev.id}>
-                  <span className="sc-tl-dot" />
-                  <span className="sc-tl-kind">{ev.kind}</span>
-                  <span className="sc-tl-date">{Number.isFinite(ev.ts) ? fmtDate(ev.ts) : ''}</span>
-                  <span className="sc-tl-pts">+{ev.points}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
+          <div className="sc-metric">
+            <span className="sc-metric-v">{metrics.week.toLocaleString()}</span>
+            <span className="sc-metric-l"><TrendingUp size={12} /> This week</span>
+          </div>
+          <div className="sc-metric">
+            <span className="sc-metric-v">{metrics.month.toLocaleString()}</span>
+            <span className="sc-metric-l"><TrendingUp size={12} /> This month</span>
+          </div>
+          <div className="sc-metric">
+            <span className="sc-metric-v">{metrics.count.toLocaleString()}</span>
+            <span className="sc-metric-l"><CheckCircle2 size={12} /> Actions</span>
+          </div>
+        </div>
       )}
-
-      {/* The full, real contribution record (log + ledger + leaderboard) is kept
-          intact below — the internal "contributions" surface, unchanged. */}
-      <div className="sc-record">
-        <div className="sc-record-h">Your contribution record</div>
-        <ContributionLedger user={user} />
-      </div>
 
       <style>{`
         .luca .sc-head{margin-bottom:14px}
@@ -180,26 +155,12 @@ export default function SelfCareSection({ user, onContinue, onEcosystem }) {
         .luca .sc-metric-v{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:22px;color:var(--ink);line-height:1}
         .luca .sc-metric-l{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--muted)}
         .luca .sc-metric-l svg{color:var(--teal)}
-        .luca .sc-timeline{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:16px}
-        .luca .sc-timeline-h{display:flex;align-items:center;gap:7px;font-weight:700;font-size:13px;color:var(--ink);margin-bottom:10px}
-        .luca .sc-timeline-h svg{color:var(--teal)}
-        .luca .sc-tl-row{display:flex;align-items:center;gap:9px;padding:7px 0;border-top:1px solid var(--line)}
-        .luca .sc-tl-row:first-of-type{border-top:none}
-        .luca .sc-tl-dot{width:8px;height:8px;border-radius:50%;background:var(--teal);flex:none}
-        .luca .sc-tl-kind{flex:1;font-size:12.5px;color:var(--ink);text-transform:capitalize}
-        .luca .sc-tl-date{font-size:11.5px;color:var(--muted)}
-        .luca .sc-tl-pts{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:12.5px;color:var(--teal-d);min-width:38px;text-align:right}
         .luca .sc-empty{background:var(--surface);border:1px dashed var(--line);border-radius:12px;padding:24px 18px;text-align:center;margin-bottom:16px;color:var(--muted)}
         .luca .sc-empty svg{color:var(--teal)}
         .luca .sc-empty-t{font-weight:700;font-size:14px;color:var(--ink);margin:8px 0 4px}
         .luca .sc-empty-s{font-size:12px;color:var(--muted);line-height:1.5;max-width:320px;margin:0 auto}
         .luca .sc-loading{display:flex;align-items:center;justify-content:center;gap:8px;padding:26px;color:var(--muted);font-size:13px}
         .luca .sc-spin{animation:spin 1s linear infinite}
-        .luca .sc-detail-note{display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--muted);line-height:1.5;
-          background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:16px}
-        .luca .sc-detail-note svg{color:var(--teal);flex:none;margin-top:1px}
-        .luca .sc-record{border-top:1px solid var(--line);padding-top:16px}
-        .luca .sc-record-h{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:13.5px;color:var(--ink);margin-bottom:12px}
       `}</style>
     </div>
   );
