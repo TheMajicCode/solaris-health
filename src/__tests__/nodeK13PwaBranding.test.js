@@ -42,8 +42,8 @@ describe('Node K1.3 §Phase 7 — manifest icon purposes', () => {
 describe('Node K1.3 §Phase 7 — service worker v22', () => {
   const sw = readFileSync(P('public/sw.js'), 'utf8');
   it('bumps the Solaris cache to v22', () => {
-    expect(sw).toMatch(/CACHE_NAME\s*=\s*'solaris-v22'/);
-    expect(sw).not.toMatch(/'solaris-v21'/);
+    expect(sw).toMatch(/CACHE_NAME\s*=\s*'solaris-v23'/);
+    expect(sw).not.toMatch(/'solaris-v22'/);
   });
   it('precaches the new branding assets', () => {
     expect(sw).toContain('/icons/icon-maskable-192-v2.png');

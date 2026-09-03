@@ -29,7 +29,7 @@
 // Economic Passport drawer + full-screen economic routing, topbar popover
 // styling repair, Self Care presentation-only slim-down). Same rule: only
 // obsolete Solaris caches are deleted on activate - never auth/local data.
-const CACHE_NAME = 'solaris-v22';
+const CACHE_NAME = 'solaris-v23';
 const SHELL_URL = '/index.html';
 
 // Branding assets to precache so the installed icon, splash, favicon and
