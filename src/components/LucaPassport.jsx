@@ -273,33 +273,11 @@ const CSS = `
 .luca .econ-menu-ic{flex:none;width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:var(--mint-soft);color:var(--teal-d)}
 .luca .econ-menu-lbl{flex:1;min-width:0;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px}
 .luca .econ-menu-btn .econ-menu-chev{flex:none;color:var(--muted)}
-/* Explicit "Back to Economic Passport" (phone detail view). */
-.luca .econ-back{display:none;align-items:center;gap:6px;align-self:flex-start;min-height:40px;padding:7px 14px;border-radius:999px;
-  border:1px solid var(--line);background:var(--surface);color:var(--teal-d);font-weight:700;font-size:13px;cursor:pointer;margin:12px 16px 0}
-.luca .econ-back:hover{background:var(--surface-2)}
-.luca .econ-back:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
-.luca .econ-body{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 16px calc(20px + env(safe-area-inset-bottom,0px))}
-.luca .econ-detail-h{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px;color:var(--muted);
-  text-transform:uppercase;letter-spacing:.06em;margin:0 0 12px}
-/* Phone (<560px): menu vs. detail are toggled by the view-* class on the drawer. */
-@media(max-width:559px){
-  .luca .econ-rail{display:none}
-  .luca .econ-drawer.view-menu .econ-shell{display:none}
-  .luca .econ-drawer.view-detail .econ-menu{display:none}
-  .luca .econ-drawer.view-detail .econ-back{display:inline-flex}
-}
-/* Tablet+ (>=560px): persistent left rail, menu hidden, detail always visible. */
+/* Navigation-only drawer: the vertical section menu is the entire body and is
+   shown at every width. Tablet+ simply gets a slightly wider sheet. */
+.luca .econ-drawer.econ-drawer-nav .econ-menu{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
 @media(min-width:560px){
-  .luca .econ-drawer{width:min(88vw,520px);max-width:520px}
-  .luca .econ-menu{display:none}
-  .luca .econ-back{display:none}
-  .luca .econ-shell{display:flex!important;flex:1;min-height:0}
-  .luca .econ-rail{flex:none;width:132px;border-right:1px solid var(--line);background:var(--surface);
-    display:flex;flex-direction:column;gap:4px;padding:12px 8px;overflow-y:auto}
-  .luca .econ-railbtn{display:flex;flex-direction:column;align-items:center;gap:5px;padding:12px 6px;border-radius:12px;
-    border:1px solid transparent;background:transparent;color:var(--muted);font-weight:600;font-size:11.5px;cursor:pointer;min-height:56px}
-  .luca .econ-railbtn.on{background:var(--mint-soft);color:var(--teal-d);border-color:rgba(14,92,87,.22)}
-  .luca .econ-railbtn:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+  .luca .econ-drawer{width:min(88vw,420px);max-width:420px}
 }
 /* Shared contextual action card (§11). */
 .luca .act-card{border:1px solid var(--line);border-radius:14px;background:var(--surface);padding:14px;box-shadow:var(--shadow-sm);margin-bottom:14px}
@@ -6867,15 +6845,16 @@ const ECON_SECTIONS = [
   { id: 'network', label: 'Network', icon: MapPin },
 ];
 
-function EconomicDrawer({ open, section, setSection, onClose, user, go }) {
+// Preview V3 §2 — the Economic Passport drawer is NAVIGATION-ONLY. The wallet
+// icon opens a left→right drawer showing just the "Economic Passport" heading
+// and a vertical nav list. Selecting an item CLOSES the drawer and navigates to
+// that section as a normal full app screen (the route-backed EconomicPassportArea
+// under ?area=wallet&sub=...), which carries the standard header + bottom nav and
+// survives refresh / deep-link / browser Back. No section content, detail state,
+// "Back to Economic Passport" control, or nested scrolling live here anymore.
+function EconomicDrawer({ open, onClose, go }) {
   const panelRef = useRef(null);
   const restoreRef = useRef(null);
-  // Phone drill state (§5): the drawer opens on the vertical section menu, then
-  // drills into a full-width detail view. Ignored at tablet+ (CSS shows both).
-  const [drilled, setDrilled] = useState(false);
-
-  // Every fresh open returns to the section menu on phones.
-  useEffect(() => { if (open) setDrilled(false); }, [open]);
 
   // Remember the trigger so focus returns to it on close (§5).
   useEffect(() => {
@@ -6943,30 +6922,16 @@ function EconomicDrawer({ open, section, setSection, onClose, user, go }) {
 
   if (!open || typeof document === 'undefined' || !document.body) return null;
 
-  // Choose a section (from the phone menu or the tablet rail) and drill into it.
-  const choose = (id) => { setSection(id); setDrilled(true); };
-  const current = ECON_SECTIONS.find((s) => s.id === section) || ECON_SECTIONS[0];
-
-  const renderSection = () => {
-    if (section === 'wallet') return <ErrorBoundary><PreviewWallet user={user} /></ErrorBoundary>;
-    if (section === 'contributions') return (
-      <ErrorBoundary>
-        <SelfCareSection
-          user={user}
-          onContinue={() => { onClose(); go('growth'); }}
-          onEcosystem={() => choose('gps')}
-        />
-      </ErrorBoundary>
-    );
-    if (section === 'network') return <ErrorBoundary><NetworkSection /></ErrorBoundary>;
-    return <ErrorBoundary><EconomicPassportPage user={user} /></ErrorBoundary>;
-  };
+  // Select a section: close the drawer, then navigate to the full-screen,
+  // route-backed Economic screen (?area=wallet&sub=<id>). go() already clears
+  // econOpen and mirrors the URL, so refresh / deep-link / Back all work.
+  const choose = (id) => { onClose(); go('wallet', id); };
 
   return createPortal(
     <div className="luca">
       <div className="econ-scrim" onClick={onClose} />
       <aside
-        className={`econ-drawer ${drilled ? 'view-detail' : 'view-menu'}`}
+        className="econ-drawer econ-drawer-nav"
         role="dialog"
         aria-modal="true"
         aria-label="Economic Passport"
@@ -6977,13 +6942,13 @@ function EconomicDrawer({ open, section, setSection, onClose, user, go }) {
           <div className="econ-head-top">
             <div className="econ-head-titles">
               <h2 className="econ-title">Economic Passport</h2>
-              <p className="econ-subtitle">Your care, contribution and value—in your control.</p>
             </div>
             <button type="button" className="econ-close" onClick={onClose} aria-label="Close Economic Passport"><X size={18} /></button>
           </div>
         </div>
 
-        {/* Phone: vertical section menu (§5). Hidden once a section is chosen. */}
+        {/* Navigation-only: one vertical list, shown at every width. Each item
+            opens the section as a normal full app screen. */}
         <nav className="econ-menu" aria-label="Economic Passport sections">
           {ECON_SECTIONS.map((s) => (
             <button key={s.id} type="button" className="econ-menu-btn" onClick={() => choose(s.id)}>
@@ -6993,32 +6958,6 @@ function EconomicDrawer({ open, section, setSection, onClose, user, go }) {
             </button>
           ))}
         </nav>
-
-        {/* Phone detail: explicit return to the section menu (§5). */}
-        <button type="button" className="econ-back" onClick={() => setDrilled(false)}>
-          <ArrowLeft size={15} /> Back to Economic Passport
-        </button>
-
-        <div className="econ-shell">
-          {/* Tablet+ persistent left rail (hidden on small phones via CSS). */}
-          <nav className="econ-rail" aria-label="Economic Passport sections">
-            {ECON_SECTIONS.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                aria-current={section === s.id ? 'page' : undefined}
-                className={`econ-railbtn ${section === s.id ? 'on' : ''}`}
-                onClick={() => choose(s.id)}
-              >
-                <s.icon size={18} /> {s.label}
-              </button>
-            ))}
-          </nav>
-          <div className="econ-body">
-            <h3 className="econ-detail-h">{current.label}</h3>
-            {renderSection()}
-          </div>
-        </div>
       </aside>
     </div>,
     document.body,
@@ -7658,10 +7597,9 @@ export default function LucaPassport() {
   const [appStatus, setAppStatus] = useState(null); // current user's latest application
   const [moreOpen, setMoreOpen] = useState(false); // practitioner "More" bottom sheet
   const [navHidden, setNavHidden] = useState(false); // mobile bottom nav hidden (full sheet / blocking overlay)
-  // §5/§6 — Economic Passport drawer. `econOpen` toggles the right sheet; the
-  // selected section is preserved across opens for the whole session.
+  // §5/§6 — Economic Passport drawer. `econOpen` toggles the nav-only sheet;
+  // selecting a section closes it and routes to a full-screen area instead.
   const [econOpen, setEconOpen] = useState(false);
-  const [econSection, setEconSection] = useState('wallet');
   // §4 — track in-app navigation depth so the contextual Back affordance can
   // step through real history and otherwise fall back to a safe destination
   // (never stranding a user who deep-linked straight into a nested screen).
@@ -7696,6 +7634,11 @@ export default function LucaPassport() {
     appNavCountRef.current += 1;
     setDrawer(false);
     setEconOpen(false);
+    // §3 — every navigation (including Economic section selection) lands at the
+    // top of the new full-screen area; the page uses ordinary window scroll.
+    if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+      try { window.scrollTo(0, 0); } catch { /* jsdom / no-op */ }
+    }
   }, [canSwitchPortal]);
 
   // §4 — contextual Back for nested screens. Steps through real in-app history
@@ -7708,12 +7651,14 @@ export default function LucaPassport() {
     }
   }, [go, effectiveRole]);
 
-  // §5/§8 — open the Economic drawer directly to a given section (e.g. Self
-  // Care's "See ecosystem impact" jumps straight to GPS).
+  // §5/§8 — the Economic Passport drawer is navigation-only. With no argument it
+  // opens the drawer's section menu; with a section it skips the menu and routes
+  // straight to that full-screen section (e.g. a jump to GPS), never rendering
+  // section detail inside the drawer.
   const openEcon = useCallback((section) => {
-    if (section) setEconSection(section);
+    if (section) { go('wallet', section); return; }
     setEconOpen(true);
-  }, []);
+  }, [go]);
 
   // Switch between the Member and Practitioner portals on the same account.
   const switchPortal = useCallback((view) => {
@@ -8074,14 +8019,11 @@ export default function LucaPassport() {
         </div>
       </div>
 
-      {/* §5/§6 — Economic Passport drawer (full-height right sheet). */}
+      {/* §5/§6 — Economic Passport drawer (navigation-only launcher sheet). */}
       {showEconTrigger && (
         <EconomicDrawer
           open={econOpen}
-          section={econSection}
-          setSection={setEconSection}
           onClose={() => setEconOpen(false)}
-          user={user}
           go={go}
         />
       )}

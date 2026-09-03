@@ -1,11 +1,13 @@
 /**
- * Focused coverage for the mobile navigation + Economic Passport drawer
- * redesign (contract §4–§11). Presentation / IA / responsive-nav only — no
- * schema, auth, wallet or transaction semantics are exercised here.
+ * Focused coverage for the mobile navigation + Economic Passport drawer.
  *
- * The bottom nav and the drawer both live in the DOM regardless of viewport
- * (CSS handles the responsive presentation), so these DOM assertions are stable
- * in jsdom.
+ * Preview V3 redesign (§2/§3): the Economic Passport drawer is now
+ * NAVIGATION-ONLY. It shows a single vertical list of the four sections
+ * (Wallet, Self Care, GPS, Network); selecting one CLOSES the drawer and opens
+ * that section as a normal, route-backed FULL APP SCREEN (?area=wallet&sub=...).
+ * No section detail, rail, or "Back to Economic Passport" is rendered inside the
+ * drawer any more. Presentation / IA / responsive-nav only — no schema, auth,
+ * wallet or transaction semantics are exercised here.
  */
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -40,19 +42,18 @@ const openDrawer = () => {
   return trigger;
 };
 const drawer = () => document.querySelector('.econ-drawer');
-// §5 redesign — sections are now a VERTICAL menu (phone) drilling into a detail
-// view, plus a persistent rail (tablet+). Both render in jsdom (CSS handles the
-// responsive show/hide), so we drive the menu buttons and read the rail's
-// active ("on") state to assert which section is selected.
-const menuLabels = () => Array.from(drawer().querySelectorAll('.econ-menu .econ-menu-lbl')).map((e) => e.textContent.trim());
+const menuLabels = () => Array.from(document.querySelectorAll('.econ-drawer .econ-menu .econ-menu-lbl')).map((e) => e.textContent.trim());
 const clickSection = (name) => {
   const btn = Array.from(drawer().querySelectorAll('.econ-menu-btn')).find((b) => b.textContent.trim().includes(name));
   fireEvent.click(btn);
   return btn;
 };
-const activeSection = () => {
-  const on = drawer().querySelector('.econ-railbtn.on');
-  return on ? on.textContent.trim() : null;
+// The full-screen Economic area renders its own SubTabs (role=tablist); the
+// selected section is the tab with aria-selected="true".
+const areaTablist = () => document.querySelector('[role="tablist"][aria-label="Economic Passport sections"]');
+const activeAreaTab = () => {
+  const el = areaTablist()?.querySelector('[role="tab"][aria-selected="true"]');
+  return el ? el.textContent.trim() : null;
 };
 
 describe('§4 mobile bottom nav — order and route destinations', () => {
@@ -71,8 +72,8 @@ describe('§4 mobile bottom nav — order and route destinations', () => {
   });
 });
 
-describe('§5 Economic Passport trigger + drawer open/close', () => {
-  it('opens a full-height right drawer with the correct header/subline', () => {
+describe('§2 Economic Passport trigger + navigation-only drawer', () => {
+  it('opens a full-height right drawer showing ONLY the heading + section list', () => {
     render(<LucaPassport />);
     openDrawer();
     const d = drawer();
@@ -80,13 +81,15 @@ describe('§5 Economic Passport trigger + drawer open/close', () => {
     expect(d.getAttribute('role')).toBe('dialog');
     expect(d.getAttribute('aria-modal')).toBe('true');
     expect(within(d).getByText('Economic Passport')).toBeInTheDocument();
-    expect(within(d).getByText(/Your care, contribution and value/i)).toBeInTheDocument();
+    // Navigation-only: no descriptive subtitle, no section detail, no rail/back.
+    expect(within(d).queryByText(/Your care, contribution and value/i)).toBeNull();
+    expect(d.querySelector('.econ-back')).toBeNull();
+    expect(d.querySelector('.econ-rail')).toBeNull();
+    expect(d.querySelector('.econ-body')).toBeNull();
   });
 
   it('closes via the close button and restores focus to the trigger', async () => {
     render(<LucaPassport />);
-    // A real click focuses the button; jsdom does not, so focus it explicitly
-    // to reproduce the interaction whose focus we expect to be restored.
     const trigger = document.querySelector('button.econ-trigger[aria-label="Open Economic Passport"]');
     trigger.focus();
     fireEvent.click(trigger);
@@ -117,77 +120,88 @@ describe('§5 Economic Passport trigger + drawer open/close', () => {
   });
 });
 
-describe('§5 drawer IA — vertical section list Wallet, Self Care, GPS, Network', () => {
+describe('§2 drawer IA — vertical section list Wallet, Self Care, GPS, Network', () => {
   it('presents the four sections as a vertical menu in the required order', () => {
     render(<LucaPassport />);
     openDrawer();
     expect(menuLabels()).toEqual(['Wallet', 'Self Care', 'GPS', 'Network']);
-    // Wallet is the default selected section (reflected in the tablet rail).
-    expect(activeSection()).toBe('Wallet');
   });
 
-  it('drilling into a section shows the "Back to Economic Passport" affordance', () => {
+  it('selecting a section CLOSES the drawer and opens it as a full app screen (route-backed)', async () => {
     render(<LucaPassport />);
     openDrawer();
-    // Fresh open starts on the menu view.
-    expect(drawer().classList.contains('view-menu')).toBe(true);
     clickSection('GPS');
-    // Choosing a section drills into the detail view.
-    expect(drawer().classList.contains('view-detail')).toBe(true);
-    // The back affordance is CSS-hidden on tablet, so select it directly.
-    const back = drawer().querySelector('.econ-back');
-    expect(back).toBeTruthy();
-    expect(back.textContent).toMatch(/back to economic passport/i);
-    fireEvent.click(back);
-    expect(drawer().classList.contains('view-menu')).toBe(true);
-  });
-});
-
-describe('§7 Self Care -> Growth deep link and -> GPS transition', () => {
-  it('"Continue self-care" closes the drawer and navigates to Growth', async () => {
-    render(<LucaPassport />);
-    openDrawer();
-    clickSection('Self Care');
-    const primary = await within(drawer()).findByRole('button', { name: /continue self-care/i });
-    fireEvent.click(primary);
+    // Drawer closes...
     await waitFor(() => expect(drawer()).toBeNull());
-    // Growth lives under the Communications area; the URL reflects the deep link.
-    expect(window.location.search).toMatch(/growth/);
+    // ...and the full-screen Economic area is now shown with GPS selected,
+    // mirrored into the URL so refresh / deep-link / Back all work.
+    expect(window.location.search).toMatch(/area=wallet/);
+    expect(window.location.search).toMatch(/sub=gps/);
+    await waitFor(() => expect(areaTablist()).toBeTruthy());
+    expect(activeAreaTab()).toBe('GPS');
   });
 
-  it('"See ecosystem impact" switches the drawer to the GPS section', async () => {
+  it('opening Wallet from the drawer lands on the Wallet full screen', async () => {
     render(<LucaPassport />);
     openDrawer();
-    clickSection('Self Care');
-    const secondary = await within(drawer()).findByRole('button', { name: /see ecosystem impact/i });
-    fireEvent.click(secondary);
-    expect(activeSection()).toBe('GPS'); // GPS now selected
+    clickSection('Wallet');
+    await waitFor(() => expect(drawer()).toBeNull());
+    expect(window.location.search).toMatch(/area=wallet/);
+    await waitFor(() => expect(areaTablist()).toBeTruthy());
+    expect(activeAreaTab()).toBe('Wallet');
   });
 });
 
-describe('§10 Network — BTC Map fallback + collapsed accordions', () => {
-  it('always shows an "Open in BTC Map" fallback link and the BTC Map iframe', () => {
+describe('§7 Self Care full screen — Growth deep link and GPS transition', () => {
+  it('opens Self Care as a full screen, then "Continue self-care" navigates to Growth', async () => {
+    render(<LucaPassport />);
+    openDrawer();
+    clickSection('Self Care');
+    await waitFor(() => expect(drawer()).toBeNull());
+    // Full-screen Self Care section is shown (Self Care sub selected).
+    await waitFor(() => expect(activeAreaTab()).toBe('Self Care'));
+    const primary = await screen.findByRole('button', { name: /continue self-care/i });
+    fireEvent.click(primary);
+    // Growth lives under the Communications area; the URL reflects the deep link.
+    await waitFor(() => expect(window.location.search).toMatch(/growth/));
+  });
+
+  it('"See ecosystem impact" navigates to the GPS full screen', async () => {
+    render(<LucaPassport />);
+    openDrawer();
+    clickSection('Self Care');
+    await waitFor(() => expect(drawer()).toBeNull());
+    const secondary = await screen.findByRole('button', { name: /see ecosystem impact/i });
+    fireEvent.click(secondary);
+    await waitFor(() => expect(activeAreaTab()).toBe('GPS'));
+    expect(window.location.search).toMatch(/sub=gps/);
+  });
+});
+
+describe('§10 Network full screen — BTC Map fallback + collapsed accordions', () => {
+  it('always shows an "Open in BTC Map" fallback link and the BTC Map iframe', async () => {
     render(<LucaPassport />);
     openDrawer();
     clickSection('Network');
-    const open = within(drawer()).getByRole('link', { name: /open in btc map/i });
+    await waitFor(() => expect(drawer()).toBeNull());
+    const open = await screen.findByRole('link', { name: /open in btc map/i });
     expect(open).toHaveAttribute('href', 'https://btcmap.org/map');
-    const iframe = drawer().querySelector('iframe.btcmap-frame');
+    const iframe = document.querySelector('iframe.btcmap-frame');
     expect(iframe).toBeTruthy();
     // Geolocation is NOT auto-requested.
     expect(iframe.getAttribute('allow')).toBeNull();
   });
 
-  it('renders Communities and Ecosystem Apps accordions collapsed by default', () => {
+  it('renders Communities and Ecosystem Apps accordions collapsed by default', async () => {
     render(<LucaPassport />);
     openDrawer();
     clickSection('Network');
-    const accHeads = drawer().querySelectorAll('.acc-head');
-    expect(accHeads.length).toBe(2);
+    await waitFor(() => expect(drawer()).toBeNull());
+    await waitFor(() => expect(document.querySelectorAll('.acc-head').length).toBe(2));
+    const accHeads = document.querySelectorAll('.acc-head');
     accHeads.forEach((h) => expect(h.getAttribute('aria-expanded')).toBe('false'));
-    // Bodies are collapsed until toggled.
-    expect(drawer().querySelector('.acc-body')).toBeNull();
+    expect(document.querySelector('.acc-body')).toBeNull();
     fireEvent.click(accHeads[0]);
-    expect(drawer().querySelector('.acc-body')).toBeTruthy();
+    expect(document.querySelector('.acc-body')).toBeTruthy();
   });
 });
