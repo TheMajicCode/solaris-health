@@ -20,6 +20,21 @@ import ProviderDetailModal from './ProviderDetailModal.jsx';
 import { PROVIDER_TYPES } from './ProviderBadges.jsx';
 import AdaptiveOverlay from '../ui/AdaptiveOverlay.jsx';
 import BookingFlow from '../booking/BookingFlow.jsx';
+import { pickAlternate, eligibleProviders } from '../../lib/alternateProvider.js';
+
+// buildRecReason — a short, consent-safe "why" line for a rotated recommendation.
+// Uses ONLY non-clinical, already-public listing attributes (rating, languages,
+// city). NEVER derives from health data, journey/check-in content, or any PHI.
+function buildRecReason(p) {
+  if (!p) return '';
+  const meta = (typeof p.__meta === 'object' && p.__meta) || null;
+  const bits = [];
+  if (p.rating) bits.push(`${Number(p.rating).toFixed(1)}★ rated`);
+  const langs = meta?.languages || p.languages;
+  if (Array.isArray(langs) && langs.length) bits.push(langs.slice(0, 2).join(' / '));
+  if (p.city) bits.push(p.city);
+  return bits.length ? `Verified match · ${bits.join(' · ')}` : 'Verified match from your approved listings';
+}
 
 // Mobile breakpoint (matches the app shell's 900px). Kept in a hook so the
 // Explore layout can switch to the map + draggable results sheet on phones and
@@ -187,11 +202,30 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
   const [curating, setCurating] = useState(false);
   const [curateOpen, setCurateOpen] = useState(false);
 
+  // ── Recommendation rotation ("Show another") ──
+  // The provider card can be rotated locally over the real approved provider
+  // pool WITHOUT re-hitting the backend (whose Preview mock deterministically
+  // returns the same top-ranked listing on refresh — the "stuck on one provider"
+  // root cause). recProvider, when set, overrides curated.curatedJourney for the
+  // displayed card. shownRecRef tracks ids shown this session so we prefer unseen
+  // options and never immediately repeat the previous one (see pickAlternate).
+  const [recProvider, setRecProvider] = useState(null);
+  const [recLoading, setRecLoading] = useState(false);
+  const [recOnlyOne, setRecOnlyOne] = useState(false);
+  const shownRecRef = useRef(new Set());
+  const recReqRef = useRef(0); // out-of-order guard for concurrent rotations
+
   const curateForMe = useCallback(async (refresh = false) => {
     setCurating(true); setCurateOpen(true);
     try {
       const r = await api.getLucaRecommendations({ refresh });
       setCurated(r || null);
+      // Reset local rotation to the backend pick; seed shown-set with it so the
+      // first "Show another" moves to a genuinely different provider.
+      setRecProvider(null);
+      setRecOnlyOne(false);
+      const seed = r?.curatedJourney?.providerId;
+      shownRecRef.current = new Set(seed != null ? [String(seed)] : []);
     } catch {
       setCurated(null);
     } finally { setCurating(false); }
@@ -342,6 +376,65 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
     }
     return rows;
   }, [providers, filters]);
+
+  // Eligible recommendation pool: real, approved, published listings only. The
+  // server already returns approved/active providers; eligibleProviders() is a
+  // second guard (excludes any unapproved item that ever slips through). Ranking
+  // is the backend's consented-context order (goal/category/location/language) —
+  // NEVER health data. We rotate over this ranked pool client-side.
+  const recommendationPool = useMemo(
+    () => eligibleProviders(providers, {}).map((p) => ({ ...p, __meta: providerMeta(p) })),
+    [providers]
+  );
+
+  // The recommendation currently shown in the card: a locally rotated provider
+  // (recProvider) overrides the backend's initial pick (curated.curatedJourney).
+  const recCard = useMemo(() => {
+    if (recProvider) {
+      return {
+        providerId: recProvider.id,
+        title: recProvider.business_name || recProvider.title || recProvider.name || 'Verified provider',
+        specialty: recProvider.provider_type || recProvider.specialty || '',
+        city: recProvider.city || '',
+        reason: buildRecReason(recProvider),
+      };
+    }
+    return curated?.curatedJourney || null;
+  }, [recProvider, curated]);
+
+  // "Show another" — rotate the provider card ONLY (never the Next Step; never
+  // closes the sheet). Rotation is local over recommendationPool: prefer unseen,
+  // never immediately repeat the current provider, start a fresh cycle when the
+  // pool is exhausted (pickAlternate). Concurrent clicks are guarded and any
+  // out-of-order resolution is ignored. If the pool has one (or zero) eligible
+  // items we keep the current card and surface an honest "only match" note —
+  // never silently return the same item without saying so.
+  const showAnotherRecommendation = useCallback(() => {
+    if (recLoading) return; // guard concurrent requests
+    const pool = recommendationPool;
+    const total = pool.length;
+    if (total <= 1) { setRecOnlyOne(true); return; }
+    const currentId = recCard?.providerId ?? null;
+    const reqId = ++recReqRef.current;
+    setRecLoading(true);
+    // Skeleton for one frame (no layout shift); the pool is already loaded, so
+    // this stays instant while honoring the loading/race contract.
+    const raf = (typeof window !== 'undefined' && window.requestAnimationFrame)
+      ? window.requestAnimationFrame
+      : (fn) => setTimeout(fn, 0);
+    raf(() => {
+      if (reqId !== recReqRef.current) return; // ignore out-of-order result
+      const { provider, used } = pickAlternate({ pool, currentId, used: shownRecRef.current });
+      if (provider) {
+        shownRecRef.current = used;
+        setRecProvider(provider);
+        setRecOnlyOne(false);
+      } else {
+        setRecOnlyOne(true); // nothing else eligible → keep current, tell the user
+      }
+      setRecLoading(false);
+    });
+  }, [recLoading, recommendationPool, recCard]);
 
   const patch = (p) => setFilters((f) => ({ ...f, ...p }));
   const reset = () => { setFilters(DEFAULT_FILTERS); setQuery(''); };
@@ -537,7 +630,9 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
     // "Recommend for me" — surfaces LUCA's recommendation as a bottom sheet whose
     // primary action opens the EXACT recommended practitioner (deep-link by id).
     const openRecommendedProvider = () => {
-      const pid = curated?.curatedJourney?.providerId;
+      // Always open the CURRENTLY-DISPLAYED provider (recCard reflects the latest
+      // rotation), not the backend's original pick.
+      const pid = recCard?.providerId;
       if (pid) {
         // Select AND reveal the exact recommended provider on the map (its marker
         // becomes active + its anchored preview shows), then open its full detail —
@@ -546,7 +641,7 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
         setMobileView('map');
         setOpenId(pid);
       } else {
-        const q = curated?.curatedJourney?.specialty || curated?.curatedJourney?.title || '';
+        const q = recCard?.specialty || recCard?.title || '';
         if (q) setQuery(q);
       }
       setCurateOpen(false);
@@ -559,9 +654,9 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
         ariaLabel="LUCA recommendations"
         size="md"
         closeLabel="Close recommendations"
-        footer={curated?.curatedJourney ? (
+        footer={recCard ? (
           <button type="button" className="exm-cc-btn" style={{ width: '100%' }} onClick={openRecommendedProvider}>
-            {curated.curatedJourney.providerId ? 'View this provider' : 'Explore related'} <ArrowRight size={15} />
+            {recCard.providerId ? 'View this provider' : 'Explore related'} <ArrowRight size={15} />
           </button>
         ) : null}
       >
@@ -577,15 +672,35 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
                 {curated.nextStep.action && <div className="exm-cc-why">{curated.nextStep.action}</div>}
               </div>
             )}
-            {curated?.curatedJourney && (
+            {recCard && (
               <div className="exm-cc journey">
-                <span className="exm-cc-tag journey">Recommended provider</span>
-                <h5>{curated.curatedJourney.title}</h5>
-                <p>{[curated.curatedJourney.specialty, curated.curatedJourney.city].filter(Boolean).join(' · ')}</p>
-                {curated.curatedJourney.reason && <div className="exm-cc-why">{curated.curatedJourney.reason}</div>}
+                <div className="exm-cc-head">
+                  <span className="exm-cc-tag journey">Recommended provider</span>
+                  <button
+                    type="button"
+                    className="exm-rec-again"
+                    onClick={showAnotherRecommendation}
+                    disabled={recLoading}
+                    aria-label="Show another recommendation"
+                  >
+                    <RefreshCw size={13} className={recLoading ? 'exm-spin' : ''} /> Show another
+                  </button>
+                </div>
+                {recLoading ? (
+                  <div className="exm-rec-skel" aria-hidden="true"><span /><span /><span /></div>
+                ) : (
+                  <>
+                    <h5>{recCard.title}</h5>
+                    <p>{[recCard.specialty, recCard.city].filter(Boolean).join(' · ')}</p>
+                    {recCard.reason && <div className="exm-cc-why">{recCard.reason}</div>}
+                    {recOnlyOne && (
+                      <div className="exm-rec-only">This is currently your only verified match.</div>
+                    )}
+                  </>
+                )}
               </div>
             )}
-            {!curating && !curated?.nextStep && !curated?.curatedJourney && (
+            {!curating && !curated?.nextStep && !recCard && (
               <div className="exm-curated-loading">LUCA couldn’t recommend anything right now. Please try again shortly.</div>
             )}
           </div>
@@ -794,9 +909,6 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
           <div className="exm-curated-head">
             <span className="exm-curated-title"><Sparkles size={16} /> Curated for you</span>
             <div className="exm-curated-actions">
-              <button className="exm-curated-refresh" onClick={() => curateForMe(true)} disabled={curating}>
-                <RefreshCw size={13} className={curating ? 'exm-spin' : ''} /> Refresh
-              </button>
               <button className="exm-curated-close" onClick={() => setCurateOpen(false)} aria-label="Close"><X size={15} /></button>
             </div>
           </div>
@@ -812,34 +924,54 @@ export default function ExploreMarketplace({ user, onBecomeProvider }) {
                   {curated.nextStep.action && <div className="exm-cc-why">{curated.nextStep.action}</div>}
                 </div>
               )}
-              {curated?.curatedJourney && (
+              {recCard && (
                 <div className="exm-cc journey">
-                  <span className="exm-cc-tag journey">Curated journey</span>
-                  <h5>{curated.curatedJourney.title}</h5>
-                  <p>
-                    {[curated.curatedJourney.specialty, curated.curatedJourney.city].filter(Boolean).join(' · ')}
-                  </p>
-                  {curated.curatedJourney.reason && <div className="exm-cc-why">{curated.curatedJourney.reason}</div>}
-                  <button
-                    className="exm-cc-btn"
-                    onClick={() => {
-                      // Deep-link straight to the recommended practitioner's profile
-                      // (bookable), falling back to a marketplace search for legacy
-                      // listing-based recommendations.
-                      if (curated.curatedJourney.providerId) {
-                        setOpenId(curated.curatedJourney.providerId);
-                      } else {
-                        const q = curated.curatedJourney.specialty || curated.curatedJourney.title || '';
-                        setQuery(q);
-                      }
-                      setCurateOpen(false);
-                    }}
-                  >
-                    {curated.curatedJourney.providerId ? 'View & book' : 'Explore related'} <ArrowRight size={14} />
-                  </button>
+                  <div className="exm-cc-head">
+                    <span className="exm-cc-tag journey">Recommended provider</span>
+                    <button
+                      type="button"
+                      className="exm-rec-again"
+                      onClick={showAnotherRecommendation}
+                      disabled={recLoading}
+                      aria-label="Show another recommendation"
+                    >
+                      <RefreshCw size={13} className={recLoading ? 'exm-spin' : ''} /> Show another
+                    </button>
+                  </div>
+                  {recLoading ? (
+                    <div className="exm-rec-skel" aria-hidden="true"><span /><span /><span /></div>
+                  ) : (
+                    <>
+                      <h5>{recCard.title}</h5>
+                      <p>
+                        {[recCard.specialty, recCard.city].filter(Boolean).join(' · ')}
+                      </p>
+                      {recCard.reason && <div className="exm-cc-why">{recCard.reason}</div>}
+                      {recOnlyOne && (
+                        <div className="exm-rec-only">This is currently your only verified match.</div>
+                      )}
+                      <button
+                        className="exm-cc-btn"
+                        onClick={() => {
+                          // Open the CURRENTLY-DISPLAYED provider (recCard reflects the
+                          // latest rotation), falling back to a marketplace search for
+                          // legacy listing-based recommendations.
+                          if (recCard.providerId) {
+                            setOpenId(recCard.providerId);
+                          } else {
+                            const q = recCard.specialty || recCard.title || '';
+                            setQuery(q);
+                          }
+                          setCurateOpen(false);
+                        }}
+                      >
+                        {recCard.providerId ? 'View & book' : 'Explore related'} <ArrowRight size={14} />
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
-              {!curated?.nextStep && !curated?.curatedJourney && (
+              {!curated?.nextStep && !recCard && (
                 <div className="exm-curated-loading">LUCA couldn't curate right now. Try refreshing.</div>
               )}
             </div>
@@ -1125,6 +1257,24 @@ const CSS = `
 .luca .exm-cc{border:1px solid var(--line);border-radius:14px;padding:15px 16px;background:var(--bg);display:flex;
   flex-direction:column;gap:7px}
 .luca .exm-cc.journey{background:var(--mint-soft);border-color:var(--mint-line)}
+/* Recommended-provider card header: label + "Show another" rotation control */
+.luca .exm-cc-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.luca .exm-rec-again{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);
+  background:var(--surface);color:var(--teal-d);border-radius:999px;padding:5px 11px;font-size:12.5px;font-weight:600;
+  cursor:pointer;font-family:inherit;min-height:32px}
+.luca .exm-rec-again:hover{color:var(--ink);border-color:var(--teal-d);background:var(--mint-soft)}
+.luca .exm-rec-again:disabled{opacity:.6;cursor:default}
+.luca .exm-rec-again svg{color:#c79a3a}
+/* Skeleton keeps the card height stable during rotation (no layout shift) */
+.luca .exm-rec-skel{display:flex;flex-direction:column;gap:8px;padding:2px 0}
+.luca .exm-rec-skel span{display:block;height:14px;border-radius:7px;
+  background:linear-gradient(90deg,rgba(0,0,0,.06),rgba(0,0,0,.11),rgba(0,0,0,.06));
+  background-size:200% 100%;animation:exm-rec-shimmer 1.1s ease-in-out infinite}
+.luca .exm-rec-skel span:nth-child(1){width:70%;height:16px}
+.luca .exm-rec-skel span:nth-child(2){width:52%}
+.luca .exm-rec-skel span:nth-child(3){width:88%;height:28px;border-radius:9px}
+@keyframes exm-rec-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.luca .exm-rec-only{font-size:12.5px;color:var(--muted);font-style:italic;padding-top:2px}
 .luca .exm-cc-tag{align-self:flex-start;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
   border-radius:999px;padding:3px 10px}
 .luca .exm-cc-tag.next{background:var(--teal-d);color:#fff}
