@@ -24,7 +24,12 @@
 // `maskable` icons with a safe logo zone and no white circle, high-resolution
 // splash/onboarding mark). Same rule: only obsolete Solaris caches are deleted
 // on activate - never auth/local data.
-const CACHE_NAME = 'solaris-v21';
+// Preview V3 (§9): bumped v21->v22 to purge the previous static cache after the
+// Preview correction pass (Explore recommendation refresh, navigation-only
+// Economic Passport drawer + full-screen economic routing, topbar popover
+// styling repair, Self Care presentation-only slim-down). Same rule: only
+// obsolete Solaris caches are deleted on activate - never auth/local data.
+const CACHE_NAME = 'solaris-v22';
 const SHELL_URL = '/index.html';
 
 // Branding assets to precache so the installed icon, splash, favicon and
