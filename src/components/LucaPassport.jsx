@@ -50,7 +50,7 @@ import DailySignalsSheet from './health/DailySignalsSheet.jsx';
 import { pickAlternate, eligibleProviders } from '../lib/alternateProvider.js';
 import { curatedNavIntent } from '../lib/curatedDeepLink.js';
 import { TODO_CADENCE, cadenceForTodo, todoActionMeta } from '../lib/todoGrouping.js';
-import { LUCA_ACTIONS, buildLucaResponse, safeMessageResponse, isValidLucaAction } from '../lib/lucaActions.js';
+import { LUCA_ACTIONS, buildLucaResponse, safeMessageResponse, isValidLucaAction, isLiveModelReply, unavailableResponse } from '../lib/lucaActions.js';
 import { SharingDefaultsCard } from './SharingControls.jsx';
 import { personalizedSeedSteps, PERSONALIZED_JOURNEY_TYPE } from '../lib/personalizedSeed.js';
 import { loadDeviceTodos, saveDeviceTodos, toggleDeviceTodo, buildLocalTodosFromJourney } from '../lib/deviceTodos.js';
@@ -2945,11 +2945,14 @@ function actionsToChips(actions = []) {
 }
 
 /* Map a typed LUCA suggestion to an in-app effect. */
-function executeChipAction(suggestion, { go, setInput, send, playAudio, startRetake, setPendingProviderId, setPendingCurate }) {
+function executeChipAction(suggestion, { go, setInput, send, playAudio, startRetake, setPendingProviderId, setPendingCurate, setJourneyOpen }) {
   const s = typeof suggestion === 'string' ? { label: suggestion, action: 'prefill_chat', target: null } : (suggestion || {});
   const { action, target, label } = s;
   switch (action) {
     case 'navigate': go(target || 'dashboard'); break;
+    // §16 — open the Personalized Journey planner (the member approves it before
+    // anything is saved). Reuses the existing PersonalizedJourneySheet flow.
+    case 'open_journey': setJourneyOpen ? setJourneyOpen(true) : go('growth'); break;
     case 'start_checkin':
       // Land on the Health Passport and open the daily check-in modal.
       go('health');
@@ -2972,6 +2975,9 @@ function executeChipAction(suggestion, { go, setInput, send, playAudio, startRet
       go('explore');
       break;
     case 'prefill_chat': setInput(label || ''); break;
+    // §14 — "Not now": a benign dismissal. Do nothing sensitive; the member
+    // simply stays where they are. Never sends or navigates.
+    case 'dismiss': break;
     default: send(label || ''); break;
   }
 }
@@ -3294,6 +3300,7 @@ function CoachPage({ user, go }) {
   const [ctxBookings, setCtxBookings] = useState([]);
   const [ctxJourneys, setCtxJourneys] = useState([]);
   const [ctxCheckins, setCtxCheckins] = useState([]);
+  const [ctxTodos, setCtxTodos] = useState([]);
   const [ctxCompleteness, setCtxCompleteness] = useState(null);
   const [sending, setSending] = useState(false);
   const [degraded, setDegraded] = useState(false);
@@ -3354,17 +3361,21 @@ function CoachPage({ user, go }) {
     let alive = true;
     loadLucaHistory();
     (async () => {
-      const [l, bk, jr, ck] = await Promise.all([
+      const [l, bk, jr, ck, td] = await Promise.all([
         api.getLatestAssessment().catch(() => null),
         api.getMyBookings().catch(() => []),
         api.getMyJourneys().catch(() => []),
         api.getCheckins().catch(() => []),
+        api.getTodos().catch(() => []),
       ]);
       if (!alive) return;
       setLatest(l);
       setCtxBookings(Array.isArray(bk) ? bk : (bk?.bookings || []));
       setCtxJourneys(Array.isArray(jr) ? jr : (jr?.journeys || []));
       setCtxCheckins(Array.isArray(ck) ? ck : (ck?.checkins || []));
+      // §14 — the member's real Growth To-dos so LUCA's "next step" surfaces the
+      // SAME task the Dashboard green card / Check-in "Next Steps" would.
+      setCtxTodos(Array.isArray(td) ? td : (td?.todos || []));
       setCtxCompleteness(appProfile?.completeness ?? null);
     })();
     return () => { alive = false; stopAudio(); };
@@ -3424,14 +3435,39 @@ function CoachPage({ user, go }) {
     setSending(true);
     try {
       const res = await api.sendLucaMessage(content);
-      setDegraded(!!res?.degraded);
-      setMessages((m) => [...m, { role: 'assistant', content: res?.reply || '…', model: res?.model, suggestions: res?.suggestions || [], created_at: new Date().toISOString() }]);
+      // §13 — only attribute the reply to a model when it is a genuine LIVE
+      // reply. A mock/degraded reply is still shown (it is the member's own
+      // free-text turn), but the panel is labelled offline and not credited
+      // to an AI model.
+      const live = isLiveModelReply(res);
+      setDegraded(!live);
+      const modelChips = Array.isArray(res?.suggestions)
+        ? res.suggestions.filter((s) => typeof s === 'string' || isValidLucaAction(s))
+        : [];
+      setMessages((m) => [...m, {
+        role: 'assistant',
+        content: res?.reply || '…',
+        model: live ? res?.model : undefined,
+        degraded: !live,
+        suggestions: modelChips,
+        created_at: new Date().toISOString(),
+      }]);
     } catch (e) {
       if (e?.agentDisabled) {
         setPaused(true);
         setMessages((m) => [...m, { role: 'assistant', content: 'LUCA is paused — you turned it off. Re-enable anytime.', created_at: new Date().toISOString() }]);
       } else {
-        setMessages((m) => [...m, { role: 'assistant', content: 'LUCA is taking a moment — try again shortly.', created_at: new Date().toISOString() }]);
+        // §17 — a genuine model failure/timeout. Be honest that LUCA is
+        // temporarily unavailable, restore the member's unsent text so nothing
+        // is lost, and offer deterministic Solaris routes instead of a canned
+        // reply presented as AI.
+        const un = unavailableResponse();
+        setDegraded(true);
+        setInput(content);
+        setMessages((m) => [...m, {
+          role: 'assistant', content: un.reply, degraded: true,
+          suggestions: actionsToChips(un.actions), created_at: new Date().toISOString(),
+        }]);
       }
     } finally { setSending(false); }
   };
@@ -3443,6 +3479,7 @@ function CoachPage({ user, go }) {
     checkins: ctxCheckins,
     journeys: ctxJourneys,
     approvedJourney,
+    todos: ctxTodos,
     bookings: ctxBookings,
     goals: latest?.response?.top_focus_areas_json || [],
     savedIds: [], bookedIds: [],
@@ -3471,8 +3508,11 @@ function CoachPage({ user, go }) {
     setSending(true);
     try {
       const res = await api.sendLucaMessage(action.label);   // existing model boundary
-      const modelReply = res?.reply && !res?.degraded ? res.reply : null;
-      setDegraded(!!res?.degraded);
+      // §13/§17 — only a genuine LIVE model reply may replace the grounded
+      // deterministic phrasing. A mock/degraded reply is NOT shown as AI; we
+      // keep the state-aware contract and label the panel "Offline mode".
+      const modelReply = isLiveModelReply(res) ? res.reply : null;
+      setDegraded(!modelReply);
       // Validate any model-supplied object suggestions before rendering; strings
       // (free-text prefill) are always safe. Fall back to our validated chips.
       const modelChips = Array.isArray(res?.suggestions)
@@ -3483,7 +3523,9 @@ function CoachPage({ user, go }) {
         content: modelReply || local.reply,
         model: modelReply ? res.model : undefined,
         degraded: !modelReply,
-        suggestions: modelChips.length ? modelChips : localChips,
+        // Only a live model may supply its own chips; otherwise always use our
+        // grounded, validated action set (§14/§15) — never the mock's chips.
+        suggestions: (modelReply && modelChips.length) ? modelChips : localChips,
         created_at: new Date().toISOString(),
       }]);
     } catch (e) {
@@ -3613,8 +3655,13 @@ function CoachPage({ user, go }) {
                 <div style={{ minWidth: 0, maxWidth: '82%' }}>
                   <div className={`msg-bubble ${isUser ? 'user' : 'ai'}`}>{m.content}</div>
                   {!isUser && (
+                    // §13 — never attribute a non-live (mock/offline/deterministic)
+                    // reply to the AI model. Degraded messages are labelled as
+                    // locally generated so canned text is never presented as AI.
                     <span style={{ fontSize: '10px', color: 'var(--muted-2)', display: 'block', marginTop: '4px' }}>
-                      AI · Not medical advice
+                      {m.degraded
+                        ? tl('luca.offlineCaption', 'Offline · organized from your data · Not medical advice')
+                        : tl('luca.aiCaption', 'AI · Not medical advice')}
                     </span>
                   )}
                   <div className={`msg-meta ${isUser ? '' : 'ai-meta'}`}>
@@ -3632,7 +3679,7 @@ function CoachPage({ user, go }) {
                     )}
                   </div>
                   {!isUser && i === messages.length - 1 && !sending && (
-                    <LucaChips suggestions={m.suggestions} onAction={(s) => executeChipAction(s, { go, setInput, send, playAudio: playFromLibrary, startRetake, setPendingProviderId, setPendingCurate })} disabled={sending} />
+                    <LucaChips suggestions={m.suggestions} onAction={(s) => executeChipAction(s, { go, setInput, send, playAudio: playFromLibrary, startRetake, setPendingProviderId, setPendingCurate, setJourneyOpen })} disabled={sending} />
                   )}
                 </div>
               </div>

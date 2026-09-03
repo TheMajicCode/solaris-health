@@ -48,8 +48,8 @@ describe('K1.4 §5 — versioned filenames + cache v20', () => {
   const html = readFileSync(P('index.html'), 'utf8');
 
   it('service worker cache is v20 (never still v19)', () => {
-    expect(sw).toMatch(/CACHE_NAME\s*=\s*'solaris-v20'/);
-    expect(sw).not.toMatch(/'solaris-v19'/);
+    expect(sw).toMatch(/CACHE_NAME\s*=\s*'solaris-v21'/);
+    expect(sw).not.toMatch(/'solaris-v20'/);
   });
 
   it('manifest references only versioned -v2 icons', () => {

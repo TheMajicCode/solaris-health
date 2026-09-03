@@ -15,7 +15,7 @@
 // the device for a cloud model — counts, flags and coarse labels, never names,
 // emails, raw health narratives, conversation content, or booking notes.
 
-import resolveNextAction from './nextAction.js';
+import resolveNextAction, { hasCheckedInToday } from './nextAction.js';
 
 // The five restored quick actions. `kind`:
 //   'response' — LUCA replies in the transcript with contextual guidance.
@@ -145,18 +145,146 @@ function hasCheckinToday(checkins = [], now = new Date()) {
   return checkins.some((c) => key(c.created_at || c.createdAt || c.date) === today);
 }
 
-function nextStepChips(descriptor) {
-  const dest = descriptor.destination || {};
-  const map = {
-    checkin:        { label: descriptor.cta || 'Check in', action: 'start_checkin', target: null },
-    assessment:     { label: descriptor.cta || 'Start assessment', action: 'start_assessment', target: null },
-    section:        { label: descriptor.cta || 'Open', action: 'navigate', target: dest.tab || 'health' },
-    communications: { label: descriptor.cta || 'Open messages', action: 'navigate', target: 'communications' },
-    booking:        { label: descriptor.cta || 'Review booking', action: 'navigate', target: 'health' },
-    journey:        { label: descriptor.cta || 'Open journey', action: 'navigate', target: 'growth' },
-    explore:        { label: descriptor.cta || 'Explore providers', action: 'navigate', target: 'explore' },
+// §14/§15 — the single source of truth for LUCA's "What is my next step?"
+// answer. It NEVER phones a model. It reuses the same deterministic resolver the
+// Dashboard green card uses (resolveNextAction), so LUCA and the card can never
+// disagree, then shapes the answer into the bounded action contract:
+//
+//   { message, reason, actions[], evidence[], requiresConsent, safety, generatedAt }
+//
+// The action set follows the contract:
+//   • a real task exists  -> Start next step / View my journey / Not now
+//   • no journey yet       -> one high-information question + Choose a guided
+//     journey / Personalize my journey / Find professional support
+// Every action is validated against the allowlist and mapped through the shell's
+// own routing — a model can never inject an arbitrary URL or command here.
+
+const LUCA_SAFETY_LINE =
+  'LUCA suggests and organizes only — it never diagnoses, prescribes, orders labs, books, or moves money without your review.';
+
+// Map a resolveNextAction destination to a validated {action_type, action_target}.
+// Only known destination types produce a concrete target; anything unexpected
+// falls back to a safe navigation, never an arbitrary command.
+function startActionFor(dest = {}) {
+  switch (dest.type) {
+    case 'checkin':        return { action_type: 'start_checkin', action_target: null };
+    case 'assessment':     return { action_type: 'start_assessment', action_target: null };
+    case 'communications': return { action_type: 'navigate', action_target: dest.section || 'growth' };
+    case 'section':        return { action_type: 'navigate', action_target: dest.tab || 'health' };
+    case 'explore':        return { action_type: 'navigate', action_target: 'explore' };
+    case 'booking':        return { action_type: 'navigate', action_target: 'health' };
+    case 'journey':        return { action_type: 'open_journey', action_target: null };
+    default:               return { action_type: 'navigate', action_target: 'dashboard' };
+  }
+}
+
+const DISMISS_ACTION = { id: 'next_step:dismiss', label: 'Not now', action_type: 'dismiss', action_target: null, requiresConfirmation: false };
+
+export function buildNextStepContract(raw = {}) {
+  const ctx = raw || {};
+  const now = ctx.now || new Date();
+  const focus = ctx.goals || [];
+  const goalText = typeof focus[0] === 'string' ? focus[0] : (focus[0]?.name || '');
+
+  const d = resolveNextAction({
+    vitality: ctx.vitality || 0,
+    completeness: ctx.completeness || null,
+    checkins: ctx.checkins || [],
+    journeys: ctx.journeys || [],
+    approvedJourney: ctx.approvedJourney || null,
+    todos: ctx.todos || [],
+    bookings: ctx.bookings || [],
+    now,
+    dataError: ctx.dataError || false,
+  });
+
+  const deid = deidentifyContext(ctx);
+  const evidence = [
+    `check-in today: ${hasCheckedInToday(ctx.checkins || [], now) ? 'complete' : 'pending'}`,
+    `active journey: ${deid.activeJourneyType || 'none'}`,
+    `Passport completeness: ${deid.completenessPct == null ? 'n/a' : deid.completenessPct + '%'}`,
+    `open Growth tasks: ${(ctx.todos || []).filter((t) => !(t && (t.done || t.completed || t.completed_at))).length}`,
+    `bookings needing action: ${deid.bookingsNeedingActionCount}`,
+  ];
+
+  let message;
+  let question = null;
+  let actions;
+
+  const startNext = { id: `next_step:${d.key}:start`, label: 'Start next step', requiresConfirmation: false, ...startActionFor(d.destination) };
+  const viewJourney = { id: 'next_step:journey', label: 'View my journey', action_type: 'navigate', action_target: 'growth', requiresConfirmation: false };
+
+  switch (d.key) {
+    case 'unavailable':
+      message = 'I had trouble reaching your latest activity, so I can\u2019t name your next step with confidence right now.';
+      actions = [{ id: 'next_step:retry', label: 'Try again', action_type: 'navigate', action_target: 'dashboard', requiresConfirmation: false }];
+      break;
+
+    case 'checkin':
+      message = 'Your next step is today\u2019s check-in \u2014 a quick moment so LUCA can notice what moves your vitality.';
+      actions = [{ id: 'next_step:checkin', label: 'Check in', action_type: 'start_checkin', action_target: null, requiresConfirmation: false }, DISMISS_ACTION];
+      break;
+
+    case 'assessment':
+      message = 'Let\u2019s map your health first. The Solaris Method assessment gives LUCA a real starting point to guide you from.';
+      actions = [{ id: 'next_step:assessment', label: 'Start assessment', action_type: 'start_assessment', action_target: null, requiresConfirmation: false }];
+      break;
+
+    case 'passport':
+      message = `Your next step: ${d.title}. ${d.explanation || ''}`.trim();
+      actions = [{ id: 'next_step:passport', label: d.cta || 'Continue', ...startActionFor(d.destination), requiresConfirmation: false }, DISMISS_ACTION];
+      break;
+
+    case 'booking':
+      message = 'A practitioner proposed a new session time \u2014 review and confirm it to lock the appointment in.';
+      actions = [{ id: 'next_step:booking', label: 'Review & confirm', action_type: 'navigate', action_target: 'health', requiresConfirmation: false }, DISMISS_ACTION];
+      break;
+
+    case 'journey_todo':
+    case 'journey_growth':
+    case 'journey_journal':
+    case 'journey_media':
+    case 'journey_continue':
+      // A real task exists in the member's approved journey.
+      message = `Your next step: ${d.title}.${d.explanation ? ` ${d.explanation}` : ''}`;
+      actions = [startNext, viewJourney, DISMISS_ACTION];
+      break;
+
+    case 'fallback':
+    default: {
+      // No active journey. Acknowledge what is actually known, ask ONE
+      // high-information question, and offer the three real routes.
+      const sufficient = focus.length > 0 || (ctx.vitality || 0) > 0;
+      if (sufficient) {
+        message = 'You don\u2019t have an active journey yet, but I can see what you\u2019re focused on.';
+        question = goalText
+          ? `To shape the right next step \u2014 what matters most about ${goalText} for you right now?`
+          : 'To shape the right next step \u2014 what\u2019s the one outcome you\u2019d most like to work toward first?';
+      } else {
+        message = 'You don\u2019t have an active journey yet, and I don\u2019t have enough goal detail to pick one for you.';
+        question = 'To point you in the right direction \u2014 what\u2019s the main thing you\u2019d like to focus on: sleep, stress, energy, movement, or something else?';
+      }
+      actions = [
+        { id: 'next_step:guided', label: 'Choose a guided journey', action_type: 'navigate', action_target: 'explore', requiresConfirmation: false },
+        { id: 'next_step:personalize', label: 'Personalize my journey', action_type: 'open_journey', action_target: null, requiresConfirmation: false },
+        { id: 'next_step:support', label: 'Find professional support', action_type: 'curate', action_target: null, requiresConfirmation: false },
+      ];
+      break;
+    }
+  }
+
+  return {
+    message,
+    reason: whyForAction('next_step', ctx),
+    actions: (actions || []).filter(isValidLucaAction).slice(0, 3),
+    evidence,
+    requiresConsent: false, // built entirely from already-permissioned local state
+    safety: LUCA_SAFETY_LINE,
+    generatedAt: new Date().toISOString(),
+    question,
+    degraded: true,
+    key: d.key,
   };
-  return [map[dest.type] || { label: descriptor.cta || 'Continue', action: 'navigate', target: 'dashboard' }];
 }
 
 // Returns { text, chips, degraded:true, needsContext?:bool }.
@@ -167,19 +295,16 @@ export function deterministicResponse(actionId, raw = {}) {
   const now = ctx.now || new Date();
   switch (actionId) {
     case 'next_step': {
-      const d = resolveNextAction({
-        vitality: ctx.vitality || 0,
-        completeness: ctx.completeness || null,
-        checkins: ctx.checkins || [],
-        journeys: ctx.journeys || [],
-        approvedJourney: ctx.approvedJourney || null,
-        bookings: ctx.bookings || [],
-        now,
-      });
+      // §14/§15 — a grounded, state-aware, actionable next step (never the
+      // generic concierge intro + score list). Delegates to the structured
+      // contract builder so the transcript reply and the offered actions come
+      // from the member's real, permissioned local state.
+      const c = buildNextStepContract(ctx);
       return {
-        text: `Your next step: ${d.title}. ${d.explanation}`,
-        chips: nextStepChips(d),
+        text: c.question ? `${c.message} ${c.question}` : c.message,
+        chips: c.actions.map((a) => ({ label: a.label, action: a.action_type, target: a.action_target })),
         degraded: true,
+        contract: c,
       };
     }
 
@@ -289,6 +414,9 @@ export function deterministicResponse(actionId, raw = {}) {
 export const LUCA_ACTION_TYPES = [
   'navigate', 'start_checkin', 'start_assessment', 'open_intake',
   'open_listing', 'play_audio', 'curate', 'open_journey', 'prefill_chat',
+  // §14 — a benign "Not now" dismissal. Self-contained (no target); the shell
+  // simply acknowledges it and does nothing sensitive.
+  'dismiss',
 ];
 const ACTION_TYPES_NEEDING_TARGET = ['navigate', 'open_listing', 'play_audio'];
 
@@ -363,9 +491,42 @@ export function buildLucaResponse(actionId, raw = {}) {
   return {
     reply: base.text,
     actions: chipsToActions(actionId, base.chips),
-    why: whyForAction(actionId, raw),
+    why: base.contract ? base.contract.reason : whyForAction(actionId, raw),
     degraded: base.degraded,
     needsContext: base.needsContext,
+    // §15 — the full structured contract is exposed for `next_step` so a caller
+    // can render evidence / safety / generatedAt if it wants to.
+    contract: base.contract || null,
+  };
+}
+
+// §13/§17 — is this backend response a genuine LIVE model reply we may show as
+// LUCA's own words? A missing/empty reply, a degraded flag, or a mock provider
+// id all mean "no live model" — in which case the caller must fall back to the
+// grounded deterministic contract and label it honestly, NEVER present the
+// canned mock text as if the AI produced it.
+export function isLiveModelReply(res) {
+  if (!res || typeof res.reply !== 'string' || !res.reply.trim()) return false;
+  if (res.degraded) return false;
+  const model = String(res.model || '').toLowerCase();
+  if (!model || model.startsWith('mock')) return false;
+  return true;
+}
+
+// §17 — honest "temporarily unavailable" response for a genuine model
+// failure/timeout on free-text. It does NOT fabricate an answer; it states the
+// outage plainly and offers deterministic Solaris routes the member can still use.
+export function unavailableResponse() {
+  const actions = [
+    { id: 'unavail:growth', label: 'Open Growth', action_type: 'navigate', action_target: 'growth' },
+    { id: 'unavail:guided', label: 'Guided Journeys', action_type: 'navigate', action_target: 'explore' },
+    { id: 'unavail:support', label: 'Find support', action_type: 'curate', action_target: null },
+  ].filter(isValidLucaAction);
+  return {
+    reply: 'LUCA is temporarily unavailable, so I can\u2019t craft a fresh reply this moment. Your message is saved. In the meantime you can keep moving with any of these:',
+    actions,
+    why: 'Model unavailable — offering deterministic Solaris routes instead of a canned response.',
+    degraded: true,
   };
 }
 

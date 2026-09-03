@@ -24,7 +24,7 @@
 // `maskable` icons with a safe logo zone and no white circle, high-resolution
 // splash/onboarding mark). Same rule: only obsolete Solaris caches are deleted
 // on activate - never auth/local data.
-const CACHE_NAME = 'solaris-v20';
+const CACHE_NAME = 'solaris-v21';
 const SHELL_URL = '/index.html';
 
 // Branding assets to precache so the installed icon, splash, favicon and

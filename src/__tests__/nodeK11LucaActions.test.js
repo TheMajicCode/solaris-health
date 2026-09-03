@@ -81,15 +81,17 @@ describe('§6(d) no LUCA action can auto-book / send / submit / spend', () => {
 describe('§6(c) runAction shows the model reply on success, honest fallback on failure', () => {
   // Isolate CoachPage.runAction from the source.
   const start = passportSrc.indexOf('const runAction = async (actionId)');
-  const body = passportSrc.slice(start, start + 2200);
+  const body = passportSrc.slice(start, start + 3200);
 
   it('calls the existing LUCA service boundary (api.sendLucaMessage)', () => {
     expect(body).toMatch(/await api\.sendLucaMessage\(action\.label\)/);
   });
 
-  it('uses the model reply only when the call is NOT degraded', () => {
-    // modelReply is set from res.reply guarded by !res.degraded ...
-    expect(body).toMatch(/res\?\.reply\s*&&\s*!res\?\.degraded\s*\?\s*res\.reply\s*:\s*null/);
+  it('uses the model reply only when it is a genuine LIVE model reply (§13)', () => {
+    // §13 correction: a mock/degraded reply (Preview runs the AIProvider in mock
+    // mode, which returns degraded:null) must NOT be treated as a live reply.
+    // modelReply is gated by isLiveModelReply(res), not merely !res.degraded ...
+    expect(body).toMatch(/const modelReply = isLiveModelReply\(res\) \? res\.reply : null/);
     // ... and the assistant message prefers the model reply, else the local text.
     expect(body).toMatch(/content:\s*modelReply\s*\|\|\s*local\.reply/);
   });
