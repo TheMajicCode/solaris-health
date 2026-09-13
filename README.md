@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🌅 Solaris Health — LUCA Passport
+# 🌅 Solaris Holistic Health — Own Your Digital Health Vault
 
 **A sovereignty-first holistic health platform.**
 Heal · Learn · Earn — own your health data, end to end.
@@ -38,30 +38,27 @@ Heal · Learn · Earn — own your health data, end to end.
 
 ## Overview
 
-**LUCA Passport** is the patient-facing product of **Solaris Health** — a full-stack
+**Health Vault** is the patient-facing product of **Solaris Health** — a full-stack
 holistic wellness platform built around a single conviction: **a person should own
 their health data and be able to take it with them, anywhere, at any time.**
 
 It pairs a cinematic "Solaris Method" onboarding with a 360° **Health Passport**, an
-AI wellness concierge (**LUCA**), a curated care marketplace, a cross-chain **wallet**
-for self-sovereign identity, and a one-click **vault export** that serializes a user's
-entire record into a portable, open Markdown + JSONL format.
+AI wellness concierge (**LUCA**), a curated care marketplace, a self custodial **wallet**
+for self-sovereign identity, and a one-click **vault export or Sync** that serializes a any health record a user wishes to share via P2P in person into a portable, open Markdown + JSONL format or via a users Health Passport share from within Solaris Network 
 
 > **LUCA** = *Last Universal Common Ancestor* — the root from which everything grows.
 > The passport is the root of a person's sovereign health graph.
 
 ### Why "sovereignty-first"?
 
-Most health apps lock your data in their database. LUCA Passport is architected so the
-export path is a **first-class, tested feature**, not an afterthought:
+Most health apps lock your data in their database. Your Health Vault is architected so the export/sync/share path is a **first-class, tested feature**, not an afterthought:
 
 - Every record can be serialized to a portable vault (`identity.md`, `health/*.md`,
   `contributions/*.md`, `credentials/*.md`, `events/log.jsonl`, `manifest.json`).
 - That format is the **same one** an independent self-hosted node can ingest — proving
   the "you own your data" claim rather than just promising it.
 - Identity is portable too: optional **DID** and **Nostr npub** fields travel with the
-  user, and wallets across **Ethereum, Polygon, Solana and Bitcoin** can be linked and
-  cryptographically verified.
+  user, and can be tied to a self custodial wallet
 
 ---
 
