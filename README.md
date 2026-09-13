@@ -11,7 +11,7 @@ Heal · Learn · Earn — own your health data, end to end.
 [![Frontend Tests](https://img.shields.io/badge/frontend%20tests-30%20passing-brightgreen.svg)](./src/__tests__)
 [![Node](https://img.shields.io/badge/node-%E2%89%A520-339933.svg)](https://nodejs.org)
 
-**Live demo → [solaris-health.abacusai.cloud](https://solaris-health.abacusai.cloud)**
+**In Beta** → [solarishealth.app](https://solarishealth.app)**
 
 </div>
 
