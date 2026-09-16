@@ -297,3 +297,60 @@ were left byte-for-byte unchanged.
 - Preview shares the Demo DB + synthetic Express backend on 127.0.0.1:5055 —
   never migrate/reseed/mutate rows there; the device-local To-do store is the
   correct path when `seed-plan` 404s.
+
+
+
+---
+
+## MAPLE-LUCA-DIRECT-1 — owner-scoped private LUCA via Maple (16 Sep 2026)
+
+Additive, reversible integration of Maple's TEE-backed inference behind the
+existing LUCA member chat (`POST /api/luca/messages`), gated to a server-side
+owner allowlist. Deployed to the LIVE shared backend
+(`solaris-beta-demo-backend.service`) with the owner path **DISABLED**
+(`LUCA_MAPLE_OWNER_USER_IDS=` empty) pending the verified owner user id.
+No architecture change, **no DB migration**, no change to any other AI consumer.
+
+### Source changed
+- **`backend/src/lib/ai/maple.js`** (new) — Maple adapter, contract
+  `complete({system,prompt,context}) -> string`, id `maple:<model>` (external),
+  bounded input (16000 chars) / output (256 tokens capped) / deadline /
+  cancellation; class-only errors, no raw provider body, **never** falls back.
+- **`backend/src/routes/luca.js`** — `isMapleOwner(userId)` gate on `POST
+  /messages`; identity from session only (body owner flags ignored); Maple path
+  sends **no Passport health-context** (context `''`), redacted typed text only;
+  on failure returns a **truthful degraded** reply, never another cloud provider;
+  `getAIProvider()` not globally redirected.
+- **`backend/test/maple/*`** (new) — 20 tests (adapter negatives, owner
+  allowlist, route integration) — all pass, stubbed, no DB/network.
+- **`docs/maple/MAPLE-LUCA-DIRECT-1.md`** (new) — reproducible proxy/service config.
+
+### Maple proxy (Stage A)
+- Pinned release **v3.4.1** (commit `0d861839…`), asset
+  `maple-proxy-linux-x86_64.tar.gz`, SHA-256 `79684284…0b0a` (verified),
+  binary `maple-proxy 0.4.0`.
+- `solaris-maple-proxy.service` (non-root), bind **127.0.0.1:8788** loopback only,
+  real HTTPS backend `enclave.trymaple.ai`, production attestation, CORS+debug OFF,
+  default key UNSET (backend supplies per-request bearer).
+
+### Deploy method
+- New release `/opt/solaris-beta/releases/maple-luca-direct-1/backend` = copy of
+  running `f7768043…` (incl node_modules) + the two changed source files;
+  migrations unchanged at 001..038 (37).
+- Unit `WorkingDirectory` repointed to the new release (prior value
+  `/opt/solaris-beta/current/backend` was frontend-only → would fail CHDIR).
+- Checkpoint/rollback under `/home/ubuntu/maple-notes/checkpoint/`.
+- Verified: 20/20 tests; REAL adapter smoke (model-list + EN + ES, cap 256) PASS;
+  `/api/health` 200 across two restarts; live process has the Maple env loaded.
+
+### Enable for the owner
+Set `LUCA_MAPLE_OWNER_USER_IDS=<verified owner user id>` in
+`/etc/solaris-beta-demo/backend.env` then restart the backend service.
+
+### Gotchas / open decisions
+- Do **not** commit or `rm` `.abacus.donotdelete` (stays modified in the tree).
+- Repo backend has migrations 001..042; the deployed release has 001..038 — a
+  pre-existing repo/deploy drift, unrelated to this task (this adapter adds none).
+- Before multi-user rollout: document + resolve Maple KV-cache namespace
+  isolation/retention (a shared account can share the namespace); the host still
+  sees readable prompts/responses before/after the enclave. Owner-only use is fine.

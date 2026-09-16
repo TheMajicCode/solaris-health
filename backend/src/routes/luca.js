@@ -18,6 +18,7 @@ const crypto = require('crypto');
 const db = require('../db');
 const { authMiddleware } = require('../middleware/auth');
 const { getAIProvider } = require('../lib/ai');
+const { createMapleProvider } = require('../lib/ai/maple');
 const { recordAIReceipt } = require('../lib/ai/receipts');
 const { redactForExternalAI, isExternalProvider } = require('../lib/phi-boundary');
 const { checkCapability, recordGrantUse } = require('../lib/agent-authority');
@@ -40,6 +41,29 @@ const JOURNEY_LABELS = {
 };
 
 const router = express.Router();
+
+// ── Owner-scoped Maple (private inference) routing ─────────────────────────
+// LUCA runs on Maple's TEE-backed inference ONLY for an explicit owner allowlist
+// carried in the env var LUCA_MAPLE_OWNER_USER_IDS (comma-separated user ids).
+// An EMPTY / unset allowlist means the Maple path is DISABLED for everyone —
+// every member keeps the existing shared AIProvider behaviour byte-for-byte.
+// This never globally redirects getAIProvider(); it only affects members whose
+// id is on this list, on this one member chat route.
+function parseOwnerAllowlist(env = process.env) {
+  const raw = typeof env.LUCA_MAPLE_OWNER_USER_IDS === 'string' ? env.LUCA_MAPLE_OWNER_USER_IDS : '';
+  return new Set(
+    raw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+  );
+}
+
+function isMapleOwner(userId, env = process.env) {
+  if (userId == null) return false;
+  const allow = parseOwnerAllowlist(env);
+  return allow.has(String(userId));
+}
 
 // Grounding knowledge injected before all per-call instructions so LUCA knows
 // what Solaris *is* before reasoning about this member's data.
@@ -501,38 +525,102 @@ router.post('/messages', authMiddleware, async (req, res) => {
     // 1. Persist user message
     await db.query('INSERT INTO luca_messages (user_id, role, content) VALUES ($1,$2,$3)', [userId, 'user', content]);
 
-    // 2. Build rich health context + per-call rule-engine triggers.
-    //    Honor the member's source-exclusion toggles (spec A3): any source they
-    //    switched off is dropped from the context LUCA sees this turn.
-    const ctxCollector = { excluded: await getExclusions(db, userId).catch(() => new Set()) };
-    const passportContext = await buildContext(userId, ctxCollector);
-    const triggers = await computeTriggers(userId, content);
-    console.log('[LUCA triggers]', userId, Object.keys(triggers)); // keys only — never trigger values (health-derived)
-    const triggerHints = buildTriggerInstructions(triggers);
-    const context = triggerHints ? `${triggerHints}\n\n${passportContext}` : passportContext;
+    // Owner-scoped private path: does THIS member run on Maple TEE inference?
+    // (Empty/unset LUCA_MAPLE_OWNER_USER_IDS ⇒ false for everyone.)
+    const mapleOwner = isMapleOwner(userId);
 
-    // 3. Use AIProvider (cloud mode = VM LLM, never the Abacus RAG bot)
-    let ai = getAIProvider();
-    // PHI boundary rule (policy v0): restricted identifiers (SSN/card/IBAN-like)
-    // never leave the platform toward an external model. The member's stored
-    // message is untouched; only the outbound copy is redacted.
-    const outbound = isExternalProvider(ai) ? redactForExternalAI(content).text : content;
+    // 2. Build context + per-call rule-engine triggers.
+    //    PRIVATE (Maple) PATH: we deliberately do NOT assemble the Passport
+    //    health-context and do NOT compute health-derived triggers — no PHI
+    //    passport block is ever egressed to the enclave. Only the member's own
+    //    typed message (identifier-redacted) is sent. This keeps PHI minimized
+    //    on the private path per policy.
+    //    SHARED PATH (everyone else): unchanged — honor the member's
+    //    source-exclusion toggles (spec A3) and inject the rich context.
+    let ctxCollector = {};
+    let context = '';
+    let triggers = {};
+    if (!mapleOwner) {
+      ctxCollector = { excluded: await getExclusions(db, userId).catch(() => new Set()) };
+      const passportContext = await buildContext(userId, ctxCollector);
+      triggers = await computeTriggers(userId, content);
+      console.log('[LUCA triggers]', userId, Object.keys(triggers)); // keys only — never trigger values (health-derived)
+      const triggerHints = buildTriggerInstructions(triggers);
+      context = triggerHints ? `${triggerHints}\n\n${passportContext}` : passportContext;
+    }
+
+    // 3. Choose provider + run inference.
+    let ai;
     let reply;
     let errorClass = null;
+    let degraded = null;
     const startedAt = Date.now();
-    try {
-      reply = await ai.complete({ system: SYSTEM_PROMPT, prompt: outbound, context });
-    } catch (e) {
-      console.error('AI provider error, falling back to mock:', e.message);
-      errorClass = /timed out/i.test(e.message || '') ? 'provider_timeout' : 'provider_error';
-      const fallback = getAIProvider({ ...process.env, LUCA_AI_MODE: 'mock' });
-      reply = await fallback.complete({ system: SYSTEM_PROMPT, prompt: outbound, context });
-      ai = { ...fallback, degraded: ai.degraded || errorClass };
+    if (mapleOwner) {
+      // PRIVATE PATH — Maple ONLY. On ANY failure we return a truthful degraded
+      // state; we NEVER fall back to mock or any other cloud provider, and the
+      // member's message is never re-sent anywhere else.
+      const abort = new AbortController();
+      const onClose = () => abort.abort();
+      req.on('close', onClose);
+      try {
+        // Even here, restricted identifiers (SSN/card/IBAN-like) are stripped
+        // before leaving the process — the loopback proxy is remote inference.
+        const outbound = redactForExternalAI(content).text;
+        let mapleProvider = null;
+        try {
+          mapleProvider = createMapleProvider(process.env, { signal: abort.signal });
+        } catch (e) {
+          errorClass = 'maple_unavailable'; // e.g. key not configured — no fallback
+        }
+        ai = { id: mapleProvider ? mapleProvider.id : `maple:${process.env.LUCA_MAPLE_MODEL || 'llama3-3-70b'}` };
+        if (mapleProvider) {
+          try {
+            // No Passport context on the private path (context intentionally '').
+            reply = await mapleProvider.complete({ system: SYSTEM_PROMPT, prompt: outbound, context: '' });
+          } catch (e) {
+            const msg = e && typeof e.message === 'string' ? e.message : '';
+            errorClass = /timeout/i.test(msg) ? 'maple_timeout' : 'maple_error';
+            reply = null;
+          }
+        } else {
+          reply = null;
+        }
+      } finally {
+        req.removeListener('close', onClose);
+      }
+      if (reply == null || reply === '') degraded = errorClass || 'maple_error';
+    } else {
+      // SHARED PATH (unchanged): cloud AIProvider, fall back to mock on failure.
+      ai = getAIProvider();
+      // PHI boundary rule (policy v0): restricted identifiers (SSN/card/IBAN-like)
+      // never leave the platform toward an external model. The member's stored
+      // message is untouched; only the outbound copy is redacted.
+      const outbound = isExternalProvider(ai) ? redactForExternalAI(content).text : content;
+      try {
+        reply = await ai.complete({ system: SYSTEM_PROMPT, prompt: outbound, context });
+      } catch (e) {
+        console.error('AI provider error, falling back to mock:', e.message);
+        errorClass = /timed out/i.test(e.message || '') ? 'provider_timeout' : 'provider_error';
+        const fallback = getAIProvider({ ...process.env, LUCA_AI_MODE: 'mock' });
+        reply = await fallback.complete({ system: SYSTEM_PROMPT, prompt: outbound, context });
+        ai = { ...fallback, degraded: ai.degraded || errorClass };
+      }
     }
     const latencyMs = Date.now() - startedAt;
 
-    // 3b. Parse the typed JSON envelope (reply + typed suggestions)
-    const { reply: parsedReply, suggestions: parsedSuggestions } = parseLucaResponse(reply);
+    // 3b. Parse the typed JSON envelope (reply + typed suggestions).
+    //     On the private path, a failed Maple call yields a TRUTHFUL degraded
+    //     message — we never fabricate a coached reply or borrow another model.
+    let parsedReply;
+    let parsedSuggestions;
+    if (mapleOwner && (reply == null || reply === '')) {
+      parsedReply = 'LUCA private mode (Maple) is temporarily unavailable. To protect your privacy, your message was not sent to any other AI service. Please try again in a moment.';
+      parsedSuggestions = [];
+    } else {
+      const parsed = parseLucaResponse(reply);
+      parsedReply = parsed.reply;
+      parsedSuggestions = parsed.suggestions;
+    }
     const cleanReply = parsedReply || 'I had trouble responding just now. Please try again in a moment.';
     // Server-side guard: open_listing targets must be real practitioner ids.
     const validProviderIds = ctxCollector.providerIds || new Set();
@@ -559,7 +647,9 @@ router.post('/messages', authMiddleware, async (req, res) => {
     const inputsHash = crypto.createHash('sha256')
       .update(JSON.stringify({ systemPrompt: SYSTEM_PROMPT.slice(0, 200), userMessage: content }))
       .digest('hex');
-    const modelId = process.env.LUCA_AI_MODEL || ai.id || 'unknown';
+    // On the private path the model id is the Maple provider id itself; never
+    // let a cloud LUCA_AI_MODEL mislabel a Maple receipt.
+    const modelId = mapleOwner ? (ai.id || 'unknown') : (process.env.LUCA_AI_MODEL || ai.id || 'unknown');
     await db.query(
       'INSERT INTO luca_messages (user_id, role, content, model, model_id, inputs_hash) VALUES ($1,$2,$3,$4,$5,$6)',
       [userId, 'assistant', cleanReply, ai.id, modelId, inputsHash]
@@ -572,18 +662,20 @@ router.post('/messages', authMiddleware, async (req, res) => {
       userId,
       eventType: 'luca.member.chat',
       ai,
-      requestedModel: process.env.LUCA_AI_MODEL || null,
+      requestedModel: mapleOwner
+        ? (process.env.LUCA_MAPLE_MODEL || 'llama3-3-70b')
+        : (process.env.LUCA_AI_MODEL || null),
       dataClass: 'health_context',
       consentBasis: 'member_self_query',
       latencyMs,
       inputText: content,
       resultText: cleanReply,
-      degraded: Boolean(ai.degraded),
+      degraded: Boolean(degraded || ai.degraded),
       errorClass,
     });
     recordGrantUse(authority.grant, { result: 'success' }); // audit: grant exercised (best-effort)
 
-    res.json({ reply: cleanReply, suggestions, model: ai.id, degraded: ai.degraded || null });
+    res.json({ reply: cleanReply, suggestions, model: ai.id, degraded: degraded || ai.degraded || null });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -602,4 +694,7 @@ router.post('/tts', authMiddleware, (req, res) => {
 // can compute *exactly* what LUCA would see this turn — same code path, no
 // hardcoding. Attached to the router export to keep a single import site.
 router.buildContext = buildContext;
+// Exposed for owner-scoped routing tests (pure, no side effects).
+router.parseOwnerAllowlist = parseOwnerAllowlist;
+router.isMapleOwner = isMapleOwner;
 module.exports = router;
