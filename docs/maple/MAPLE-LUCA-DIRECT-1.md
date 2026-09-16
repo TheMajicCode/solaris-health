@@ -92,3 +92,33 @@ then `sudo systemctl restart solaris-beta-demo-backend.service`.
   document + resolve cache-isolation/retention before multi-user rollout.
 - Automatic Passport health-context is intentionally OFF on the Maple path; only
   typed owner text is used.
+
+## Follow-up fix — dedicated no-context system prompt (prevent fabricated metrics)
+Live ES owner smoke revealed the model **fabricating** specific health numbers
+(e.g. an invented "hidratación media de 6/10"). Root cause: the Maple path sends
+NO Passport context (`context=''`, correct for PHI minimization) but was still
+passing the shared `SYSTEM_PROMPT`, which asserts a `[PASSPORT CONTEXT]` block is
+present ("USE THIS DATA. It is real ... Never say you can't see their health
+data"). With no data present, the model hallucinated plausible figures — unsafe.
+
+Fix (owner path only): added `MAPLE_SYSTEM_PROMPT` (+ `MAPLE_ORIENTATION`) in
+`backend/src/routes/luca.js`, used ONLY on the `mapleOwner` branch. It:
+- keeps LUCA's identity (warm/sovereign/grounded; brief 2–4 short paragraphs;
+  non-clinical; never diagnose/prescribe; route clinical concerns to a
+  licensed practitioner);
+- explicitly states NO Passport data is available this turn and forbids
+  referencing/citing/estimating/inventing any specific metric (vitality,
+  Mind/Body/Heart/Spirit, check-ins, dates, streaks, LOVE points, bookings,
+  journey progress); tells LUCA to keep guidance general and, if asked about
+  specific numbers, to say it can't see Passport data on this private channel
+  and point to the relevant app section;
+- keeps the SAME strict JSON envelope (`{reply, suggestions:[{label,action,target}]}`,
+  2–3 suggestions) so `parseLucaResponse`/suggestion handling are unchanged, but
+  drops `open_listing` from the allowed actions (no practitioner directory is
+  provided on this path).
+
+The shared (non-owner) path still uses `SYSTEM_PROMPT`, byte-for-byte unchanged.
+Verified: `node --test backend/test/maple/` → 20/20 pass; `/api/health` 200 after
+`systemctl restart solaris-beta-demo-backend.service`. Deployed release file
+`/opt/solaris-beta/releases/maple-luca-direct-1/backend/src/routes/luca.js` kept
+in sync with the committed source.

@@ -354,3 +354,13 @@ Set `LUCA_MAPLE_OWNER_USER_IDS=<verified owner user id>` in
 - Before multi-user rollout: document + resolve Maple KV-cache namespace
   isolation/retention (a shared account can share the namespace); the host still
   sees readable prompts/responses before/after the enclave. Owner-only use is fine.
+
+### Follow-up fix applied — no-context Maple system prompt
+- Defect (live smoke): with `context=''` on the Maple owner path the shared
+  `SYSTEM_PROMPT` still told the model a real `[PASSPORT CONTEXT]` block was
+  present, so it fabricated specific health metrics. Fix: dedicated
+  `MAPLE_SYSTEM_PROMPT` used ONLY on the owner path — same JSON envelope, but it
+  states no Passport data is available and forbids inventing any metric; drops
+  `open_listing` (no directory on this path). Shared path prompt unchanged.
+- Re-verified: 20/20 maple tests; `/api/health` 200 after restart; deployed
+  release luca.js kept in sync with committed source.
