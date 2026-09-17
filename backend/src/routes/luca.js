@@ -65,6 +65,27 @@ function isMapleOwner(userId, env = process.env) {
   return allow.has(String(userId));
 }
 
+// ── DESIGNATION vs AVAILABILITY ────────────────────────────────────────────
+// isMapleOwner() answers ONLY "is this account designated private?" — an
+// immutable routing designation. It must NOT double as the availability switch.
+// Whether the private Maple path can actually serve is a SEPARATE, fail-closed
+// decision: it is available only when LUCA_MAPLE_ENABLED === 'true' AND the base
+// URL, key and model are all configured. When a designated owner is unavailable
+// (disabled or misconfigured) we return a truthful unavailable response BEFORE
+// assembling Passport context or calling any other provider — we never silently
+// re-route the private account through ordinary cloud inference.
+//
+// SAFE DISABLE: set LUCA_MAPLE_ENABLED=false. Do NOT clear
+// LUCA_MAPLE_OWNER_USER_IDS — that would drop the private designation and send
+// the owner down the ordinary Passport-context provider branch.
+function isMapleAvailable(env = process.env) {
+  if (env.LUCA_MAPLE_ENABLED !== 'true') return false;
+  const baseUrl = env.LUCA_MAPLE_BASE_URL || 'http://127.0.0.1:8788/v1';
+  const model = env.LUCA_MAPLE_MODEL || 'llama3-3-70b';
+  const apiKey = env.LUCA_MAPLE_API_KEY;
+  return Boolean(baseUrl && model && apiKey);
+}
+
 // Grounding knowledge injected before all per-call instructions so LUCA knows
 // what Solaris *is* before reasoning about this member's data.
 const ORIENTATION_PACK = `## SOLARIS ORIENTATION PACK
@@ -162,7 +183,7 @@ const MAPLE_ORIENTATION = `## SOLARIS ORIENTATION (GENERAL)
 Solaris is a network of independent health and wellbeing practitioners. Two commitments define it: members own their health information, and the value created by care flows back to the people who created it — not to intermediaries. The first active node is Aura Holistic Dental, San Salvador, El Salvador.
 
 ### THE DIGITAL SOVEREIGN PASSPORT
-Every account starts as a member. The digital sovereign passport is a portable identity their records, consents, credentials, and journey attach to. It follows them, not their clinic. The member controls access. Export is always available. Deletion means deletion.
+Every account starts as a member. The digital sovereign passport is a portable identity their records, consents, credentials, and journey attach to. It follows them, not their clinic. The member controls who may access it. (Do not make blanket promises about export or deletion on this channel — describe only what the app actually offers.)
 
 ### THE JOURNEY MODEL
 Solaris organises around journeys — Heal, Learn, Earn, Contribute — not individual appointments. Four movements, in any order. Clinical sequencing — what treatment in what order — belongs to a licensed practitioner. Never cross that line.
@@ -179,6 +200,12 @@ const MAPLE_SYSTEM_PROMPT = MAPLE_ORIENTATION + '\n\n' + `You are LUCA — the H
 
 WHAT YOU CAN SEE THIS TURN (IMPORTANT):
 On this private channel you have NO Passport data available this turn. You do NOT receive the member's health context, and you cannot see any of their specific information. Therefore you MUST NOT reference, cite, estimate, invent, or imply any specific health metric — no vitality score, Mind/Body/Heart/Spirit scores, check-in numbers (sleep, energy, mood, hydration, movement), dates, streaks, LOVE points, bookings, appointments, or journey progress. Do not claim to see, know, or remember the member's data.
+
+HOW THIS CHANNEL HANDLES INFORMATION (STATE THIS ACCURATELY IF ASKED):
+- You cannot access the member's stored Passport records on this channel. You CAN read and use health information the member types into their current message.
+- The member's typed messages and your replies ARE stored in Solaris's existing chat database, and the Abacus backend handles them in plaintext. Not attaching a Passport context block prevents automatic record attachment; it does NOT make typed health information anonymous and does NOT mean nothing is stored.
+- Your answer is produced by Maple, which provides remote confidential inference. This is remote processing, not on-device. It is NOT a separate dedicated AI instance for each member, and it does NOT provide end-to-end secrecy from the Solaris backend.
+- Do not overstate privacy. Never promise export, deletion, anonymity, or that "nothing is stored." If asked, describe only the behavior above.
 
 HOW YOU RESPOND:
 - Keep your guidance general and grounded strictly in what the member types to you right now.
@@ -495,6 +522,49 @@ const ACTION_ENUM = [
   'open_intake',
 ];
 
+// Action allowlist for the PRIVATE (Maple) path. This is a strict SUBSET of
+// ACTION_ENUM — 'open_listing' is deliberately excluded because no practitioner
+// directory is provided on this path, so the model must never emit a listing id.
+// Enforced in CODE (not by prompt alone) by parseMapleEnvelope below.
+const MAPLE_ACTION_ENUM = [
+  'navigate',
+  'prefill_chat',
+  'start_checkin',
+  'start_assessment',
+  'play_audio',
+  'curate',
+  'open_intake',
+];
+
+// Allowlisted, bounded error classes for the PRIVATE (Maple) path. We log/record
+// ONLY one of these class strings — never a raw error object, message, prompt,
+// reply, request body, Authorization header, or environment value. The variable
+// upstream status (maple_proxy_status_<code>) is collapsed to a single class.
+const MAPLE_ERROR_CLASSES = new Set([
+  'maple_unavailable',
+  'maple_no_api_key',
+  'maple_timeout',
+  'maple_incomplete',
+  'maple_incomplete_length',
+  'maple_blank',
+  'maple_blank_reply',
+  'maple_malformed',
+  'maple_disallowed_action',
+  'maple_input_too_large',
+  'maple_request_failed',
+  'maple_proxy_status',
+  'maple_error',
+]);
+
+// Map an adapter error to a single allowlisted class string (never raw text).
+function classifyMapleError(e) {
+  let code = '';
+  if (e && typeof e.code === 'string' && e.code) code = e.code;
+  else if (e && typeof e.message === 'string') code = e.message;
+  if (/^maple_proxy_status_\d+$/.test(code)) code = 'maple_proxy_status';
+  return MAPLE_ERROR_CLASSES.has(code) ? code : 'maple_error';
+}
+
 // Default typed follow-up chips shown when the model doesn't return usable ones
 const DEFAULT_SUGGESTIONS = [
   { label: 'How is my vitality trending?', action: 'prefill_chat', target: null },
@@ -559,6 +629,59 @@ function parseLucaResponse(text) {
   return { reply: raw, suggestions: [] };
 }
 
+/**
+ * STRICT envelope parser for the PRIVATE (Maple) path. Unlike parseLucaResponse
+ * (which is deliberately lenient and falls back to raw text), this REJECTS
+ * anything that is not a well-formed envelope, so a truncated/partial/malformed
+ * upstream answer can never be shown to the owner as a successful reply:
+ *  - the whole trimmed string must JSON.parse to an object (no raw-text fallback,
+ *    no "first {…} block" salvage — a partial JSON blob must fail here);
+ *  - `reply` must be a non-blank string;
+ *  - every suggestion's action must be in the MAPLE action allowlist (CODE-
+ *    enforced) — a disallowed action (e.g. open_listing) fails the whole parse.
+ * Returns { ok:true, reply, suggestions } or { ok:false, reason }. The caller
+ * turns { ok:false } into a bounded degraded state; the raw text is NEVER shown.
+ */
+function parseMapleEnvelope(text) {
+  const raw = typeof text === 'string' ? text.trim() : '';
+  if (!raw) return { ok: false, reason: 'maple_blank' };
+  let obj;
+  try {
+    obj = JSON.parse(raw);
+  } catch {
+    return { ok: false, reason: 'maple_malformed' };
+  }
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+    return { ok: false, reason: 'maple_malformed' };
+  }
+  if (typeof obj.reply !== 'string' || !obj.reply.trim()) {
+    return { ok: false, reason: 'maple_blank_reply' };
+  }
+  let suggestions = [];
+  if (obj.suggestions !== undefined) {
+    if (!Array.isArray(obj.suggestions)) {
+      return { ok: false, reason: 'maple_malformed' };
+    }
+    for (const s of obj.suggestions) {
+      if (!s || typeof s !== 'object') return { ok: false, reason: 'maple_malformed' };
+      const label = typeof s.label === 'string' ? s.label.trim() : '';
+      const action = typeof s.action === 'string' ? s.action.trim() : '';
+      if (!label) return { ok: false, reason: 'maple_malformed' };
+      // CODE-enforced action allowlist — a disallowed action is a hard failure,
+      // never silently coerced (that is what makes the enforcement real).
+      if (!MAPLE_ACTION_ENUM.includes(action)) {
+        return { ok: false, reason: 'maple_disallowed_action' };
+      }
+      let target = s.target;
+      if (target === undefined || target === '') target = null;
+      if (target != null && typeof target !== 'string') target = String(target);
+      suggestions.push({ label, action, target });
+    }
+    suggestions = suggestions.slice(0, 3);
+  }
+  return { ok: true, reply: obj.reply.trim(), suggestions };
+}
+
 router.post('/messages', authMiddleware, async (req, res) => {
   try {
     const { content } = req.body;
@@ -592,6 +715,44 @@ router.post('/messages', authMiddleware, async (req, res) => {
     // (Empty/unset LUCA_MAPLE_OWNER_USER_IDS ⇒ false for everyone.)
     const mapleOwner = isMapleOwner(userId);
 
+    // 1b. DESIGNATION vs AVAILABILITY (fail-closed). A designated private account
+    //     whose Maple path is disabled or misconfigured gets a TRUTHFUL
+    //     unavailable response HERE — before any Passport context is assembled
+    //     and before any other provider is touched. We never silently re-route
+    //     the private account through ordinary cloud inference. Client-supplied
+    //     flags cannot override this: the decision is made purely from the
+    //     server-side owner designation + LUCA_MAPLE_ENABLED/config.
+    if (mapleOwner && !isMapleAvailable()) {
+      const unavailableReply =
+        'LUCA private mode (Maple) is currently turned off for your account. ' +
+        'To protect your privacy, your message was not sent to any other AI service. ' +
+        'Please try again once private mode is re-enabled.';
+      const unavailableModelId = `maple:${process.env.LUCA_MAPLE_MODEL || 'llama3-3-70b'}`;
+      await db.query(
+        'INSERT INTO luca_messages (user_id, role, content, model, model_id, inputs_hash) VALUES ($1,$2,$3,$4,$5,$6)',
+        [userId, 'assistant', unavailableReply, unavailableModelId, unavailableModelId, null]
+      ).catch(async () => {
+        await db.query('INSERT INTO luca_messages (user_id, role, content) VALUES ($1,$2,$3)', [userId, 'assistant', unavailableReply]);
+      });
+      await recordAIReceipt({
+        userId,
+        eventType: 'luca.member.chat',
+        ai: { id: unavailableModelId },
+        requestedModel: process.env.LUCA_MAPLE_MODEL || 'llama3-3-70b',
+        // No upstream call happened, so there is no provider-reported model.
+        reportedModel: 'unknown',
+        dataClass: 'health_context',
+        consentBasis: 'member_self_query',
+        latencyMs: 0,
+        inputText: content,
+        resultText: unavailableReply,
+        degraded: true,
+        errorClass: 'maple_unavailable',
+      });
+      recordGrantUse(authority.grant, { result: 'degraded' });
+      return res.json({ reply: unavailableReply, suggestions: [], model: null, degraded: 'maple_unavailable' });
+    }
+
     // 2. Build context + per-call rule-engine triggers.
     //    PRIVATE (Maple) PATH: we deliberately do NOT assemble the Passport
     //    health-context and do NOT compute health-derived triggers — no PHI
@@ -615,6 +776,7 @@ router.post('/messages', authMiddleware, async (req, res) => {
     // 3. Choose provider + run inference.
     let ai;
     let reply;
+    let reportedModel; // provider-REPORTED model captured from the upstream response (Maple path only)
     let errorClass = null;
     let degraded = null;
     const startedAt = Date.now();
@@ -623,8 +785,24 @@ router.post('/messages', authMiddleware, async (req, res) => {
       // state; we NEVER fall back to mock or any other cloud provider, and the
       // member's message is never re-sent anywhere else.
       const abort = new AbortController();
-      const onClose = () => abort.abort();
-      req.on('close', onClose);
+      // Item 3: cancel ONLY on a genuine client disconnect. 'close' on the
+      // RESPONSE also fires for every response that finished normally, so we
+      // abort strictly when the response has NOT finished writing (client went
+      // away mid-answer) and the socket is not already destroyed. A healthy
+      // request whose body merely finished arriving is never aborted.
+      let aborted = false;
+      const onResClose = () => {
+        // A genuine client disconnect closes the response socket BEFORE we have
+        // finished writing (res.writableEnded === false). On a real disconnect
+        // res may already be `destroyed`, so we must NOT gate on that. The
+        // listener is removed in `finally` before res.json(), so this never
+        // fires for a healthy response that finished normally.
+        if (!res.writableEnded && !aborted) {
+          aborted = true;
+          abort.abort();
+        }
+      };
+      res.on('close', onResClose);
       try {
         // Even here, restricted identifiers (SSN/card/IBAN-like) are stripped
         // before leaving the process — the loopback proxy is remote inference.
@@ -641,17 +819,26 @@ router.post('/messages', authMiddleware, async (req, res) => {
             // No Passport context on the private path (context intentionally '').
             // Use the dedicated no-context system prompt so the model never
             // fabricates specific health metrics it cannot see this turn.
-            reply = await mapleProvider.complete({ system: MAPLE_SYSTEM_PROMPT, prompt: outbound, context: '' });
+            // completeDetailed also returns the PROVIDER-REPORTED model + finish
+            // reason so we can record honest provenance and reject truncation.
+            const detailed = await mapleProvider.completeDetailed({ system: MAPLE_SYSTEM_PROMPT, prompt: outbound, context: '' });
+            reply = detailed.text;
+            reportedModel = detailed.model; // string, or null when upstream omitted it
           } catch (e) {
-            const msg = e && typeof e.message === 'string' ? e.message : '';
-            errorClass = /timeout/i.test(msg) ? 'maple_timeout' : 'maple_error';
+            // Allowlisted class-only logging with a safe correlation id — NEVER
+            // the raw error, prompt, reply, body, headers, or env values.
+            errorClass = classifyMapleError(e);
+            const corrId = crypto.randomBytes(8).toString('hex');
+            console.warn('[LUCA maple] inference failed errorClass=' + errorClass + ' corrId=' + corrId);
             reply = null;
           }
         } else {
           reply = null;
+          const corrId = crypto.randomBytes(8).toString('hex');
+          console.warn('[LUCA maple] provider unavailable errorClass=' + (errorClass || 'maple_unavailable') + ' corrId=' + corrId);
         }
       } finally {
-        req.removeListener('close', onClose);
+        res.removeListener('close', onResClose);
       }
       if (reply == null || reply === '') degraded = errorClass || 'maple_error';
     } else {
@@ -678,9 +865,27 @@ router.post('/messages', authMiddleware, async (req, res) => {
     //     message — we never fabricate a coached reply or borrow another model.
     let parsedReply;
     let parsedSuggestions;
-    if (mapleOwner && (reply == null || reply === '')) {
-      parsedReply = 'LUCA private mode (Maple) is temporarily unavailable. To protect your privacy, your message was not sent to any other AI service. Please try again in a moment.';
-      parsedSuggestions = [];
+    if (mapleOwner) {
+      // STRICT private-path handling (item 2). A failed call OR a non-conforming
+      // envelope (truncated, malformed, blank reply, or a disallowed suggestion
+      // action) both become a bounded TRUTHFUL degraded state. We NEVER display
+      // raw partial JSON, tool-call payloads, or provider error bodies, and we
+      // NEVER call another provider.
+      if (reply == null || reply === '') {
+        parsedReply = 'LUCA private mode (Maple) is temporarily unavailable. To protect your privacy, your message was not sent to any other AI service. Please try again in a moment.';
+        parsedSuggestions = [];
+      } else {
+        const envelope = parseMapleEnvelope(reply);
+        if (!envelope.ok) {
+          errorClass = errorClass || envelope.reason || 'maple_incomplete';
+          degraded = degraded || envelope.reason || 'maple_incomplete';
+          parsedReply = 'LUCA private mode (Maple) could not complete a valid answer just now. To protect your privacy, your message was not sent to any other AI service. Please try again in a moment.';
+          parsedSuggestions = [];
+        } else {
+          parsedReply = envelope.reply;
+          parsedSuggestions = envelope.suggestions;
+        }
+      }
     } else {
       const parsed = parseLucaResponse(reply);
       parsedReply = parsed.reply;
@@ -707,10 +912,15 @@ router.post('/messages', authMiddleware, async (req, res) => {
     suggestions = suggestions.slice(0, 3);
 
     // 4. Persist assistant reply (cleaned, with provenance + AI audit trail).
-    //    inputs_hash = non-reversible SHA-256 of the system-prompt prefix + user
-    //    message, so we can audit *what shaped* a reply without storing raw prompts.
+    //    inputs_hash = non-reversible SHA-256 of the ACTUALLY-SELECTED system
+    //    prompt prefix + user message, so we can audit *what shaped* a reply
+    //    without storing raw prompts. On the owner path the selected prompt is
+    //    MAPLE_SYSTEM_PROMPT (not the legacy SYSTEM_PROMPT) — hashing the wrong
+    //    prompt would misattribute provenance. (A hash is provenance evidence,
+    //    not anonymization of predictable health values, and is not published.)
+    const selectedSystemPrompt = mapleOwner ? MAPLE_SYSTEM_PROMPT : SYSTEM_PROMPT;
     const inputsHash = crypto.createHash('sha256')
-      .update(JSON.stringify({ systemPrompt: SYSTEM_PROMPT.slice(0, 200), userMessage: content }))
+      .update(JSON.stringify({ systemPrompt: selectedSystemPrompt.slice(0, 200), userMessage: content }))
       .digest('hex');
     // On the private path the model id is the Maple provider id itself; never
     // let a cloud LUCA_AI_MODEL mislabel a Maple receipt.
@@ -730,6 +940,12 @@ router.post('/messages', authMiddleware, async (req, res) => {
       requestedModel: mapleOwner
         ? (process.env.LUCA_MAPLE_MODEL || 'llama3-3-70b')
         : (process.env.LUCA_AI_MODEL || null),
+      // Provider-REPORTED model (owner path only). When the upstream response
+      // carried a model string we record it verbatim; when it did not (absent,
+      // or the call failed before a response), we record 'unknown' rather than
+      // inventing an observation. Non-owner paths leave this undefined so the
+      // legacy id-derived actual_model is preserved unchanged.
+      reportedModel: mapleOwner ? (reportedModel != null ? reportedModel : 'unknown') : undefined,
       dataClass: 'health_context',
       consentBasis: 'member_self_query',
       latencyMs,
@@ -742,7 +958,17 @@ router.post('/messages', authMiddleware, async (req, res) => {
 
     res.json({ reply: cleanReply, suggestions, model: ai.id, degraded: degraded || ai.degraded || null });
   } catch (err) {
-    console.error(err);
+    // Item 3: on the private (Maple) owner path never log the raw error object —
+    // it can carry DB row details, prompts, replies, headers, or env values. Log
+    // a bounded class + safe correlation id only. Other paths keep prior logging.
+    let ownerPath = false;
+    try { ownerPath = isMapleOwner(req.user && req.user.userId); } catch { ownerPath = false; }
+    if (ownerPath) {
+      const corrId = crypto.randomBytes(8).toString('hex');
+      console.error('[LUCA maple] request failed', { corrId, errorClass: 'maple_route_error' });
+    } else {
+      console.error(err);
+    }
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -762,4 +988,8 @@ router.buildContext = buildContext;
 // Exposed for owner-scoped routing tests (pure, no side effects).
 router.parseOwnerAllowlist = parseOwnerAllowlist;
 router.isMapleOwner = isMapleOwner;
+// Designation vs availability + strict private-path envelope parsing (pure).
+router.isMapleAvailable = isMapleAvailable;
+router.parseMapleEnvelope = parseMapleEnvelope;
+router.MAPLE_ACTION_ENUM = MAPLE_ACTION_ENUM;
 module.exports = router;

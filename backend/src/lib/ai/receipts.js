@@ -42,6 +42,15 @@ async function recordAIReceipt({
   eventType,
   ai,
   requestedModel = null,
+  // Provider-REPORTED model, when the adapter captured one from the upstream
+  // response (e.g. the Maple path passes response.model here). This is
+  // provider-reported EVIDENCE, NOT independent hardware/model attestation.
+  // When a caller supplies it we record it verbatim as actual_model; when it is
+  // explicitly absent for a path that expected one, callers pass 'unknown'
+  // rather than letting us infer a model we did not observe. When it is left
+  // undefined we fall back to the model parsed from the provider id (legacy
+  // behaviour for all existing consumers — unchanged).
+  reportedModel = undefined,
   dataClass = 'health_context',
   consentBasis = 'member_self_query',
   latencyMs = null,
@@ -51,7 +60,10 @@ async function recordAIReceipt({
   errorClass = null,
 }) {
   try {
-    const { provider, actualModel, computeTarget } = describeProvider(ai);
+    const { provider, actualModel: modelFromId, computeTarget } = describeProvider(ai);
+    // actual_model = provider-reported model when the caller observed one,
+    // otherwise the model encoded in the provider id (legacy).
+    const actualModel = reportedModel !== undefined ? reportedModel : modelFromId;
     // Stamp the permanent Solaris subject id (ADR 001) — best-effort join key.
     const subjectId = await subjectIdForUser(userId);
     const r = await db.query(

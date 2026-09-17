@@ -19,8 +19,29 @@
 
 const DEFAULT_TIMEOUT_MS = 20000;
 const MAX_INPUT_CHARS = 16000;   // outbound prompt+context ceiling
-const MAX_OUTPUT_CHARS = 8000;   // defensive cap on returned text
+const MAX_OUTPUT_CHARS = 8000;   // defensive ceiling (NOT a truncation of a complete reply)
 const DEFAULT_MAX_OUTPUT_TOKENS = 256; // bounded usage (also the smoke cap)
+
+// Completion states we accept as a *complete* reply. Anything else (notably
+// 'length' = the model hit max_tokens and was cut off, or 'content_filter',
+// 'tool_calls') means the answer is INCOMPLETE and must be treated as a failure —
+// we never slice/pad a partial answer to force-fit it. `null`/absent is tolerated
+// because some OpenAI-compatible backends omit finish_reason on a full non-stream
+// response; blank content is still rejected separately below.
+const COMPLETE_FINISH_REASONS = new Set(['stop', null, undefined]);
+
+/**
+ * Typed error for an incomplete / unusable upstream completion (truncated,
+ * blank, or an unsupported finish state). Carries a bounded class-only `code`;
+ * the caller maps it to a truthful degraded state and NEVER shows raw output.
+ */
+class MapleIncompleteError extends Error {
+  constructor(code) {
+    super(code);
+    this.name = 'MapleIncompleteError';
+    this.code = code;
+  }
+}
 
 function mapleTimeoutMs(env = process.env) {
   const parsed = Number.parseInt(env.LUCA_AI_TIMEOUT_MS, 10);
@@ -43,73 +64,108 @@ function mapleMaxOutputTokens(env = process.env) {
  * @param {AbortSignal} [opts.signal] external cancellation (e.g. client disconnect)
  */
 function createMapleAI({ baseUrl, model, apiKey, timeoutMs = DEFAULT_TIMEOUT_MS, maxOutputTokens = DEFAULT_MAX_OUTPUT_TOKENS, signal }) {
+  // Detailed form used by the Maple route: returns not just the text but the
+  // PROVIDER-REPORTED model and the finish reason, so callers can record honest
+  // provenance and reject incomplete answers. `complete()` wraps this and returns
+  // only the string, so the generic AIProvider port contract stays unchanged.
+  async function completeDetailed({ system, prompt, context }) {
+    const userContent = context
+      ? `CONTEXT (use this, do not invent):\n${context}\n\n${prompt}`
+      : prompt;
+
+    if (typeof userContent === 'string' && userContent.length > MAX_INPUT_CHARS) {
+      // Bound outbound size — do not send oversized payloads to the enclave.
+      throw new Error('maple_input_too_large');
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    // Link external cancellation (client disconnect) to this request, and keep a
+    // reference so the listener can be removed in finally (no dangling listener).
+    let onExternalAbort = null;
+    if (signal) {
+      if (signal.aborted) controller.abort();
+      else {
+        onExternalAbort = () => controller.abort();
+        signal.addEventListener('abort', onExternalAbort, { once: true });
+      }
+    }
+
+    try {
+      const res = await fetch(`${String(baseUrl).replace(/\/$/, '')}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          stream: false,
+          temperature: 0.4,
+          max_tokens: maxOutputTokens,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: userContent },
+          ],
+        }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        // Never include the raw provider body in the error — status class only.
+        // Drain the body so the socket can be reused, but discard its contents.
+        await res.text().catch(() => {});
+        throw new Error(`maple_proxy_status_${res.status}`);
+      }
+
+      const data = await res.json();
+      const choice = data && Array.isArray(data.choices) ? data.choices[0] : null;
+      const finishReason = choice ? choice.finish_reason : undefined;
+      // Provider-reported model (evidence, NOT independent attestation). Absent ⇒ null.
+      const reportedModel = data && typeof data.model === 'string' && data.model ? data.model : null;
+
+      // Truncation / unsupported completion state ⇒ INCOMPLETE. Do not slice or
+      // pad a partial answer to force-fit it — treat it as a failure.
+      if (!COMPLETE_FINISH_REASONS.has(finishReason)) {
+        throw new MapleIncompleteError(
+          finishReason === 'length' ? 'maple_incomplete_length' : 'maple_incomplete'
+        );
+      }
+
+      let out = choice && choice.message && typeof choice.message.content === 'string'
+        ? choice.message.content
+        : '';
+      out = out.trim();
+      if (!out) throw new MapleIncompleteError('maple_blank');
+      // Defensive ceiling only (unreachable at 256 output tokens); a complete
+      // 'stop' reply is never truncated here — finish_reason is validated above.
+      if (out.length > MAX_OUTPUT_CHARS) out = out.slice(0, MAX_OUTPUT_CHARS);
+      return { text: out, model: reportedModel, finishReason: finishReason ?? null };
+    } catch (error) {
+      if (error && error.name === 'AbortError') {
+        throw new Error('maple_timeout');
+      }
+      // Re-throw our own typed incomplete errors and bounded maple_* classes as-is;
+      // wrap anything else to a generic class so raw network/parse messages never
+      // propagate to logs/clients.
+      if (error instanceof MapleIncompleteError) throw error;
+      const msg = error && typeof error.message === 'string' ? error.message : '';
+      if (/^maple_/.test(msg)) throw error;
+      throw new Error('maple_request_failed');
+    } finally {
+      clearTimeout(timeout);
+      if (signal && onExternalAbort) signal.removeEventListener('abort', onExternalAbort);
+    }
+  }
+
   return {
     id: `maple:${model}`,
-    async complete({ system, prompt, context }) {
-      const userContent = context
-        ? `CONTEXT (use this, do not invent):\n${context}\n\n${prompt}`
-        : prompt;
-
-      if (typeof userContent === 'string' && userContent.length > MAX_INPUT_CHARS) {
-        // Bound outbound size — do not send oversized payloads to the enclave.
-        throw new Error('maple_input_too_large');
-      }
-
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), timeoutMs);
-      // Link external cancellation (client disconnect) to this request.
-      if (signal) {
-        if (signal.aborted) controller.abort();
-        else signal.addEventListener('abort', () => controller.abort(), { once: true });
-      }
-
-      try {
-        const res = await fetch(`${String(baseUrl).replace(/\/$/, '')}/chat/completions`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            model,
-            stream: false,
-            temperature: 0.4,
-            max_tokens: maxOutputTokens,
-            messages: [
-              { role: 'system', content: system },
-              { role: 'user', content: userContent },
-            ],
-          }),
-          signal: controller.signal,
-        });
-
-        if (!res.ok) {
-          // Never include the raw provider body in the error — status class only.
-          // Drain the body so the socket can be reused, but discard its contents.
-          await res.text().catch(() => {});
-          throw new Error(`maple_proxy_status_${res.status}`);
-        }
-
-        const data = await res.json();
-        let out = data && data.choices && data.choices[0] && data.choices[0].message
-          ? data.choices[0].message.content
-          : '';
-        out = typeof out === 'string' ? out.trim() : '';
-        if (out.length > MAX_OUTPUT_CHARS) out = out.slice(0, MAX_OUTPUT_CHARS);
-        return out;
-      } catch (error) {
-        if (error && error.name === 'AbortError') {
-          throw new Error('maple_timeout');
-        }
-        // Re-throw our own bounded classes as-is; wrap anything else to a generic
-        // class so raw network/parse messages never propagate to logs/clients.
-        const msg = error && typeof error.message === 'string' ? error.message : '';
-        if (/^maple_/.test(msg)) throw error;
-        throw new Error('maple_request_failed');
-      } finally {
-        clearTimeout(timeout);
-      }
+    // Generic port contract (unchanged): resolve to the reply string only.
+    async complete(args) {
+      const { text } = await completeDetailed(args);
+      return text;
     },
+    completeDetailed,
   };
 }
 
@@ -142,6 +198,7 @@ module.exports = {
   createMapleProvider,
   mapleTimeoutMs,
   mapleMaxOutputTokens,
+  MapleIncompleteError,
   MAX_INPUT_CHARS,
   DEFAULT_MAX_OUTPUT_TOKENS,
 };
