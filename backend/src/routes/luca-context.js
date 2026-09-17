@@ -2,7 +2,7 @@
 /**
  * LUCA context endpoint (Solaris sprint, spec §7).
  *   GET /api/luca/context            -> context for the authenticated user
- *   GET /api/luca/context?user_id=   -> context for a specific user (demo)
+ *   GET /api/luca/context?user_id=   -> optional assertion of the same account
  *
  * Returns: role, name, level/points, pending items (appointments/follow-ups/
  * receipts), last 5 ledger events, and the §6 guidance row for that role.
@@ -14,10 +14,28 @@ const { authMiddleware } = require('../middleware/auth');
 const { levelFor } = require('../lib/levels');
 
 const router = express.Router();
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isUuid(value) {
+  return typeof value === 'string' && value.length === 36 && UUID_PATTERN.test(value);
+}
 
 router.get('/context', authMiddleware, async (req, res) => {
   try {
-    const userId = req.query.user_id || req.user.userId;
+    // The validated session is the only authority for these private records.
+    const userId = req.user && req.user.userId;
+    if (!isUuid(userId)) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const requestedUserId = req.query.user_id;
+    if (requestedUserId !== undefined) {
+      if (!isUuid(requestedUserId)) {
+        return res.status(400).json({ error: 'Invalid user_id' });
+      }
+      if (requestedUserId.toLowerCase() !== userId.toLowerCase()) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+    }
 
     const userRes = await db.query('SELECT * FROM users WHERE id = $1', [userId]);
     if (!userRes.rows.length) return res.status(404).json({ error: 'User not found' });
@@ -95,8 +113,8 @@ router.get('/context', authMiddleware, async (req, res) => {
       guidance,
       simulated: true,
     });
-  } catch (err) {
-    console.error('luca context error:', err);
+  } catch (_err) {
+    console.error('[luca-context] context unavailable');
     res.status(500).json({ error: 'Server error' });
   }
 });
