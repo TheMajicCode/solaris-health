@@ -1,6 +1,6 @@
 # API Reference
 
-REST API for **Solaris Health / LUCA Passport**. All endpoints are prefixed with
+REST API for **Solaris Health / Sovereign Passport**. All endpoints are prefixed with
 `/api` and return JSON. Authenticated endpoints require a JWT bearer token.
 
 - **Base URL (prod):** `https://solaris-health.abacusai.cloud/api`
