@@ -1,5 +1,7 @@
 # Architecture
 
+> **Historical architecture — status note added 24 September 2026.** The body below is retained as a record of earlier implementations and claims. It is not current evidence of complete export/recovery, production readiness, deployed topology, a working cross-chain wallet or Health NFT. Read [Current state](CURRENT-STATE.md) for inspected source and [Economic Passport architecture](ECONOMIC-PASSPORT-ARCHITECTURE.md) for the owner's new target direction. Accepted contracts and historical findings are not removed by this notice.
+
 This document describes the architecture of **Solaris Health / LUCA Passport** —
 its components, data flow, authentication, the hexagonal AI provider, the web3
 integration, the sovereign vault export, and the deployment topology.

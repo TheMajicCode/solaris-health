@@ -1,381 +1,63 @@
-<div align="center">
+# Solaris
 
-# 🌅 Solaris Holistic Health — Own Your Digital Health Vault
+Solaris is building a network for private health guidance, practitioner discovery and evidence of contribution. LUCA is its assistant. The intended experience connects a user-controlled Health Passport with an Economic Passport while keeping health records, payment authority and public identity separate.
 
-**A sovereignty-first holistic health platform.**
-Heal · Learn · Earn — own your health data, end to end.
+**Status: development/beta.** This repository contains the React/Vite web application and Express/PostgreSQL backend, including legacy features being evaluated for retention. It is not a production-readiness certification. The source and roadmap review below is dated **24 September 2026**; deployed behavior requires separate release evidence.
 
-[![CI](https://placehold.co/1200x600/e2e8f0/1e293b?text=Continuous_Integration__CI__status_badge_showing_b)
-[![License: MIT](https://img.shields.io/badge/License-MIT-gold.svg)](./LICENSE)
-[![Backend Tests](https://img.shields.io/badge/backend%20tests-103%20passing-brightgreen.svg)](./backend/tests)
-[![Frontend Tests](https://img.shields.io/badge/frontend%20tests-30%20passing-brightgreen.svg)](./src/__tests__)
-[![Node](https://img.shields.io/badge/node-%E2%89%A520-339933.svg)](https://nodejs.org)
+Start with [Current state](docs/CURRENT-STATE.md), [Economic Passport architecture](docs/ECONOMIC-PASSPORT-ARCHITECTURE.md), and [Contributing](CONTRIBUTING.md).
 
-**In Beta** → [solarishealth.app](https://solarishealth.app)**
+## Product direction
 
-</div>
+| Surface | Intended responsibility |
+| --- | --- |
+| Public web | Discovery, practitioner/practice profiles, marketplace information, reviews, verification status and search visibility. Practitioner membership of a practice, clinic, venue or registered business is a target product rule requiring implementation. |
+| Health Passport / mobile vault | Local health records, user-controlled sharing, private guidance and progress attestations. Android work is maintained separately in [Solaris-andriod](https://github.com/TheMajicCode/Solaris-andriod); this web review does not establish its current build acceptance. |
+| Economic Passport | User-controlled payment connections, private contribution receipts and optional public proof. Wallet integration and recovery must be demonstrated before real-funds use. |
+| Clinic companion / future Solaris node | Consented communication with patients, practice operations and eventually a clinic-owned stack. P2P transport, self-hosting and local AI remain separate delivery milestones. |
 
----
+The web is moving toward a discovery and coordination role. Existing web health routes have **not** yet been removed or isolated by a discovery-only server profile. Verification work includes practitioner/business evidence, reviews, the planned VTV approach and optional Self integration; an identity check alone does not establish professional credentials.
 
-## Table of Contents
+## Payment and contribution direction
 
-- [Overview](#overview)
-- [Features](#features)
-- [Screenshots](#screenshots)
-- [Tech Stack](#tech-stack)
-- [Architecture](#architecture)
-- [Quick Start](#quick-start)
-- [Demo Credentials](#demo-credentials)
-- [Testing](#testing)
-- [Documentation](#documentation)
-- [Deployment](#deployment)
-- [Project Structure](#project-structure)
-- [Roadmap](#roadmap)
-- [Contributing](#contributing)
-- [License](#license)
+These are the owner's selected direction and proposed integrations, not a list of shipped features:
 
----
+| Component | Intended role / evidence status |
+| --- | --- |
+| **Breez SDK–Spark** | Preferred Bitcoin (“digital gold”) integration candidate. Existing direct Spark code in this repository is not evidence of a completed Breez integration. |
+| **Tether WDK + MoonPay** | Planned digital-dollar and balance top-up integration. The USD₮ network/token and supported ramp markets remain to be selected and tested. |
+| **Second Bark / Ark** | Alternative Bitcoin adapter if the first SatsPath integration or recovery tests justify it. No switch is assumed. |
+| **SatsPath** | Founder-reported collaboration/co-creation and intended first GPS pilot. Its API, payment lifecycle and reported Second integration need technical evidence. |
+| **Alby, Nostr and BTC Map** | Proposed wallet connectivity, optional public contribution proofs and merchant discovery. No formal partnership or working two-way sync is asserted. |
+| **RGB** | Research/prototype path for proposed LOVE and GPS assets and optional credential representations. No production issuance, passport NFT or interoperability with the selected wallets is established. |
 
-## Overview
+GPS is Solaris's proposed contribution policy and receipt layer. It may use settled payments or user-consented progress attestations to authorize rewards. It does not require exposing health records with a payment. **Sats rewards are funded Bitcoin payouts; RGB cannot mint sats.** LOVE/GPS asset issuance is a separate design with its own authority, supply, recovery and transfer rules. Existing in-app points are not proof of an issued RGB asset.
 
-**Health Vault** is the patient-facing product of **Solaris Health** — a full-stack
-holistic wellness platform built around a single conviction: **a person should own
-their health data and be able to take it with them, anywhere, at any time.**
+Any public contribution trail is optional and separately approved by the user. An npub, wallet or transferable NFT must not become authority to read someone's health records. See the [architecture and primary references](docs/ECONOMIC-PASSPORT-ARCHITECTURE.md) for the proposed boundaries and staged implementation.
 
-It pairs a cinematic "Solaris Method" onboarding with a 360° **Health Passport**, an
-AI wellness concierge (**LUCA**), a curated care marketplace, a self custodial **wallet**
-for self-sovereign identity, and a one-click **vault export or Sync** that serializes a any health record a user wishes to share via P2P in person into a portable, open Markdown + JSONL format or via a users Health Passport share from within Solaris Network 
+## What the inspected source establishes
 
-> **LUCA** = *Last Universal Common Ancestor* — the root from which everything grows.
-> The passport is the root of a person's sovereign health graph.
+- React/Vite frontend, Express API, PostgreSQL persistence and an AI-provider abstraction.
+- WEB-R1 [PR #3](https://github.com/TheMajicCode/solaris-health/pull/3) merged: LUCA context reads are restricted to the authenticated account. This is source integration, not evidence of deployment.
+- Legacy wallet screens and direct Spark adapters remain. The Health NFT screen simulates mint/transfer behavior; older cross-chain and NFT descriptions are not current product promises.
+- Payment routes inspected in this review are disabled; GPS allocation records are simulated. New payment SDKs and RGB rewards are not established by the inspected source/manifests.
+- Export includes selected, bounded records. Complete export, restore and device-to-device data continuity are not established.
+- Maple work is on a separate, diverged branch and has unresolved review findings. Private provider use, local inference and offline fallback are different capabilities; none should be inferred from a provider label.
 
-### Why "sovereignty-first"?
+Known authorization, consent, AI-boundary, messaging/recovery and deployment issues remain. The [current-state register](docs/CURRENT-STATE.md) records the evidence and repair order.
 
-Most health apps lock your data in their database. Your Health Vault is architected so the export/sync/share path is a **first-class, tested feature**, not an afterthought:
+## Development and delivery
 
-- Every record can be serialized to a portable vault (`identity.md`, `health/*.md`,
-  `contributions/*.md`, `credentials/*.md`, `events/log.jsonl`, `manifest.json`).
-- That format is the **same one** an independent self-hosted node can ingest — proving
-  the "you own your data" claim rather than just promising it.
-- Identity is portable too: optional **DID** and **Nostr npub** fields travel with the
-  user, and can be tied to a self custodial wallet
-
----
-
-## Features
-
-### 🌗 The Solaris Method — assessment & onboarding
-A guided questionnaire scoring **4 Aspects of Being** (Physical, Mental, Emotional,
-Spiritual) and **8 Body Systems**, producing a **360° Vitality Score**, a radar
-profile, top focus areas, and LUCA-generated starter habits.
-
-### 🪪 Health Passport — your unified record
-A single, FHIR-aligned view of every health signal: vitality, aspects, a body-systems
-radar, documents, daily check-ins, and a complete chronological **Health Timeline**.
-
-### 📈 Trends & Timeline (Phase 3)
-- **Health Timeline** — every event (appointments, vitals, assessments, coach chats,
-  rewards, documents) merged into one filterable, paginated, clustered chronology.
-- **Vitals Trends** — interactive charts of energy, mood, sleep, hydration, movement
-  and vitality over time, with range selection and change deltas.
-
-### 🔗 Cross-Chain Wallet (Phase 4)
-- Connect & verify wallets on **Ethereum, Polygon, Solana, Bitcoin**.
-- SIWE-style **signature verification** to prove ownership (no gas, no transaction).
-- Live native balances, transaction history, a primary-wallet concept, and a
-  **Health NFT** identity card.
-
-### 🤖 LUCA — AI wellness concierge
-A non-diagnostic AI guide built on a **hexagonal (ports & adapters) AI provider**:
-swap between cloud LLMs and a zero-cost offline rule-based fallback without touching
-route code. Never hard-fails — degrades gracefully to the mock provider.
-
-### 🛒 Care marketplace
-A curated directory of practitioners and clinics with booking requests, admin
-approval workflows, and a practitioner portal.
-
-### 💛 LOVE points (rewards)
-`account_created` +10 · `assessment_complete` +50 · `onboarding_complete` +25 ·
-`daily_checkin` +5 · `booking_request` +30.
-
-### 📦 Sovereign vault export
-One click serializes the full record into a portable, open, round-trippable archive —
-now including `ai/execution-receipts.jsonl` (every AI call, hashed, with provider +
-policy version) and `agents/authority.json` (your LUCA's capability grants).
-
-### 🛡️ Sovereignty & governance layer (sprint v4)
-- **AI execution receipts** — every LUCA call is recorded (provider, model, sha256
-  input/output hashes, latency, consent basis; no plaintext content).
-- **PHI boundary** — sensitive identifiers are redacted before any text leaves for an
-  external AI provider (`lib/phi-boundary.js`).
-- **Sovereignty status card** — the Passport answers "who am I, who has access, where
-  is my data, which AI saw it, how do I export/revoke" in plain language.
-- **Agent capability grants** — your LUCA agent runs on explicit, revocable
-  capabilities; every use is audited; LUCA can be disabled without deleting you.
-- **GPS evidence before payment** — every value split gets a shadow allocation receipt
-  (PHI-free evidence + sha256 hash + policy version) that the UI can explain, and any
-  participant can dispute to a human (`proposed → disputed → corrected`). No real money moves.
-- **Read-only mode** — `READ_ONLY_MODE=true` freezes all writes for incident response.
-
----
-
-## Screenshots
-
-> Live walkthrough: **[solaris-health.abacusai.cloud](https://opengraph.githubassets.com/1b67c86b0d37cc577aa353d7d8af3bd5cc0df3b4146494ad8d3fdaa10089f42e/EstherJin/WaterlooWorks-Desirability-Predictor
-
-| Health Passport | Timeline | Wallet |
-|:---:|:---:|:---:|
-| 360° vitality, aspects & systems radar | Unified chronological journey | Cross-chain identity & balances |
-
-_(Run the app with the demo credentials below to explore each surface.)_
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| **Frontend** | React 19, Vite, state-based routing (`AppContext`), Recharts, lucide-react, date-fns |
-| **Backend** | Node.js, Express 4, PostgreSQL (`pg`), JWT (`jsonwebtoken`), `bcryptjs`, `archiver` |
-| **Web3** | `ethers` v6 (EVM), `@solana/web3.js`, public-RPC balance/tx reads |
-| **AI** | Hexagonal provider — cloud LLM adapter + offline rule-based mock |
-| **Testing** | Jest + Supertest (backend), Vitest + React Testing Library (frontend) |
-| **Tooling** | ESLint, Prettier, EditorConfig, GitHub Actions CI/CD |
-| **Infra** | Docker Compose (frontend, backend, postgres), Nginx reverse proxy |
-
----
-
-## Architecture
-
-```mermaid
-flowchart LR
-  subgraph Client["🖥️ Frontend — React + Vite"]
-    UI[LucaPassport Shell]
-    TL[HealthTimeline]
-    TR[TrendCharts]
-    WC[WalletConnect]
-    API[api.js client]
-  end
-
-  subgraph Server["⚙️ Backend — Express"]
-    MW[JWT auth middleware]
-    R[Route layer]
-    AIH[AI provider port]
-    W3[web3 lib]
-    VX[vault-export lib]
-  end
-
-  subgraph Data["🗄️ Data & External"]
-    PG[(PostgreSQL)]
-    LLM[Cloud LLM]
-    MOCK[Mock AI]
-    CHAINS[(EVM / Solana / BTC RPC)]
-  end
-
-  UI --> API --> MW --> R
-  R --> PG
-  R --> AIH
-  AIH --> LLM
-  AIH -.fallback.-> MOCK
-  R --> W3 --> CHAINS
-  R --> VX
-  TL --> API
-  TR --> API
-  WC --> API
+```sh
+git clone https://github.com/TheMajicCode/solaris-health.git
+cd solaris-health
 ```
 
-See **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** for the full breakdown
-(components, data flow, auth flow, the hexagonal AI provider, and deployment topology).
+Read [AGENTS.md](AGENTS.md), the [bounded workflow](docs/beta-v1/WORKFLOW.md) and [Contributing](CONTRIBUTING.md) before running scripts or changing code. Use a task branch and a disposable development database. Local configuration must not point to the shared hosted database. Never treat legacy seed/deploy scripts as a development prerequisite.
 
----
+The inspected main tree has no active `.github/workflows` directory; `ci-workflows/` contains drafts. Recorded test runs are documented with their limitations in [Current state](docs/CURRENT-STATE.md). There is no passing CI badge claimed here.
 
-## Quick Start
-
-### Option A — Docker Compose (recommended)
-
-```bash
-git clone https://github.com/solaris-health/luca-passport.git
-cd luca-passport
-docker compose up -d --build
-# Frontend → http://localhost:3000   Backend → http://localhost:5000
-```
-
-### Option B — Local dev
-
-**Prerequisites:** Node ≥ 20, PostgreSQL ≥ 14.
-
-```bash
-# 1. Database
-psql -U postgres -c "CREATE USER luca_user WITH PASSWORD 'luca_dev_2026';"
-psql -U postgres -c "CREATE DATABASE luca_passport OWNER luca_user;"
-cd backend && psql "$DATABASE_URL" -f schema.sql && node seed.js
-
-# 2. Backend (port 5000)
-cd backend && npm install && npm start
-
-# 3. Frontend (port 3000)
-cd .. && npm install && npm run dev
-```
-
-**`backend/.env`:**
-```ini
-DATABASE_URL=postgresql://luca_user:luca_dev_2026@localhost:5432/luca_passport
-JWT_SECRET=change_me_to_a_long_random_secret
-PORT=5000
-LUCA_AI_MODE=mock          # or set an LLM key for cloud mode
-```
-
-Full instructions: **[docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md)**.
-
----
-
-## Demo Credentials
-
-| Role | Email | Password | Experience |
-|------|-------|----------|------------|
-| **Member (Patient)** | `sarah@solaris.health` | `demo123` | Onboarding → Solaris Method → Passport, Timeline, Trends, Journal, Media, LUCA coach |
-| **Practitioner** | `elena@solaris.health` | `demo123` | Practitioner portal — profile, listings, bookings |
-| **Admin** | `admin@solaris.health` | `demo123` | Admin console — stats, users, listing approvals |
-| **Clinic Admin** | `aura@solaris.health` | `demo123` | Aura node admin — clinic-side flows |
-
-> Passwords are seed defaults — change them before any real deployment.
-
----
-
-## Seeding & Resetting Demo Data
-
-The showcase members (Sarah, Carolina) are populated with realistic activity — 30 days of
-check-ins, journal reflections, unlocked audio, an assessment — by the idempotent seed script.
-
-```bash
-# from backend/  (or: docker exec luca-passport-backend-1 npm run seed)
-npm run seed                                   # seed both showcase accounts (safe to re-run)
-npm run seed:reset                             # hard-reset + reseed ALL showcase accounts
-npm run seed:reset -- --email=sarah@solaris.health   # hard-reset + reseed one member
-```
-
-`seed:reset` wipes **all of a member's generated data** — check-ins, journal, audio unlocks,
-rewards, LUCA messages, assessment, and bookings — then reseeds a fresh, coherent picture.
-It never touches the `users` row, so the login stays valid.
-
----
-
-## Testing
-
-The project ships with **133 automated tests** (103 backend, 30 frontend), plus an 18-step HTTP smoke test (`backend/scripts/smoke-test.js`) and an 8-check tenant-isolation script (`tests/tenant-isolation.test.js`).
-
-```bash
-# Backend — Jest + Supertest
-cd backend
-npm test                 # run all suites
-npm run test:coverage    # with coverage report
-
-# Frontend — Vitest + React Testing Library
-cd ..
-npm test                 # run all suites
-npm run test:coverage    # with coverage report
-```
-
-**Coverage highlights:** `vault-export.js` 100 %, `auth.js` route 86 %,
-`trends.js` 93 %, mock AI 94 %.
-
-The backend HTTP suites register **throwaway users with unique `@test.local`
-emails** and clean them up afterwards, so they never pollute demo data. Pure
-functions (vault export, web3 validation/signing, the mock AI) are tested fully
-offline. See **[docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md#testing)** for details.
-
----
-
-## Documentation
-
-| Doc | What's inside |
-|-----|---------------|
-| **[ARCHITECTURE.md](./docs/ARCHITECTURE.md)** | System diagrams, components, data/auth flow, hexagonal AI provider, deployment topology |
-| **[API.md](./docs/API.md)** | Every endpoint with request/response examples, JWT, errors, cURL |
-| **[DATABASE.md](./docs/DATABASE.md)** | Full 27-table schema, ER diagram, indexing, migrations, backup |
-| **[DEPLOYMENT.md](./docs/DEPLOYMENT.md)** | Docker Compose + Nginx production deployment |
-| **[USER_GUIDE.md](./docs/USER_GUIDE.md)** | End-user walkthrough for each role |
-| **[DEVELOPMENT.md](./docs/DEVELOPMENT.md)** | Local setup, testing, code style, conventions |
-| **[SECURITY.md](./docs/SECURITY.md)** | Threat model, hardening checklist, disclosure policy |
-| **[PERFORMANCE.md](./docs/PERFORMANCE.md)** | Health/metrics endpoints, benchmarks, tuning |
-
----
-
-## Deployment
-
-The live demo runs on Docker Compose behind Nginx at
-**[solaris-health.abacusai.cloud](https://solaris-health.abacusai.cloud)**.
-
-```bash
-docker compose up -d --build       # build & start all services
-curl https://solaris-health.abacusai.cloud/api/health   # liveness probe
-```
-
-Operational endpoints:
-- `GET /api/health` — JSON liveness + DB check (503 if the DB is down).
-- `GET /api/metrics` — Prometheus-format metrics (`luca_up`, `luca_database_up`, …).
-
-Full guide: **[docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)**.
-
----
-
-## Project Structure
-
-```
-luca-passport/
-├── backend/
-│   ├── src/
-│   │   ├── routes/        # auth, users, assessment, listings, journey, luca,
-│   │   │                  # practitioner, admin, export, timeline, trends, wallet, …
-│   │   ├── lib/           # ai/ (hexagonal provider + mock), web3.js, vault-export.js, helpers.js
-│   │   ├── middleware/    # auth.js (JWT)
-│   │   ├── db.js          # pg pool
-│   │   └── server.js      # Express app (+ /api/health, /api/metrics)
-│   └── tests/             # Jest + Supertest suites
-├── src/
-│   ├── components/        # LucaPassport, HealthTimeline, TrendCharts, wallet/*, ui/*
-│   ├── flows/             # Onboarding, Auth, Assessment
-│   ├── pages/             # Hub, HealthPassport, Luca, Explore, Profile, …
-│   ├── lib/               # api.js, web3-utils.js
-│   ├── state/             # AppContext.jsx
-│   └── __tests__/         # Vitest + RTL suites
-├── docs/                  # ARCHITECTURE, API, DATABASE, DEPLOYMENT, USER_GUIDE, DEVELOPMENT, SECURITY, PERFORMANCE
-├── .github/workflows/     # ci.yml, deploy.yml
-├── docker-compose.yml
-└── docker-compose.test.yml
-```
-
----
-
-## Roadmap
-
-- ✅ **Phase 1** — Sovereignty backend & vault export
-- ✅ **Phase 2** — Unified Health Passport dashboard
-- ✅ **Phase 3** — Visualizations & Health Timeline
-- ✅ **Phase 4** — Cross-chain wallet & verifiable identity
-- 🔜 **Phase 5** — P2P encrypted messaging (Nostr)
-- ✅ **Phase 6** — Testing, documentation & DevOps _(this release)_
-- 🔭 **Future** — Full FHIR export, payments/payouts, scheduling, DID issuance
-
-See **[CHANGELOG.md](./CHANGELOG.md)** for release history.
-
----
-
-## Contributing
-
-Contributions are welcome! Please read **[CONTRIBUTING.md](./CONTRIBUTING.md)** for the
-workflow, coding standards, and how to run the test suite before opening a PR. Use the
-issue templates under [`.github/ISSUE_TEMPLATE`](./.github/ISSUE_TEMPLATE).
-
----
+The intended workflow is Claude Code for bounded changes, GitHub for reviewable source, and separately controlled Abacus testing/deployment. A GitHub merge alone is not proof that a domain runs the change. [Historical architecture](docs/ARCHITECTURE.md), [release ledger](docs/beta-v1/RELEASE-LEDGER.md) and accepted contracts remain available as dated records.
 
 ## License
 
-Released under the **MIT License** — see **[LICENSE](./LICENSE)**.
-
-<div align="center">
-
-*Solaris Health · LUCA Passport · Sovereignty-first holistic health.*
-**Heal · Learn · Earn — Enter the Golden Age.**
-
-</div>
+[MIT](LICENSE).
