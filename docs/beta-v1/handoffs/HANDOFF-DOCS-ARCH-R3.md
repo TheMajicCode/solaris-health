@@ -21,7 +21,8 @@ The candidate changes eight documentation paths listed in [the contract](../cont
   base adaptation was needed and the old `79f10b23` base was not used. The session's local branch
   was `claude/web-r1-context-isolation-y7kpm5` at `fab59fb8bcf825e7cb48be6a1e578e45aed316ed` with a
   clean worktree (zero uncommitted paths). The task branch `claude/docs-arch-r3` was cut from
-  `origin/main` at that commit and tree.
+  `origin/main` at `bb0bcf5beb54e956ac8eb046eb38483ac62ec4bf`, tree
+  `a6350bbe98b2492cf7e44ad60db59c9351a13799`.
 - **Owner authorization accepted.** `PROCEED DOCS-ARCH-R3` for the eight-path documentation scope,
   covering apply/validate/review/commit/push/PR/normal-merge without repeated generic approval.
   No base adaptation was required; no allowlist widening, reset, force-push or unrelated branch
@@ -38,7 +39,7 @@ The candidate changes eight documentation paths listed in [the contract](../cont
   | Base blobs vs manifest | 4 present files match both `git_blob` and `sha256`; 4 new files confirmed absent at base |
   | `git apply --check` | exit 0 |
   | `git apply` | exit 0 |
-  | Reconstruction vs `candidate/` | 8 of 8 byte-identical |
+  | Reconstruction vs `candidate/` | 8 of 8 byte-identical at apply, before this record was completed |
   | Scope vs allowlist | exact match, 8 paths |
   | `git diff --cached --check` | exit 0 |
   | Relative file links | 37 checked, 0 broken |
