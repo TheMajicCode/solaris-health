@@ -1,17 +1,23 @@
 # Changelog
 
-All notable changes to the **LUCA Passport** project are documented in this file.
+This file records changes to **Solaris / LUCA Passport**.
+
+> Historical release descriptions below retain their original wording. In particular, the June 2026 “production-ready” and CI/CD claims are not current acceptance evidence. See [Current state](docs/CURRENT-STATE.md) for the inspected source, recorded test limitations and open production blockers.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Planned
-- Playwright end-to-end test suite covering the full patient onboarding flow.
-- `husky` + `lint-staged` pre-commit hooks to enforce linting and formatting.
-- Real LLM provider integration for the LUCA assistant (currently mock-backed).
-- On-chain anchoring of vault export manifests.
+### Documentation alignment — DOCS-ARCH-R3
+
+- Replace obsolete front-page cross-chain, NFT, complete-export and CI/test claims with dated implementation evidence.
+- Document the owner-selected Breez/WDK direction, conditional Bark alternative, proposed GPS/RGB rewards and private contribution boundaries.
+- Distinguish the founder-reported SatsPath collaboration from proposed ecosystem connections and unverified integrations.
+- Record WEB-R1 source integration, remaining repairs and Maple divergence; correct contributor branch/setup/verification guidance.
+- Preserve historical architecture and release records with explicit status notices. No application, dependency or deployment change.
+
+Earlier uncompleted planning notes are superseded for prioritization by [Current state](docs/CURRENT-STATE.md); this documentation entry is not a feature release.
 
 ---
 
@@ -70,5 +76,5 @@ identity and data-portability platform.
 - Docker Compose stack (frontend, backend, postgres) deployed at
   https://solaris-health.abacusai.cloud.
 
-[Unreleased]: https://github.com/solaris-health/luca-passport/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/solaris-health/luca-passport/releases/tag/v1.0.0
+[Unreleased]: https://github.com/TheMajicCode/solaris-health/commits/main
+[1.0.0]: #100---2026-06-28
