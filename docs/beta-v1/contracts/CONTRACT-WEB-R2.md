@@ -121,3 +121,53 @@ no force-push. Final diff digests are recorded outside the files they describe.
 No deployment, restart, production migration or dependency change. Reverting this node is
 mechanically possible but would restore the cross-account read and is not an acceptable operational
 rollback. A source merge does not patch any running backend.
+
+## Amendment 1 — finalization scope and merge authorization (2026-09-26)
+
+Authority: Majd's `FINALIZE AND MERGE WEB-R2 PR #5` instruction. Everything above this section is the
+original contract and remains the record of the implementation base, scope and evidence plan; it is
+not rewritten here.
+
+**Anchors at amendment.** Pull request #5 head
+`b18293e353f246a74abfce78230f3f40200e32b3` (reviewed; unchanged). `main` has advanced from the
+implementation base `2cbeabe4ed5dff64053886587bc82cf7b92fa739` to
+`13f04c060475fef507345d8ce3c8d49c86c1edd0` through three owner/PR commits that change only Markdown:
+`README.md`, the `docs/API.md` title ("Sovereign Passport") and a new `docs/VISION.md`. None touches
+code, dependencies, tests or CI. Those changes are preserved.
+
+**Expanded allowlist.** A seventh path is added:
+
+7. `docs/API.md` — only its Trends section, to document own-account-only access, the optional
+   same-account `userId` assertion, the 401/400/403/500 responses, the authentication middleware's
+   existing 503 for unavailable revocation storage, and the actual supported ranges and success
+   payload. The newer title and every other section are left untouched.
+
+The six original paths remain allowed for corrections only. `backend/src/routes/trends.js` and both
+test files stay exactly as reviewed.
+
+**Correction to the user-facing impact paragraph above.** That paragraph calls the practitioner
+panel's behavior "the owner-approved consequence of own-account-only access". Only the **access
+restriction** is approved. The resulting **display** — showing a denied request as "No check-in data
+for this range" — is a known, unresolved UI defect, not an approved outcome. It is to be fixed by a
+separate WEB-R2-UI contract. This amendment supersedes that sentence and, as applied to the display,
+the word "intended" in that section's heading.
+
+**Other statements superseded or qualified.** The status line's "No merge … is authorized" is
+superseded by the merge authorization below; deployment remains unauthorized. The acceptance plan
+asked for "equivalently initialized" databases. The handoff finds only **comparable initialization on
+the measured properties** — matching table and migration counts, zero users and a matching checksum
+over column names and data types — not proven complete equivalence or an error-free installation, and
+this amendment adopts that narrower finding.
+
+**Merge authorization.** After independent review of the corrections and the final diff, the
+corrections are to be committed as follow-up commits (no amend of published commits, no force-push)
+and pushed; pull request #5 may then be marked ready and merged through the normal GitHub process
+once actual repository requirements pass. A merge is not a deployment and authorizes no restart, live database
+operation, dependency change or Maple integration.
+
+**Verification for this amendment.** The prospective merge of the pull request head, plus these
+corrections, with freshly fetched `main` is built in a disposable worktree. The focused trends suite,
+an exact-scope check, `git diff --check` and relevant documentation checks run there. Because the
+upstream changes are Markdown-only and the reviewed code and tests are unchanged, the full database
+suites are not repeated for these prose corrections; the original full-suite results remain the
+recorded evidence, with their stated limitations.

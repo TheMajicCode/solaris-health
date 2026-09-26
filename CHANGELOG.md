@@ -20,9 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `userId` returns 401, all before any trends query.
 - Storage failures return a generic 500 and log a fixed marker instead of the raw error object.
 - Behavior change: the practitioner patient-detail trends panel no longer loads another account's
-  data. It now shows its ordinary "No check-in data for this range" empty state, which a clinician
-  could misread as the patient not checking in. Clinician access requires a separate consent/care
-  policy; an explicit "not permitted" state is a recommended follow-up.
+  data. Clinician access requires a separate consent/care policy.
+- Known unresolved UI defect, not an intended outcome: that panel shows a denied request as its
+  ordinary "No check-in data for this range" empty state, which a clinician could misread as the
+  patient not checking in. To be fixed separately (WEB-R2-UI).
+- `docs/API.md` Trends section now documents own-account-only access, the optional same-account
+  `userId`, its 401/400/403/503/500 responses, the `1y` range and the full success payload.
 - Authentication/revocation middleware, payloads, statistics and `range` handling are unchanged.
   Not deployed.
 

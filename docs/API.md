@@ -200,17 +200,38 @@ curl "$BASE/timeline/me?limit=5&types=vitals,appointment" -H "Authorization: Bea
 ## Trends
 
 ### `GET /api/trends/vitals` (auth)
-Vitals time series for the current user (or `?userId=` for staff/admin).
+Vitals time series for the **authenticated account only**. Every role — including practitioner and
+admin — reads only its own trends; there is no role-based override. Reading another account's
+trends would need a separately specified consent and care-relationship policy, which does not exist.
 
-**Query:** `range` (`7d`, `30d`, `90d`, `all`), `userId` (staff/admin only).
-**`200`:**
+**Query:**
+- `range` — `7d`, `30d`, `90d`, `1y` or `all` (default `30d`, also used for an empty value). The
+  value is echoed in the response. Most unrecognised values use the 30-day window, but names of
+  built-in object properties (for example `constructor` or `toString`) currently return the generic
+  `500` — a known, pre-existing defect.
+- `userId` — optional. If present it must be one UUID naming the **same** account as the session,
+  compared ignoring case. It never selects another account.
+
+**`200`:** series are in ascending date order.
 ```json
 { "range": "30d",
-  "points": [ { "date": "2026-06-01", "energy": 7, "mood": 8, "sleep": 7.5, "hydration": 6, "movement": 30 } ],
-  "vitality": [ ... ],
-  "metrics": { "energy": { "avg": 7, "min": 5, "max": 9, "change": 2 } } }
+  "points": [ { "date": "2026-06-01", "energy": 7, "mood": 8, "sleep": 7.5, "hydration": 6, "movement": 30, "nutrition": 7 } ],
+  "vitality": [ { "date": "2026-06-01", "vitality": 72, "mental": 70, "emotional": 68, "physical": 75, "spiritual": 74 } ],
+  "metrics": { "energy": { "count": 12, "avg": 7, "min": 5, "max": 9, "first": 5, "last": 7, "change": 2 }, ... } }
 ```
-A patient requesting another user's vitals → `403`.
+`metrics` has the same statistics object for `energy`, `mood`, `sleep`, `hydration`, `movement`,
+`nutrition` and `vitality`; `avg` and `change` are rounded to one decimal. With no data, `count` is
+`0` and the other fields are `null`.
+
+**Errors** — the `401`, `400`, `403` and `503` responses below all happen before any trends data is read:
+- Missing, invalid, expired, `jti`-less or revoked token, or a session whose `userId` is not a valid
+  UUID → `401`.
+- `userId` empty, malformed, repeated, an array or an object → `400` `{ "error": "Invalid userId" }`.
+- `userId` is a valid UUID for a different account, for any role → `403` `{ "error": "Not allowed" }`.
+- Revocation storage unavailable (authentication middleware, fail-closed) → `503`
+  `{ "error": "SESSION_VALIDATION_UNAVAILABLE" }`.
+- Storage failure while reading trends, or the `range` defect above → `500`
+  `{ "error": "Server error" }`, with no internal detail.
 
 ---
 
