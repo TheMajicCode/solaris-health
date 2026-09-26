@@ -1,6 +1,20 @@
 # Solaris
 
-Solaris is building a network for private health guidance, practitioner discovery and evidence of contribution. LUCA is its assistant. The intended experience connects a user-controlled Health Passport with an Economic Passport while keeping health records, payment authority and public identity separate.
+**A new architecture for life. Built around the person.**
+
+Health begins long before an appointment. It grows from the food we eat, the land that sustains us, the relationships we trust, and the choices we are free to make. Yet our health stories can become scattered across records, accounts and institutions, leaving us to reconnect the pieces. Solaris begins with a different foundation: the person, and their right to carry their identity, knowledge and care forward throughout their life.
+
+We are building an open health ecosystem connecting people, practitioners and communities through holistic healthcare, regenerative agriculture, personal intelligence and shared economic opportunity. Its foundation is identity first and local first: technology designed around the person, with independent access and recovery paths for their core health records.
+
+**Solaris is an open-source company by conviction. We are committed to releasing all Solaris-developed software under open-source licenses.** We believe progress in healthcare should become a foundation others can inspect, improve and build upon. This repository is available under the [MIT License](LICENSE).
+
+Our engineering requirement is explicit:
+
+> No external protocol, company, relay, signer, wallet, AI model, storage provider or interoperability partner may become necessary for the user to retain access to their identity and core health data.
+
+That requirement includes Solaris itself. It is a design commitment to prove through working software and recovery tests. Read [the full vision](docs/VISION.md) for how open infrastructure, person-controlled intelligence and GPS contribution sharing fit together.
+
+This repository develops the web part of that ecosystem. The intended experience connects a user-controlled Health Passport with an Economic Passport while keeping health records, payment authority and public identity separate. LUCA is the intelligence layer attached to a person's identity and limited by their permission.
 
 **Status: development/beta.** This repository contains the React/Vite web application and Express/PostgreSQL backend, including legacy features being evaluated for retention. It is not a production-readiness certification. The source and roadmap review below is dated **24 September 2026**; deployed behavior requires separate release evidence.
 
