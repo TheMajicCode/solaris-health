@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security — WEB-R2 trends isolation
+
+- `GET /api/trends/vitals` now reads only the authenticated account's trends. Previously a
+  `practitioner` or `admin` could pass any `userId` and read that account's daily check-ins and
+  assessment scores with no consent, care-relationship or expiry check.
+- The optional `userId` query value is only an assertion of the same account, compared
+  case-insensitively; both trends queries bind the session `userId`. A different valid account
+  returns 403 for every role, malformed or duplicate values return 400, and an invalid session
+  `userId` returns 401, all before any trends query.
+- Storage failures return a generic 500 and log a fixed marker instead of the raw error object.
+- Behavior change: the practitioner patient-detail trends panel no longer loads another account's
+  data. Clinician access requires a separate consent/care policy.
+- Known unresolved UI defect, not an intended outcome: that panel shows a denied request as its
+  ordinary "No check-in data for this range" empty state, which a clinician could misread as the
+  patient not checking in. To be fixed separately (WEB-R2-UI).
+- `docs/API.md` Trends section now documents own-account-only access, the optional same-account
+  `userId`, its 401/400/403/503/500 responses, the `1y` range and the full success payload.
+- Authentication/revocation middleware, payloads, statistics and `range` handling are unchanged.
+  Not deployed.
+
 ### Documentation alignment — DOCS-ARCH-R3
 
 - Replace obsolete front-page cross-chain, NFT, complete-export and CI/test claims with dated implementation evidence.

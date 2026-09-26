@@ -1,11 +1,14 @@
 /**
  * Trends / vitals tests — auth gating, the vitals payload shape, range
- * filtering, and the role guard preventing a patient from reading another
- * user's vitals.
+ * filtering, and the account boundary preventing a caller from reading another
+ * user's vitals. Malformed userId values are rejected separately with 400.
  */
 const request = require('supertest');
 const app = require('../src/server');
 const db = require('../src/db');
+
+// A distinct, valid synthetic UUID that never belongs to the registered user.
+const OTHER_USER_ID = 'bbccddee-2345-4bcd-9efa-112233445566';
 
 describe('GET /api/trends/vitals', () => {
   let token;
@@ -64,9 +67,17 @@ describe('GET /api/trends/vitals', () => {
   });
 
   it('forbids a patient from reading another user vitals', async () => {
+    expect(OTHER_USER_ID).not.toBe(userId);
+    const res = await request(app)
+      .get(`/api/trends/vitals?userId=${OTHER_USER_ID}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('rejects a malformed userId such as a legacy numeric id', async () => {
     const res = await request(app)
       .get('/api/trends/vitals?userId=999999')
       .set('Authorization', `Bearer ${token}`);
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(400);
   });
 });

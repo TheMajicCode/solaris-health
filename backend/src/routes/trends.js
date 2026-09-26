@@ -3,7 +3,11 @@
  * Time-series data for multi-metric charts.
  *
  *   GET /api/trends/vitals?range=30d            — authenticated user's vitals trends
- *   GET /api/trends/vitals?userId=..&range=90d  — patient vitals (practitioner/admin)
+ *   GET /api/trends/vitals?userId=..&range=90d  — optional assertion of the same account
+ *
+ * The validated session is the only authority for these private records. There
+ * is no practitioner/admin override: reading another account's trends requires
+ * a separately specified consent and care-relationship policy.
  *
  * range: 7d | 30d | 90d | 1y | all  (default 30d)
  */
@@ -12,6 +16,11 @@ const db = require('../db');
 const { authMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isUuid(value) {
+  return typeof value === 'string' && value.length === 36 && UUID_PATTERN.test(value);
+}
 
 function rangeToDate(range) {
   const now = new Date();
@@ -100,15 +109,25 @@ async function gatherVitals(userId, range) {
 // Own vitals trends
 router.get('/vitals', authMiddleware, async (req, res) => {
   try {
-    let userId = req.user.userId;
-    if (req.query.userId && req.query.userId !== req.user.userId) {
-      if (req.user.role !== 'practitioner' && req.user.role !== 'admin')
+    const userId = req.user && req.user.userId;
+    if (!isUuid(userId)) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const requestedUserId = req.query.userId;
+    if (requestedUserId !== undefined) {
+      if (!isUuid(requestedUserId)) {
+        return res.status(400).json({ error: 'Invalid userId' });
+      }
+      if (requestedUserId.toLowerCase() !== userId.toLowerCase()) {
         return res.status(403).json({ error: 'Not allowed' });
-      userId = req.query.userId;
+      }
     }
     const data = await gatherVitals(userId, req.query.range || '30d');
     res.json(data);
-  } catch (err) { console.error('trends/vitals', err); res.status(500).json({ error: 'Server error' }); }
+  } catch (_err) {
+    console.error('[trends] vitals unavailable');
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 module.exports = router;
