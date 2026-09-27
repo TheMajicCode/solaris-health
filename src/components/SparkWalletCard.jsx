@@ -1,8 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Wallet, Check, Link2, AlertTriangle } from 'lucide-react';
-import { api } from '../lib/api.js';
-import { readSparkConfig } from '../lib/spark/config.js';
-import { classifySparkAddress } from '../lib/spark/adapter.js';
+import React from 'react';
+import { Wallet, Check } from 'lucide-react';
 import SparkWalletSetup from './SparkWalletSetup.jsx';
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -12,8 +9,8 @@ import SparkWalletSetup from './SparkWalletSetup.jsx';
  * device passphrase / adopt) now lives in the SINGLE reusable SparkWalletSetup
  * component, composed here for onboarding and by the Economic Passport empty-wallet
  * state. There is NO second crypto implementation. This card keeps the onboarding
- * chrome (heading, beta-safe copy, optional public-address linking, the UTEXO
- * "coming soon" card and the shared reassurance list).
+ * chrome (heading, beta-safe copy, the planned WDK digital-dollar card and
+ * the shared reassurance list). Public-address registry linking is retired.
  *
  * Beta-safe copy (spec §2A) is used verbatim; no over-broad custody/privacy claims.
  * ──────────────────────────────────────────────────────────────────────────── */
@@ -24,37 +21,6 @@ const SCREEN2_SAFE_COPY =
   + 'limits, and service behavior depend on the wallet and network.';
 
 export default function SparkWalletCard({ onWalletReady }) {
-  const cfg = useMemo(() => readSparkConfig(), []);
-
-  // Optional PUBLIC-address linking — a SEPARATE, unchecked consent (spec §4).
-  const [linkConsent, setLinkConsent] = useState(false);
-  const [linkAddr, setLinkAddr] = useState('');
-  const [linkMsg, setLinkMsg] = useState('');
-  const [linkErr, setLinkErr] = useState('');
-  const [linked, setLinked] = useState(null); // { chain, address }
-
-  const linkAddress = async () => {
-    setLinkErr(''); setLinkMsg('');
-    const c = classifySparkAddress(linkAddr);
-    if (!c.ok) { setLinkErr(c.reason); return; }
-    try {
-      // Reuse the existing wallet_addresses / /api/wallet boundary. No secret is
-      // sent; the address stays verified=false server-side. Idempotent on
-      // (user_id, chain, address).
-      await api.connectWallet({ chain: c.chain, address: c.address });
-      setLinked({ chain: c.chain, address: c.address });
-      setLinkMsg('Public address linked (unverified).');
-    } catch (e) {
-      setLinkErr(e?.message || 'Could not link that address right now.');
-    }
-  };
-
-  const unlinkAddress = async () => {
-    // Optimistic local unlink for the demo surface; server unlink uses the same
-    // boundary when an id is available. No secret involved either way.
-    setLinked(null); setLinkMsg(''); setLinkErr(''); setLinkAddr('');
-  };
-
   return (
     <div className="spk">
       {/* ── Spark card ── */}
@@ -68,42 +34,15 @@ export default function SparkWalletCard({ onWalletReady }) {
         {/* The ONE reusable secure setup flow (onboarding palette). */}
         <SparkWalletSetup variant="onboarding" onWalletReady={onWalletReady} />
 
-        {/* Optional PUBLIC-address linking — separate, unchecked consent */}
-        {cfg.enabled && (
-          <div className="spk-link">
-            <label className="spk-ack" htmlFor="spk-link-consent">
-              <input id="spk-link-consent" type="checkbox" checked={linkConsent} onChange={(e) => setLinkConsent(e.target.checked)} />
-              Optionally link a public Spark address to my Solaris profile (no secret is shared).
-            </label>
-            {linkConsent && !linked && (
-              <div className="spk-link-form">
-                <label className="spk-label" htmlFor="spk-link-addr">Public Spark address</label>
-                <input
-                  id="spk-link-addr" className="input" value={linkAddr}
-                  onChange={(e) => setLinkAddr(e.target.value)} placeholder="spark1… or sparkrt1…"
-                  autoComplete="off" spellCheck={false}
-                />
-                <button className="spk-btn spk-btn-ghost" onClick={linkAddress}><Link2 size={14} /> Link address</button>
-                {linkErr && <p className="spk-err">{linkErr}</p>}
-              </div>
-            )}
-            {linked && (
-              <div className="spk-linked">
-                <p className="spk-hint"><Check size={13} /> {linkMsg} <b>{linked.chain}</b></p>
-                <button className="spk-btn spk-btn-ghost" onClick={unlinkAddress}>Unlink</button>
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
-      {/* ── UTEXO card — always disabled, zero SDK/network ── */}
+      {/* ── Planned WDK card — disabled, no WDK SDK or network operation ── */}
       <div className="spk-card spk-card-coming">
         <div className="spk-head">
           <span className="spk-title"><Wallet size={16} /> Create your digital dollar wallet</span>
-          <span className="spk-badge spk-badge-coming">Powered by UTEXO · Coming Soon</span>
+          <span className="spk-badge spk-badge-coming">Tether WDK · Planned</span>
         </div>
-        <p className="spk-safe">A stable digital-dollar wallet is on the roadmap and is not available yet.</p>
+        <p className="spk-safe">USDT support through Tether WDK is planned, not integrated in this build. The network has not been selected.</p>
         <button className="spk-btn" disabled aria-disabled="true">Generate my digital dollar wallet — Coming Soon</button>
       </div>
 
@@ -138,9 +77,6 @@ export default function SparkWalletCard({ onWalletReady }) {
         .spk-ack{display:flex;gap:8px;align-items:flex-start;font-size:0.82rem;color:var(--on-surface-variant);cursor:pointer;line-height:1.4;margin-bottom:12px}
         .spk-ack input{margin-top:2px;accent-color:var(--tertiary)}
         .spk-hint{color:var(--outline);font-size:0.76rem;margin:0;display:flex;align-items:center;gap:6px}
-        .spk-link{border-top:1px dashed var(--outline-variant);margin-top:10px;padding-top:12px}
-        .spk-link-form{margin-top:8px}
-        .spk-linked{margin-top:8px}
         .spk-err{color:var(--error);font-size:0.8rem;margin:6px 0 0}
         .spk-shared{list-style:none;padding:0;margin:6px 0 16px;display:flex;flex-direction:column;gap:7px}
         .spk-shared li{display:flex;align-items:flex-start;gap:7px;color:var(--on-surface-variant);font-size:0.8rem;line-height:1.4}

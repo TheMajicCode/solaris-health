@@ -107,14 +107,10 @@ router.get('/sovereignty-status', authMiddleware, async (req, res) => {
     const userId = req.user.userId;
     const safe = (q, params) => db.query(q, params).then((r) => r.rows).catch(() => []);
 
-    const [userRows, wallets, consents, lastReceipt] = await Promise.all([
+    const [userRows, consents, lastReceipt] = await Promise.all([
       safe(
         `SELECT id, email, full_name, role, country, city, created_at, did, nostr_npub
            FROM users WHERE id=$1 AND deleted_at IS NULL`,
-        [userId]
-      ),
-      safe(
-        `SELECT chain, label, verified, is_primary FROM wallet_addresses WHERE user_id=$1`,
         [userId]
       ),
       safe(
@@ -144,11 +140,10 @@ router.get('/sovereignty-status', authMiddleware, async (req, res) => {
       { method: 'nostr', label: 'Nostr key', connected: Boolean(u.nostr_npub) },
       {
         method: 'wallet',
-        label: 'Crypto wallet',
-        connected: wallets.length > 0,
-        detail: wallets.length
-          ? `${wallets.length} linked (${[...new Set(wallets.map((w) => w.chain))].join(', ')})`
-          : undefined,
+        label: 'Historical wallet addresses',
+        connected: false,
+        legacy: true,
+        detail: 'Legacy wallet connections are retired. Stored address metadata is not an active wallet or payment capability.',
       },
     ];
 

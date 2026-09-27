@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed — ECO-CLEAN-R1 obsolete wallet prototypes
+
+- Removed the nested Crypto wallets hub, injected EVM/Solana providers, browser
+  EVM transaction sending, simulated Health NFT mint/transfers and exclusive
+  `ethers` / `@solana/web3.js` dependencies. GPS, Self Care and Network remain.
+- Retired legacy wallet operations with authenticated 410 responses; retained
+  owner-only access to historical public-address metadata. No stored data or
+  historical migration was deleted. Passport status marks those records inactive.
+- Removed email-triggered fake balances, the simulated opening-balance card,
+  mock Lightning address and nonfunctional Spark public-address linking controls.
+  BTC balances distinguish observed zero from unavailable; USD₮ stays unconnected.
+- Updated the obsolete UTEXO placeholder to the planned Tether WDK direction.
+  This does not install Breez/WDK, select a USD₮ network, enable funds or issue RGB assets.
+- Direct Spark wallet encryption, keys, recovery and safety gates are unchanged.
+  Tests for retired features are replaced with retirement, privacy and retained-flow checks.
+  Source changes only; not deployed.
+
 ### Fixed — WEB-R2-UI trends chart states
 
 - The trends panel (`TrendCharts`) no longer shows a refused request as "No check-in data". A 403

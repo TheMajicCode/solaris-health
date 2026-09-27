@@ -15,7 +15,7 @@
  *   - the new-identity nsec is MASKED until a deliberate reveal;
  *   - Screen 1 completion is a CHECKBOX-ONLY acknowledgement (exact text) — there
  *     is NO character-entry confirmation;
- *   - Screen 2 shows the Spark surface + UTEXO Coming Soon + Skip;
+ *   - Screen 2 shows the Spark surface + planned WDK Coming Soon + Skip;
  *   - Screen 3 "Reclaim Your Sovereignty" exact copy, motto, and a COMPACT muted
  *     roadmap note — with NONE of the removed forbidden phrases and NO dashed panel;
  *   - finalize persists the minimum profile then activates; only the public npub
@@ -215,12 +215,12 @@ describe('Screen 2 + Screen 3', () => {
     expect(ackOnboardingScreen).toHaveBeenCalledWith('identity');
   });
 
-  it('Screen 2 shows the Spark surface, UTEXO Coming Soon, and Skip for now', async () => {
+  it('Screen 2 shows the Spark surface, planned WDK Coming Soon, and Skip for now', async () => {
     await advanceToWallet();
     expect(screen.getByText('Create your digital gold wallet')).toBeInTheDocument();
     expect(screen.getByText('Powered by Spark')).toBeInTheDocument();
     expect(screen.getByText('Create your digital dollar wallet')).toBeInTheDocument();
-    expect(screen.getByText(/Powered by UTEXO · Coming Soon/)).toBeInTheDocument();
+    expect(screen.getByText(/Tether WDK · Planned/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Skip for now/ })).toBeInTheDocument();
   });
 

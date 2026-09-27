@@ -52,7 +52,7 @@ Any public contribution trail is optional and separately approved by the user. A
 
 - React/Vite frontend, Express API, PostgreSQL persistence and an AI-provider abstraction.
 - WEB-R1 [PR #3](https://github.com/TheMajicCode/solaris-health/pull/3) merged: LUCA context reads are restricted to the authenticated account. This is source integration, not evidence of deployment.
-- Legacy wallet screens and direct Spark adapters remain. The Health NFT screen simulates mint/transfer behavior; older cross-chain and NFT descriptions are not current product promises.
+- ECO-CLEAN-R1 retires the legacy multi-chain wallet hub, browser EVM sending and simulated Health NFT controls. Fabricated wallet balances and mock Lightning addresses are removed. Existing encrypted Bitcoin vault/recovery and direct Spark adapters are preserved; Breez and WDK remain planned integrations. Historical wallet address metadata remains owner-readable without activating the retired wallet functionality.
 - Payment routes inspected in this review are disabled; GPS allocation records are simulated. New payment SDKs and RGB rewards are not established by the inspected source/manifests.
 - Export includes selected, bounded records. Complete export, restore and device-to-device data continuity are not established.
 - Maple work is on a separate, diverged branch and has unresolved review findings. Private provider use, local inference and offline fallback are different capabilities; none should be inferred from a provider label.

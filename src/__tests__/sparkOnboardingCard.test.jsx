@@ -21,10 +21,12 @@ vi.mock('../state/SparkWalletContext.jsx', () => ({
 vi.mock('../lib/api.js', () => ({ api: { connectWallet: vi.fn().mockResolvedValue({}) } }));
 
 import SparkWalletCard from '../components/SparkWalletCard.jsx';
+import { api } from '../lib/api.js';
 import { DEMO_FIXTURE_MNEMONIC } from '../lib/spark/adapter.js';
 
 beforeEach(() => {
   adopt.mockClear();
+  api.connectWallet.mockClear();
   vi.stubEnv('VITE_SPARK_WALLET_ENABLED', 'true');
   vi.stubEnv('VITE_SPARK_NETWORK', 'REGTEST');
   vi.stubEnv('VITE_SPARK_DEMO_FIXTURE', 'true');
@@ -32,6 +34,23 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs(); });
 
 describe('SparkWalletCard — onboarding (demo fixture)', () => {
+  it('describes WDK as planned and retires public-address link/unlink without writes', () => {
+    const write = vi.spyOn(Storage.prototype, 'setItem');
+    const remove = vi.spyOn(Storage.prototype, 'removeItem');
+    render(<SparkWalletCard />);
+    expect(screen.getByText('Tether WDK · Planned')).toBeInTheDocument();
+    expect(screen.getByText(/not integrated in this build/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Generate my digital dollar wallet/ })).toBeDisabled();
+    expect(screen.queryByText(/UTEXO|Public Spark address|link a public Spark address/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^(Link address|Unlink)$/ })).not.toBeInTheDocument();
+    expect(api.connectWallet).not.toHaveBeenCalled();
+    expect(adopt).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+    write.mockRestore();
+    remove.mockRestore();
+  });
+
   it('keeps the wallet optional and does not create anything until an explicit action', () => {
     render(<SparkWalletCard />);
     expect(screen.getByText(/Optional — never required for care or booking/i)).toBeInTheDocument();

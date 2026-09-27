@@ -237,23 +237,30 @@ trends would need a separately specified consent and care-relationship policy, w
 
 ## Wallet
 
-| Method | Path | Auth | Role | Description |
-|--------|------|------|------|-------------|
-| `GET` | `/wallet/chains` | ✓ | any | Supported chain metadata |
-| `GET` | `/wallet/me` | ✓ | any | The user's connected wallets |
-| `POST` | `/wallet/connect` | ✓ | patient | Connect/link a wallet |
-| `PUT` | `/wallet/disconnect` | ✓ | patient | Remove a wallet |
-| `PUT` | `/wallet/primary` | ✓ | patient | Set primary wallet |
-| `GET` | `/wallet/nonce` | ✓ | patient | Nonce + SIWE message to sign |
-| `POST` | `/wallet/verify-signature` | ✓ | patient | Verify ownership (EVM) |
-| `GET` | `/wallet/balance/:chain/:address` | ✓ | any | Native balance |
-| `GET` | `/wallet/transactions/:chain/:address` | ✓ | any | Recent transactions |
+The legacy multi-chain wallet prototype is retired by ECO-CLEAN-R1. It is not the
+current Spark adapter or a new Breez/WDK implementation.
 
-**`POST /wallet/connect` body:** `{ "chain": "ethereum", "address": "0x...", "label": "Main" }`.
+| Method | Path | Auth | Result |
+|--------|------|------|--------|
+| `GET` | `/wallet/me` | ✓ | Owner-scoped historical public-address metadata only; `legacy: true`, records marked inactive. No balance, signing or ownership authority. |
+| `GET` | `/wallet/chains` | ✓ | 410 — retired |
+| `POST` | `/wallet/connect` | ✓ | 410 — retired |
+| `PUT` | `/wallet/disconnect` | ✓ | 410 — retired |
+| `PUT` | `/wallet/primary` | ✓ | 410 — retired |
+| `GET` | `/wallet/nonce` | ✓ | 410 — retired |
+| `POST` | `/wallet/verify-signature` | ✓ | 410 — retired |
+| `GET` | `/wallet/balance/:chain/:address` | ✓ | 410 — retired, including the old Bitcoin watch-only proxy |
+| `GET` | `/wallet/transactions/:chain/:address` | ✓ | 410 — retired, including the old Bitcoin watch-only proxy |
 
-```bash
-curl $BASE/wallet/chains -H "Authorization: Bearer $TOKEN"
-```
+Authentication and session-revocation checks still apply (401/503 failures); a 410
+request performs no wallet query or external RPC. GET `/wallet/me` uses the session
+account only and returns a generic 500 on storage failure. Existing address rows
+are retained without a migration. They are not automatically included in the
+bounded full-vault export; this owner read is a separate history access path.
+
+Local Bitcoin vault recovery and the direct Spark adapter remain independent of
+these routes. Their preservation does not establish acceptance for real-funds use.
+Breez, WDK and a selected USD₮ network still require their own integration work.
 
 ---
 
