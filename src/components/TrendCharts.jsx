@@ -5,15 +5,26 @@
  *
  * Props:
  *   loader(params)   async fn returning { points, vitality, metrics, range }
- *   userId           optional userId passed through to loader
+ *   userId           optional target account, passed through to loader. The
+ *                    target must be given here rather than captured inside
+ *                    `loader`: results are scoped, invalidated and refetched
+ *                    by this prop, not by the loader function's identity.
+ *
+ * WEB-R2-UI: a result is shown only for the scope that requested it — the
+ * signed-in viewer, the requested userId and the range — and only for the
+ * latest request in that scope. The data area is keyed by scope, so a scope
+ * change renders a fresh loading state instead of the previous scope's values.
+ * Access denial, session loss and unavailability are shown as such; the empty
+ * message appears only for a valid, successful response with no daily points.
  */
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ResponsiveContainer, LineChart, Line, AreaChart, Area, XAxis, YAxis,
   CartesianGrid, Tooltip, Legend, Brush, ReferenceLine,
 } from 'recharts';
 import { format, parseISO, isValid } from 'date-fns';
-import { TrendingUp, TrendingDown, Minus, Activity, RefreshCw } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Activity, RefreshCw, Lock, LogIn, CloudOff } from 'lucide-react';
+import { useApp } from '../state/AppContext.jsx';
 
 const METRICS = [
   { key: 'energy', label: 'Energy', color: '#10B981', unit: '' },
@@ -90,48 +101,100 @@ function StatCard({ metric, stats }) {
   );
 }
 
-export default function TrendCharts({ loader, userId }) {
-  const [range, setRange] = useState('30d');
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [selMetrics, setSelMetrics] = useState(['energy', 'mood', 'sleep']);
+// Map a loader failure to a display state. Only the HTTP status and the
+// transport flags set by src/lib/api.js are consulted; error messages and
+// bodies are never displayed or logged.
+function classifyFailure(e) {
+  const status = e && typeof e.status === 'number' ? e.status : null;
+  if (status === 403) return 'denied';
+  if (status === 401) return 'session';
+  // Network errors, timeouts, 5xx (including 503) and anything unexpected.
+  return 'unavailable';
+}
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = { range };
-      if (userId) params.userId = userId;
-      const d = await loader(params);
-      setData(d);
-    } catch (e) { console.error('trends load', e); setData(null); }
-    finally { setLoading(false); }
-  }, [loader, range, userId]);
+// Accept only the documented response shape; anything else is unusable, which
+// is shown as unavailable rather than as an empty result.
+function normalizeTrends(d) {
+  if (!d || typeof d !== 'object' || Array.isArray(d) || !Array.isArray(d.points)) return null;
+  if (d.vitality != null && !Array.isArray(d.vitality)) return null;
+  if (d.metrics != null && (typeof d.metrics !== 'object' || Array.isArray(d.metrics))) return null;
+  return { points: d.points, vitality: d.vitality || [], metrics: d.metrics || {} };
+}
 
-  useEffect(() => { load(); }, [load]);
+const STATE_COPY = {
+  denied: {
+    Icon: Lock,
+    title: "You don't have permission to view these trends",
+    detail: 'Trends can only be viewed by the account they belong to.',
+  },
+  session: {
+    Icon: LogIn,
+    title: 'Your session has expired',
+    detail: 'Please sign in again to view trends.',
+  },
+  signedOut: {
+    Icon: LogIn,
+    title: 'Sign in to view trends',
+    detail: 'Your trends are available after you sign in.',
+  },
+  unavailable: {
+    Icon: CloudOff,
+    title: 'Trends are temporarily unavailable',
+    detail: 'Check your connection and try again.',
+  },
+};
 
-  const toggleMetric = (k) => setSelMetrics((s) => (s.includes(k) ? s.filter((x) => x !== k) : [...s, k]));
+function StateMessage({ status, onRetry }) {
+  const copy = STATE_COPY[status];
+  const { Icon } = copy;
+  return (
+    <div className="tc-empty" role={status === 'signedOut' ? 'status' : 'alert'}>
+      <Icon size={26} style={{ opacity: .5 }} />
+      <div style={{ marginTop: 8, fontWeight: 600, color: 'var(--ink)' }}>{copy.title}</div>
+      <div className="small">{copy.detail}</div>
+      {status === 'unavailable' && (
+        <button className="btn ghost" style={{ marginTop: 12 }} onClick={onRetry}><RefreshCw size={15} /> Retry</button>
+      )}
+    </div>
+  );
+}
 
-  const points = data?.points || [];
-  const vitality = data?.vitality || [];
-  const metrics = data?.metrics || {};
+// Presentational: renders stat cards, the daily chart card and the vitality
+// card for one resolved state. Data is passed in only when status is 'ready'.
+function TrendsPanel({ status, data, selMetrics, onToggleMetric, onRetry }) {
+  const ready = status === 'ready' && data;
+  const points = ready ? data.points : [];
+  const vitality = ready ? data.vitality : [];
+  const metrics = ready ? data.metrics : {};
 
-  // annotation dates: assessment days (significant events)
-  const annotations = useMemo(() => vitality.map((v) => v.date).filter(Boolean), [vitality]);
+  let body;
+  if (status === 'loading') {
+    body = <div className="tc-empty" role="status"><RefreshCw size={24} className="spin" style={{ opacity: .5 }} /><div style={{ marginTop: 8 }}>Loading trends…</div></div>;
+  } else if (!ready) {
+    body = <StateMessage status={status} onRetry={onRetry} />;
+  } else if (points.length === 0) {
+    body = <div className="tc-empty" role="status"><Activity size={26} style={{ opacity: .5 }} /><div style={{ marginTop: 8, fontWeight: 600, color: 'var(--ink)' }}>No check-in data for this range</div><div className="small">Daily check-ins will populate these trends.</div></div>;
+  } else {
+    body = (
+      <ResponsiveContainer width="100%" height={320}>
+        <LineChart data={points} margin={{ top: 6, right: 12, left: -10, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#EBF3F0" vertical={false} />
+          <XAxis dataKey="date" tickFormatter={fmtAxis} tick={{ fontSize: 11, fill: '#6B8581' }} minTickGap={24} />
+          <YAxis tick={{ fontSize: 11, fill: '#6B8581' }} />
+          <Tooltip content={<CustomTooltip />} />
+          <Legend wrapperStyle={{ fontSize: 12 }} />
+          {METRICS.filter((m) => selMetrics.includes(m.key)).map((m) => (
+            <Line key={m.key} type="monotone" dataKey={m.key} name={m.label} stroke={m.color}
+              strokeWidth={2.2} dot={{ r: 2.5 }} activeDot={{ r: 5 }} connectNulls />
+          ))}
+          {points.length > 8 && <Brush dataKey="date" height={22} stroke="#34C9A9" tickFormatter={fmtAxis} travellerWidth={8} />}
+        </LineChart>
+      </ResponsiveContainer>
+    );
+  }
 
   return (
-    <div className="tc-wrap">
-      <style>{CSS}</style>
-
-      {/* range + refresh */}
-      <div className="between" style={{ flexWrap: 'wrap', gap: 10 }}>
-        <div className="tc-ranges">
-          {RANGES.map((r) => (
-            <button key={r.key} className={range === r.key ? 'on' : ''} onClick={() => setRange(r.key)}>{r.label}</button>
-          ))}
-        </div>
-        <button className="btn ghost" onClick={load}><RefreshCw size={15} /> Refresh</button>
-      </div>
-
+    <>
       {/* stat cards */}
       <div className="tc-stats">
         {METRICS.map((m) => <StatCard key={m.key} metric={m} stats={metrics[m.key]} />)}
@@ -148,7 +211,7 @@ export default function TrendCharts({ loader, userId }) {
             {METRICS.map((m) => {
               const on = selMetrics.includes(m.key);
               return (
-                <span key={m.key} className="tc-mchip" onClick={() => toggleMetric(m.key)}
+                <span key={m.key} className="tc-mchip" onClick={() => onToggleMetric(m.key)}
                   style={on ? { background: `${m.color}1f`, color: m.color, borderColor: 'transparent' } : { opacity: .55 }}>
                   <span className="tc-dot" style={{ background: m.color }} />{m.label}
                 </span>
@@ -156,26 +219,7 @@ export default function TrendCharts({ loader, userId }) {
             })}
           </div>
         </div>
-        {loading ? (
-          <div className="tc-empty"><RefreshCw size={24} className="spin" style={{ opacity: .5 }} /><div style={{ marginTop: 8 }}>Loading trends…</div></div>
-        ) : points.length === 0 ? (
-          <div className="tc-empty"><Activity size={26} style={{ opacity: .5 }} /><div style={{ marginTop: 8, fontWeight: 600, color: 'var(--ink)' }}>No check-in data for this range</div><div className="small">Daily check-ins will populate these trends.</div></div>
-        ) : (
-          <ResponsiveContainer width="100%" height={320}>
-            <LineChart data={points} margin={{ top: 6, right: 12, left: -10, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#EBF3F0" vertical={false} />
-              <XAxis dataKey="date" tickFormatter={fmtAxis} tick={{ fontSize: 11, fill: '#6B8581' }} minTickGap={24} />
-              <YAxis tick={{ fontSize: 11, fill: '#6B8581' }} />
-              <Tooltip content={<CustomTooltip />} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              {METRICS.filter((m) => selMetrics.includes(m.key)).map((m) => (
-                <Line key={m.key} type="monotone" dataKey={m.key} name={m.label} stroke={m.color}
-                  strokeWidth={2.2} dot={{ r: 2.5 }} activeDot={{ r: 5 }} connectNulls />
-              ))}
-              {points.length > 8 && <Brush dataKey="date" height={22} stroke="#34C9A9" tickFormatter={fmtAxis} travellerWidth={8} />}
-            </LineChart>
-          </ResponsiveContainer>
-        )}
+        {body}
       </div>
 
       {/* vitality chart with annotations */}
@@ -200,6 +244,85 @@ export default function TrendCharts({ loader, userId }) {
             </AreaChart>
           </ResponsiveContainer>
         </div>
+      )}
+    </>
+  );
+}
+
+// Fetches and shows one scope. It is keyed by scope in TrendCharts, so each
+// instance only ever serves a single viewer, target and range; a scope change
+// replaces the instance instead of reusing its state.
+function ScopedTrends({ loader, range, userId, generation, ...panel }) {
+  const [result, setResult] = useState(null);
+  const loaderRef = useRef(loader);
+
+  useEffect(() => { loaderRef.current = loader; });
+
+  useEffect(() => {
+    let cancelled = false;
+    const params = { range };
+    if (userId) params.userId = userId;
+    let pending;
+    try { pending = Promise.resolve(loaderRef.current(params)); } catch (e) { pending = Promise.reject(e); }
+    pending.then(
+      (d) => {
+        if (cancelled) return;
+        const data = normalizeTrends(d);
+        setResult({ generation, status: data ? 'ready' : 'unavailable', data });
+      },
+      (e) => {
+        if (cancelled) return;
+        setResult({ generation, status: classifyFailure(e), data: null });
+      },
+    );
+    // Scope instances unmount on scope change; a newer generation or an
+    // unmount cancels this request, so its late outcome is ignored.
+    return () => { cancelled = true; };
+  }, [range, userId, generation]);
+
+  const current = result && result.generation === generation ? result : null;
+  return <TrendsPanel status={current ? current.status : 'loading'} data={current ? current.data : null} {...panel} />;
+}
+
+export default function TrendCharts({ loader, userId }) {
+  const app = useApp();
+  // Outside an application provider (standalone use) the viewer is a fixed
+  // value; inside one, a missing user means signed out.
+  const signedOut = Boolean(app) && !app.user;
+  const viewer = app ? (app.user ? String(app.user.id ?? '') : null) : '(standalone)';
+
+  const [range, setRange] = useState('30d');
+  const [selMetrics, setSelMetrics] = useState(['energy', 'mood', 'sleep']);
+  const [generation, setGeneration] = useState(0);
+
+  const refresh = useCallback(() => setGeneration((g) => g + 1), []);
+  const toggleMetric = useCallback(
+    (k) => setSelMetrics((s) => (s.includes(k) ? s.filter((x) => x !== k) : [...s, k])),
+    [],
+  );
+
+  const scopeKey = JSON.stringify([viewer, userId || null, range]);
+  const panel = { selMetrics, onToggleMetric: toggleMetric, onRetry: refresh };
+
+  return (
+    <div className="tc-wrap">
+      <style>{CSS}</style>
+
+      {/* range + refresh */}
+      <div className="between" style={{ flexWrap: 'wrap', gap: 10 }}>
+        <div className="tc-ranges">
+          {RANGES.map((r) => (
+            <button key={r.key} className={range === r.key ? 'on' : ''} onClick={() => setRange(r.key)}>{r.label}</button>
+          ))}
+        </div>
+        <button className="btn ghost" onClick={refresh}><RefreshCw size={15} /> Refresh</button>
+      </div>
+
+      {signedOut ? (
+        <TrendsPanel status="signedOut" data={null} {...panel} />
+      ) : (
+        <ScopedTrends key={scopeKey} loader={loader} range={range} userId={userId}
+          generation={generation} {...panel} />
       )}
     </div>
   );

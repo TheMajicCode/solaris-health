@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed — WEB-R2-UI trends chart states
+
+- The trends panel (`TrendCharts`) no longer shows a refused request as "No check-in data". A 403
+  shows an access-denied message, a 401 shows session guidance, and network errors, timeouts, 5xx
+  (including 503), other failures and unusable responses show a temporarily-unavailable state with
+  Retry. The empty message appears only for a valid, successful response with no daily points.
+- Results are shown only for the scope that requested them — signed-in viewer, target patient and
+  range — and only for the latest request in that scope. Switching patient, account or range, or
+  signing out, no longer shows the previous values, and a slow earlier response or its failure can
+  no longer replace newer content or end a newer loading state.
+- The component no longer logs error objects and never displays server error text.
+- Successful charts, vitality-only results, range controls, metric toggles and styling are
+  preserved. During a Refresh, stat cards and charts are hidden until the new result arrives rather
+  than showing the previous values. Not deployed.
+
 ### Security — WEB-R2 trends isolation
 
 - `GET /api/trends/vitals` now reads only the authenticated account's trends. Previously a
