@@ -1,80 +1,130 @@
-/**
- * PreviewWallet (spec §6) — truth-first, Preview-only Economic Passport wallet.
- *
- * Verifies:
- *   • Two asset cards: Bitcoin ("Digital gold") + USDT ("Digital Dollars").
- *   • A persistent "Preview · Test wallet" status is always visible.
- *   • The lead copy keeps the authorization promise ("LUCA cannot move money
- *     without your explicit authorization").
- *   • Designated demo identities (@solaris.health) see a clearly-labelled
- *     "Demo balance"; real members see a truthful zero and NO demo badge.
- *   • Send explains WHY it is disabled instead of silently doing nothing.
- *   • Receive shows an honest placeholder (no fake address behind a QR).
- *   • REGTEST / network details live in a collapsed "Developer details"
- *     disclosure, not in the primary UI.
- */
+/** Economic Passport cards must never invent balances or payment capabilities. */
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, within, fireEvent, cleanup } from '@testing-library/react';
 
-// The app-root Spark wallet is disabled in this Preview build; the component is
-// null-safe and treats an absent/!ready wallet as offline (demo/zero balances).
+const state = vi.hoisted(() => ({ wallet: undefined }));
 vi.mock('../state/SparkWalletContext.jsx', () => ({
-  useSparkWallet: () => undefined,
+  useSparkWallet: () => state.wallet,
+}));
+vi.mock('qrcode.react', () => ({
+  QRCodeSVG: ({ value }) => <svg data-testid="receive-qr" data-value={value} />,
 }));
 
 import PreviewWallet from '../components/economic/PreviewWallet.jsx';
 
-beforeEach(() => cleanup());
+beforeEach(() => { state.wallet = undefined; });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
-describe('PreviewWallet — asset cards, status and authorization copy', () => {
-  it('renders Bitcoin (Digital gold) and USDT (Digital Dollars) with the Preview status', () => {
-    render(<PreviewWallet user={{ email: 'demo@example.com' }} />);
-    expect(screen.getByText('Bitcoin')).toBeInTheDocument();
-    expect(screen.getByText('Digital gold')).toBeInTheDocument();
-    expect(screen.getByText('USDT')).toBeInTheDocument();
-    expect(screen.getByText('Digital Dollars')).toBeInTheDocument();
-    expect(screen.getByText(/Preview · Test wallet/)).toBeInTheDocument();
-    expect(screen.getByText(/LUCA cannot move money without your explicit authorization/i)).toBeInTheDocument();
-  });
+function connect(overrides = {}) {
+  state.wallet = {
+    enabled: true, status: 'ready', network: 'REGTEST',
+    balanceSats: 0, address: 'sparkrt1synthetic',
+    send: vi.fn(), createInvoice: vi.fn(), adopt: vi.fn(),
+    ...overrides,
+  };
+}
 
-  it('shows a labelled "Demo balance" for a designated @solaris.health identity', () => {
-    render(<PreviewWallet user={{ email: 'sofia@solaris.health' }} />);
-    const badges = screen.getAllByText('Demo balance');
-    expect(badges.length).toBeGreaterThan(0);
-  });
+function openAction(name, assetIndex = 0) {
+  fireEvent.click(screen.getAllByRole('button', { name, exact: true })[assetIndex]);
+  return screen.getByRole('dialog');
+}
 
-  it('shows a truthful zero and NO demo badge for a real member', () => {
-    render(<PreviewWallet user={{ email: 'jane@realmember.com' }} />);
-    expect(screen.getByText('0.0000 BTC')).toBeInTheDocument();
-    expect(screen.getByText('0.00 USDT')).toBeInTheDocument();
-    expect(screen.queryByText('Demo balance')).toBeNull();
-  });
+describe('PreviewWallet — observed balances only', () => {
+  it.each(['sofia@solaris.health', 'SOFIA@SOLARIS.HEALTH', 'jane@example.com', undefined])(
+    'shows unknown balances without a connected wallet for %s', (email) => {
+      render(<PreviewWallet user={{ email }} />);
+      expect(screen.getByText('Bitcoin')).toBeInTheDocument();
+      expect(screen.getByText('Digital gold')).toBeInTheDocument();
+      expect(screen.getByText('USDT')).toBeInTheDocument();
+      expect(screen.getByText('Digital Dollars')).toBeInTheDocument();
+      expect(screen.getByText('Wallet not connected')).toBeInTheDocument();
+      expect(screen.getAllByText('Balance unavailable')).toHaveLength(2);
+      expect(screen.queryByText('Demo balance')).not.toBeInTheDocument();
+      expect(screen.queryByText(/\d+\.\d+ (BTC|USDT)/)).not.toBeInTheDocument();
+    },
+  );
+
+  it.each([undefined, null, NaN, Infinity, -1, 1.5, '0'])(
+    'does not turn a missing or invalid balance (%s) into zero', (balanceSats) => {
+      connect({ balanceSats });
+      render(<PreviewWallet />);
+      expect(screen.getAllByText('Balance unavailable')).toHaveLength(2);
+      expect(screen.getByText('The connected wallet has not provided a balance.')).toBeInTheDocument();
+    },
+  );
+
+  it.each([[0, '0.00000000 BTC'], [1, '0.00000001 BTC'], [123456789, '1.23456789 BTC']])(
+    'shows the observed %s sats, including a genuine zero', (balanceSats, expected) => {
+      connect({ balanceSats });
+      render(<PreviewWallet user={{ email: 'sofia@solaris.health' }} />);
+      expect(screen.getByText(expected)).toBeInTheDocument();
+      expect(screen.getAllByText('Balance unavailable')).toHaveLength(1);
+      expect(screen.getByText(/USDT wallet not connected\. Tether WDK integration is planned/)).toBeInTheDocument();
+    },
+  );
+
+  it.each([{ enabled: false }, { status: 'locked' }, { status: 'idle' }])(
+    'ignores leftover public data when the wallet is not ready: %j', (overrides) => {
+      connect({ balanceSats: 200000000, ...overrides });
+      render(<PreviewWallet />);
+      expect(screen.getAllByText('Balance unavailable')).toHaveLength(2);
+      const dialog = openAction('Receive');
+      expect(within(dialog).queryByTestId('receive-qr')).not.toBeInTheDocument();
+      expect(within(dialog).getByText('Receive address unavailable')).toBeInTheDocument();
+    },
+  );
 });
 
-describe('PreviewWallet — Preview-only actions explain themselves', () => {
-  it('Send opens a sheet that explains sending is disabled in Preview', () => {
-    render(<PreviewWallet user={{ email: 'demo@example.com' }} />);
-    // First card's Send button (Bitcoin).
-    fireEvent.click(screen.getAllByRole('button', { name: /Send/ })[0]);
-    const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByText(/Sending is disabled in Preview/i)).toBeInTheDocument();
-    expect(within(dialog).getByText(/LUCA cannot move money without your explicit authorization/i)).toBeInTheDocument();
+describe('PreviewWallet — safe actions and network disclosure', () => {
+  it.each(['REGTEST', 'MAINNET'])(
+    'labels the actual %s network and only renders the reported receive address', (network) => {
+      connect({ network, address: 'spark1reported-address' });
+      render(<PreviewWallet />);
+      expect(screen.getByText(`Connected · ${network}`)).toBeInTheDocument();
+      const dialog = openAction('Receive');
+      expect(within(dialog).getByText(`${network} address`)).toBeInTheDocument();
+      expect(within(dialog).getByTestId('receive-qr')).toHaveAttribute('data-value', 'spark1reported-address');
+      expect(screen.queryByText(/no real funds|test wallet|test network/i)).not.toBeInTheDocument();
+    },
+  );
+
+  it('does not make an address scannable when its network is unknown', () => {
+    connect({ network: null });
+    render(<PreviewWallet />);
+    const dialog = openAction('Receive');
+    expect(within(dialog).queryByTestId('receive-qr')).not.toBeInTheDocument();
+    expect(within(dialog).getByText('Receive address unavailable')).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Developer details' }));
+    expect(screen.getByText('Not reported')).toBeInTheDocument();
+    expect(screen.queryByText(/REGTEST/)).not.toBeInTheDocument();
   });
 
-  it('Receive shows an honest placeholder when no real address is connected', () => {
-    render(<PreviewWallet user={{ email: 'demo@example.com' }} />);
-    fireEvent.click(screen.getAllByRole('button', { name: /Receive/ })[0]);
-    const dialog = screen.getByRole('dialog');
-    expect(within(dialog).getByText(/Preview — address not connected/i)).toBeInTheDocument();
+  it('does not reuse the Bitcoin address for USDT', () => {
+    connect();
+    render(<PreviewWallet />);
+    const dialog = openAction('Receive', 1);
+    expect(within(dialog).queryByTestId('receive-qr')).not.toBeInTheDocument();
+    expect(within(dialog).getByText('Receive address unavailable')).toBeInTheDocument();
   });
-});
 
-describe('PreviewWallet — REGTEST relocated to Developer details', () => {
-  it('hides REGTEST until the Developer details disclosure is opened', () => {
-    render(<PreviewWallet user={{ email: 'demo@example.com' }} />);
-    expect(screen.queryByText(/REGTEST/)).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /Developer details/i }));
-    expect(screen.getByText(/REGTEST/)).toBeInTheDocument();
+  it('explains unavailable sends and top-ups without mutations or storage writes', () => {
+    connect({ network: 'MAINNET', balanceSats: 100000000 });
+    const storageWrite = vi.spyOn(Storage.prototype, 'setItem');
+    render(<PreviewWallet />);
+    for (const assetIndex of [0, 1]) {
+      let dialog = openAction('Send', assetIndex);
+      expect(within(dialog).getByText('Sending is unavailable from this screen')).toBeInTheDocument();
+      expect(within(dialog).getByText(/LUCA cannot move money without your explicit authorization/)).toBeInTheDocument();
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+      dialog = openAction('Top Up', assetIndex);
+      expect(within(dialog).getByText('Top Up is not connected')).toBeInTheDocument();
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    }
+    expect(state.wallet.send).not.toHaveBeenCalled();
+    expect(state.wallet.createInvoice).not.toHaveBeenCalled();
+    expect(state.wallet.adopt).not.toHaveBeenCalled();
+    expect(storageWrite).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -7,85 +7,27 @@ import {
 } from 'lucide-react';
 import { useSparkWallet } from '../../state/SparkWalletContext.jsx';
 
-/* ────────────────────────────────────────────────────────────────────────────
- * PreviewWallet — the Economic Passport "Wallet" section (spec §6).
- *
- * TRUTH-FIRST, PREVIEW-ONLY. Replaces the empty Spark warning with two asset
- * cards — Bitcoin ("Digital gold") and USDT ("Digital Dollars"). It performs NO
- * real payment, signature or mutation and never shows or requests a mnemonic.
- *
- * Balances:
- *   • Real regtest/testnet balance is shown when the app-root Spark wallet is
- *     actually connected and ready (spark.enabled && status==='ready').
- *   • Otherwise designated test identities (seeded @solaris.health demo cohort)
- *     see a DETERMINISTIC balance clearly labelled "Demo balance".
- *   • Everyone else sees a truthful 0.0000 BTC / 0.00 USDT.
- *
- * A persistent "Preview · Test wallet" status is always visible; the REGTEST /
- * developer details live in a collapsed disclosure, not in the primary UI.
- * ──────────────────────────────────────────────────────────────────────────── */
-
+/**
+ * Economic Passport wallet overview. Values come from the enabled Spark context,
+ * never an email-based demo. An absent context balance is unknown; the existing
+ * adapter can still coerce a missing SDK field to zero (separate follow-up).
+ * USDT remains unconnected pending a separately accepted adapter.
+ * This screen does not send funds, top up a wallet or change wallet storage.
+ */
 const SATS_PER_BTC = 100000000;
 
-// Designated test/demo identities for this Preview environment. Real members
-// (any other email) always see zero balances — never a fabricated number.
-function isDemoIdentity(user) {
-  const email = String(user?.email || '').toLowerCase();
-  return email.endsWith('@solaris.health');
-}
-
-// Small deterministic hash so a demo identity always sees the SAME numbers.
-function hashString(s) {
-  let h = 2166136261;
-  const str = String(s || '');
-  for (let i = 0; i < str.length; i += 1) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
-function fmtBtc(sats) {
-  if (sats == null || Number.isNaN(sats)) return '0.0000';
-  return (sats / SATS_PER_BTC).toFixed(4);
-}
-
-function fmtUsdt(cents) {
-  if (cents == null || Number.isNaN(cents)) return '0.00';
-  return (cents / 100).toFixed(2);
-}
-
-export default function PreviewWallet({ user }) {
+export default function PreviewWallet() {
   const spark = useSparkWallet();
-  const [sheet, setSheet] = useState(null); // { asset, kind: 'receive'|'send'|'topup' } | null
+  const [sheet, setSheet] = useState(null);
   const [devOpen, setDevOpen] = useState(false);
 
   const walletReady = !!(spark && spark.enabled && spark.status === 'ready');
   const realAddress = walletReady ? (spark.address || '') : '';
   const network = walletReady ? (spark.network || null) : null;
-
-  // Resolve the two balances truthfully (see file header).
-  const { btc, usdt } = useMemo(() => {
-    if (walletReady && spark.balanceSats != null) {
-      // Real Bitcoin balance from the connected regtest/testnet wallet. There is
-      // no live USDT rail yet, so USDT stays zero until an adapter connects.
-      return {
-        btc: { sats: spark.balanceSats, demo: false },
-        usdt: { cents: 0, demo: false, connected: false },
-      };
-    }
-    if (isDemoIdentity(user)) {
-      const n = hashString(user?.email || user?.id || 'demo');
-      return {
-        btc: { sats: 100000 + (n % 900000), demo: true },      // ~0.0010–0.0100 BTC
-        usdt: { cents: 5000 + (n % 45000), demo: true, connected: false }, // $50–$500
-      };
-    }
-    return {
-      btc: { sats: 0, demo: false },
-      usdt: { cents: 0, demo: false, connected: false },
-    };
-  }, [walletReady, spark?.balanceSats, user]);
+  const hasBalance = walletReady && Number.isSafeInteger(spark.balanceSats) && spark.balanceSats >= 0;
+  const btcBalance = hasBalance
+    ? `${(spark.balanceSats / SATS_PER_BTC).toFixed(8)} BTC`
+    : 'Balance unavailable';
 
   const assets = [
     {
@@ -94,9 +36,8 @@ export default function PreviewWallet({ user }) {
       tag: 'Digital gold',
       icon: Bitcoin,
       accent: '#E08A2A',
-      balance: `${fmtBtc(btc.sats)} BTC`,
-      demo: btc.demo,
-      note: null,
+      balance: btcBalance,
+      note: walletReady ? (hasBalance ? null : 'The connected wallet has not provided a balance.') : 'Bitcoin wallet not connected.',
     },
     {
       key: 'usdt',
@@ -104,9 +45,8 @@ export default function PreviewWallet({ user }) {
       tag: 'Digital Dollars',
       icon: CircleDollarSign,
       accent: '#0E5C57',
-      balance: `${fmtUsdt(usdt.cents)} USDT`,
-      demo: usdt.demo,
-      note: usdt.connected ? null : 'USDT rail not connected in Preview.',
+      balance: 'Balance unavailable',
+      note: 'USDT wallet not connected. Tether WDK integration is planned.',
     },
   ];
 
@@ -115,13 +55,14 @@ export default function PreviewWallet({ user }) {
       <div className="pvw-head">
         <div className="pvw-head-titles">
           <h3 className="pvw-title">Your wallet</h3>
-          <span className="pvw-status"><ShieldCheck size={13} /> Preview · Test wallet</span>
+          <span className="pvw-status"><ShieldCheck size={13} /> {walletReady ? `Connected · ${network || 'Network unknown'}` : 'Wallet not connected'}</span>
         </div>
       </div>
 
       <p className="pvw-lead">
-        A preview of the assets your Economic Passport can hold. Nothing here moves
-        real money—<strong>LUCA cannot move money without your explicit authorization.</strong>
+        Balances and receive addresses appear only when an enabled wallet provides them.
+        Sending and top-ups are unavailable from this screen.{' '}
+        <strong>LUCA cannot move money without your explicit authorization.</strong>
       </p>
 
       <div className="pvw-assets">
@@ -136,7 +77,6 @@ export default function PreviewWallet({ user }) {
             </div>
             <div className="pvw-bal-row">
               <span className="pvw-bal">{a.balance}</span>
-              {a.demo && <span className="pvw-demo-badge">Demo balance</span>}
             </div>
             {a.note && <p className="pvw-card-note"><Info size={12} /> {a.note}</p>}
             <div className="pvw-actions">
@@ -162,12 +102,12 @@ export default function PreviewWallet({ user }) {
         </button>
         {devOpen && (
           <div className="pvw-dev-body">
-            <div className="pvw-dev-row"><span>Network</span><span>{network ? network : 'REGTEST (not connected)'}</span></div>
-            <div className="pvw-dev-row"><span>Wallet status</span><span>{walletReady ? 'Ready' : 'Preview (offline)'}</span></div>
+            <div className="pvw-dev-row"><span>Network</span><span>{network || 'Not reported'}</span></div>
+            <div className="pvw-dev-row"><span>Wallet status</span><span>{walletReady ? 'Ready' : 'Not connected'}</span></div>
             <div className="pvw-dev-row"><span>Spark address</span><span>{realAddress ? `${realAddress.slice(0, 10)}…` : 'Not connected'}</span></div>
             <p className="pvw-dev-hint">
-              This is a test network for previewing the wallet experience. No real
-              funds are involved and no private keys are ever shown or transmitted.
+              Check the reported network before receiving funds. This screen displays
+              public wallet information only and does not request recovery words.
             </p>
           </div>
         )}
@@ -188,17 +128,16 @@ export default function PreviewWallet({ user }) {
   );
 }
 
-// Bottom sheet for Receive (QR) / Send / Top Up — all Preview-only. Every action
-// that cannot complete explains WHY rather than silently doing nothing (§6).
+// Receive displays an existing address; Send and Top Up remain unavailable.
+// No signing, payment, invoice creation or storage operation occurs here.
 function PreviewSheet({ sheet, asset, realAddress, network, onClose }) {
   if (typeof document === 'undefined' || !document.body) return null;
   const title = sheet.kind === 'receive' ? `Receive ${asset.name}`
     : sheet.kind === 'send' ? `Send ${asset.name}`
       : `Top Up ${asset.name}`;
 
-  // A scannable QR is only shown for a real testnet/regtest address. Otherwise a
-  // clear placeholder — never a fake/invalid address behind a QR.
-  const hasRealAddress = sheet.asset === 'btc' && !!realAddress;
+  // Without a reported network, keep the address non-actionable.
+  const hasRealAddress = sheet.asset === 'btc' && !!realAddress && !!network;
 
   return createPortal(
     <div className="luca">
@@ -214,16 +153,16 @@ function PreviewSheet({ sheet, asset, realAddress, network, onClose }) {
             {hasRealAddress ? (
               <>
                 <div className="pvw-qr"><QRCodeSVG value={realAddress} size={168} includeMargin /></div>
-                <p className="pvw-qr-net">{network ? `${network} address` : 'Test network address'}</p>
+                <p className="pvw-qr-net">{`${network} address`}</p>
                 <code className="pvw-addr">{realAddress}</code>
               </>
             ) : (
               <div className="pvw-qr-placeholder">
                 <QrCode size={40} />
-                <p className="pvw-qr-ph-title">Preview — address not connected</p>
+                <p className="pvw-qr-ph-title">Receive address unavailable</p>
                 <p className="pvw-qr-ph-sub">
-                  A scannable address appears here once a {sheet.asset === 'usdt' ? 'USDT' : 'test-network'} wallet
-                  is connected. No address is shown until it is real.
+                  An address and its network must be provided by a connected {sheet.asset === 'usdt' ? 'USDT' : 'Bitcoin'} wallet.
+                  No address is generated by this screen.
                 </p>
               </div>
             )}
@@ -235,10 +174,10 @@ function PreviewSheet({ sheet, asset, realAddress, network, onClose }) {
             <div className="pvw-disabled-note">
               <Lock size={16} />
               <div>
-                <p className="pvw-dn-title">Sending is disabled in Preview</p>
+                <p className="pvw-dn-title">Sending is unavailable from this screen</p>
                 <p className="pvw-dn-sub">
-                  This is a test wallet with no connected payment rail, so no transaction
-                  can be created. LUCA cannot move money without your explicit authorization.
+                  This screen cannot create or sign a transaction. LUCA cannot move money
+                  without your explicit authorization.
                 </p>
               </div>
             </div>
@@ -250,10 +189,10 @@ function PreviewSheet({ sheet, asset, realAddress, network, onClose }) {
             <div className="pvw-disabled-note">
               <AlertTriangle size={16} />
               <div>
-                <p className="pvw-dn-title">Top Up is a preview</p>
+                <p className="pvw-dn-title">Top Up is not connected</p>
                 <p className="pvw-dn-sub">
-                  Funding is not available in this Preview build. When the wallet is
-                  connected you will be able to add {asset.name} here. No charge is made.
+                  No funding provider is connected here. Top-up integration is planned;
+                  this screen cannot initiate a charge.
                 </p>
               </div>
             </div>
@@ -285,8 +224,6 @@ function PreviewWalletStyle() {
       .luca .pvw-asset-tag{font-size:12px;color:var(--muted)}
       .luca .pvw-bal-row{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:6px}
       .luca .pvw-bal{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:22px;color:var(--ink);letter-spacing:-.01em}
-      .luca .pvw-demo-badge{font-size:10.5px;font-weight:700;color:#8A5A00;background:rgba(224,138,42,.15);
-        border:1px solid rgba(224,138,42,.35);border-radius:999px;padding:2px 8px}
       .luca .pvw-card-note{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted);margin:0 0 10px}
       .luca .pvw-actions{display:flex;gap:8px}
       .luca .pvw-act{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:44px;padding:9px 8px;

@@ -1,6 +1,44 @@
-# Current state — 24 September 2026
+# Current state — 27 September 2026 cleanup update
 
 This is a dated source/evidence register, not a live status endpoint or production approval. Update its anchors when later work changes them. The owner's September direction is described in [Economic Passport architecture](ECONOMIC-PASSPORT-ARCHITECTURE.md). Historical contracts remain discoverable and do not prove implementation of the new direction.
+
+
+## ECO-CLEAN-R1 source update — 27 September 2026
+
+Cleanup base: `main` at `abf507a9eeafcb7e7d534438ff231343bd221dbe`, tree
+`f7d6b3cf0b09f96758ec7c785841451b53fd5d21`. WEB-R2 is merged through PR #5.
+WEB-R2-UI PR #7 was still a separate draft at `3e5687b7` when this task began;
+its merge/deployment must not be inferred from this cleanup.
+
+The cleanup removes the reachable multi-chain hub (including real EVM browser
+sending), simulated Health NFT controls, fake wallet balances/mock addresses,
+unused multi-chain SDKs, and old wallet API operations. Historical address rows
+remain owner-readable at `/api/wallet/me`; no database migration or deletion is
+performed. Direct Spark vault/recovery, BTC/USDT layout, GPS, Self Care and Network
+are retained. Breez/WDK/MoonPay and RGB are still future integrations. See the
+[cleanup contract](beta-v1/contracts/CONTRACT-ECO-CLEAN-R1.md) and
+[handoff](beta-v1/handoffs/HANDOFF-ECO-CLEAN-R1.md) for exact scope and fresh checks.
+
+Further active prototype surfaces found, **not removed by this wallet slice**:
+
+- `LucaPassport.jsx` device-sync sheet imports fixed Apple Health/Fitbit samples
+  into local browser storage. Replace member-facing synthetic imports with an
+  honest unavailable/native-companion state; preserve existing stored data.
+- The identity page can generate simulated payment/GPS receipts. Review removal
+  of the member-facing generator separately from preserving history, shadow-ledger
+  tests and truthful simulation labels.
+- The onboarding demo cohort and direct Spark fixture controls need a dedicated
+  production-profile review. Deleting safety gates or test fixtures is not a cleanup.
+- The unchanged Spark adapter maps a missing SDK balance field to zero, and its
+  context has asynchronous account-switch clearing risks. The new wallet UI
+  removes fabricated demo balances but does not close those upstream issues.
+
+Next work: TEST-DB-R1 fail-fast disposable database setup/synthetic fixtures, then
+Maple source convergence and consent/discovery boundaries. Wallet cleanup does
+not close those production blockers or establish a safe live deployment.
+
+The older evidence register below is retained as the dated 24 September review;
+its original anchors and counts are historical, not this cleanup's results.
 
 ## Evidence categories
 
